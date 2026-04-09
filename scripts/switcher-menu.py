@@ -205,6 +205,7 @@ class SwitcherMenu(QWidget):
             }
             QTreeWidget::item:selected {
                 background-color: rgba(130, 170, 255, 0.85);
+                color: #1e2030;
                 font-weight: bold;
             }
             /* Scrollbar */
