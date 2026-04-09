@@ -36,20 +36,19 @@ class SwitcherMenu(QWidget):
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_X11NetWmWindowTypeNotification)
         
         # Geometry setup (Flush Right Edge)
-        screen = QApplication.primaryScreen().geometry()
-        width = 340 
-        height = 720
-        self.setFixedSize(width, height)
+        self.screen_geom = QApplication.primaryScreen().geometry()
+        self.hud_width = 340 
+        self.height_expanded = 720
+        self.height_collapsed = 480
         
-        x = screen.width() - width + 20
-        y = -20
-        self.move(x, y)
+        # Start collapsed
+        self.setFixedSize(self.hud_width, self.height_collapsed)
+        self.reset_geometry()
         
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(20, 2, 20, 20)
         self.setLayout(main_layout)
         
         # Main UI Box
@@ -63,7 +62,7 @@ class SwitcherMenu(QWidget):
             }
         """)
         
-        # Low profile shadow
+        # Shadow logic
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(10)
         shadow.setColor(QColor(0, 0, 0, 120))
@@ -74,11 +73,6 @@ class SwitcherMenu(QWidget):
         container_layout.setContentsMargins(6, 6, 6, 6)
         container_layout.setSpacing(6)
         self.container.setLayout(container_layout)
-        
-        self.title_label = QLabel(title_label)
-        self.title_label.setFont(QFont("Inter", 11, QFont.Medium))
-        self.title_label.setStyleSheet("color: #a9b1d6;")
-        container_layout.addWidget(self.title_label)
         
         self.search_entry = QLineEdit()
         self.search_entry.setFont(QFont("Inter", 11))
@@ -191,19 +185,45 @@ class SwitcherMenu(QWidget):
         row2.addWidget(self.undo_btn)
         row2.addWidget(self.done_btn)
         
-        row3.addWidget(self.go_btn)
-        
         self.close_app_btn = QPushButton("Close App")
         self.close_app_btn.setStyleSheet(btn_style)
         self.close_app_btn.setToolTip("(Alt+X)")
         self.close_app_btn.clicked.connect(lambda: sys.exit(0))
+        
+        row3.addWidget(self.go_btn)
         row3.addWidget(self.close_app_btn)
         
         btns_container_layout.addLayout(row1)
         btns_container_layout.addLayout(row2)
         btns_container_layout.addLayout(row3)
         
-        container_layout.addLayout(btns_container_layout)
+        # Buttons Widget (Collapsible)
+        self.btn_container_widget = QWidget()
+        self.btn_container_widget.setLayout(btns_container_layout)
+        self.btn_container_widget.setVisible(False) # Start collapsed
+        
+        # Toggle Button (Tiny Arrow)
+        self.toggle_btn = QPushButton("▼")
+        self.toggle_btn.setFixedHeight(16)
+        self.toggle_btn.setCursor(Qt.PointingHandCursor)
+        self.toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #5a4a78;
+                font-size: 9px;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton:hover {
+                color: #82aaff;
+            }
+        """)
+        self.toggle_btn.clicked.connect(self.on_toggle_buttons)
+        
+        container_layout.addWidget(self.toggle_btn)
+        container_layout.addWidget(self.btn_container_widget)
+        
         main_layout.addWidget(self.container)
         
         # Behaviors
@@ -224,6 +244,7 @@ class SwitcherMenu(QWidget):
         # Force Focus after mapping
         self.force_focus_title = title_win
         QTimer.singleShot(50, self.force_focus)
+        QTimer.singleShot(150, self.force_position)  # Override KDE strut adjustment
         
         # Immediate focus
         self.search_entry.setFocus()
@@ -232,9 +253,16 @@ class SwitcherMenu(QWidget):
 
     def force_focus(self):
         try:
-            # We use title-based targeting for both tools to avoid ID mismatch bugs on Wayland.
-            # kdotool handles the focus, wmctrl handles the "stickiness" (follow-me).
             cmd = f"kdotool search --name \"^{self.force_focus_title}$\" windowactivate && wmctrl -F -r \"{self.force_focus_title}\" -t -1"
+            subprocess.run(["bash", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except:
+            pass
+
+    def force_position(self):
+        """Override KDE panel struts by forcing window to y=0 via wmctrl."""
+        try:
+            x = self.screen_geom.width() - self.hud_width + 20
+            cmd = f'wmctrl -F -r "{self.force_focus_title}" -e 0,{x},0,{self.hud_width},{self.height()}'
             subprocess.run(["bash", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except:
             pass
@@ -286,6 +314,23 @@ class SwitcherMenu(QWidget):
                     
         if self.current_pairs:
             self.listbox.setCurrentRow(found_row)
+
+    def reset_geometry(self):
+        # Place container at top-right corner
+        x = self.screen_geom.width() - self.width() + 20
+        y = 0
+        self.move(x, y)
+        # Also force via wmctrl after a short delay to override KDE struts
+        QTimer.singleShot(50, self.force_position)
+
+    def on_toggle_buttons(self):
+        is_visible = self.btn_container_widget.isVisible()
+        self.btn_container_widget.setVisible(not is_visible)
+        # ▼ = collapsed (buttons hidden), ▲ = expanded (buttons showing)
+        self.toggle_btn.setText("▲" if not is_visible else "▼")
+        new_height = self.height_expanded if not is_visible else self.height_collapsed
+        self.setFixedSize(self.hud_width, new_height)
+        self.reset_geometry()
 
     def on_search(self, text):
         query = text.lower()
