@@ -12,7 +12,7 @@
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -308,6 +308,16 @@ function main() {
                 console.log(`✅ Template "${templateData.name}" applied! Renamed ${currentDesktops.length} desktops.`);
             } catch (err) {
                 console.log(`❌ Failed to load template: ${err}`);
+            }
+        } else if (result.startsWith('DELETE_TEMPLATE:')) {
+            const templateFilename = result.substring(16);
+            const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
+            const templatePath = join(templatesDir, templateFilename);
+            try {
+                unlinkSync(templatePath);
+                console.log(`✅ Success! Deleted template: ${templateFilename}`);
+            } catch (err) {
+                console.log(`❌ Failed to delete template: ${err}`);
             }
         }
     }

@@ -37,9 +37,10 @@ class WindowFetcher(QObject):
             pass
 
 class FolderTreeWidget(QTreeWidget):
-    """Custom tree widget with smart drag-drop rules:
-    - Folders can be reordered at the top level only
-    - Desktops can be moved between folders only
+    """Custom tree widget with full drag-drop flexibility:
+    - Folders can be reordered at the top level
+    - Desktops can be moved between folders AND reordered within folders
+    - Drop position (above/below/on) controls exact placement
     """
     def dropEvent(self, event):
         dragged = self.currentItem()
@@ -48,48 +49,80 @@ class FolderTreeWidget(QTreeWidget):
             return
         
         target = self.itemAt(event.pos())
+        drop_indicator = self.dropIndicatorPosition()
         is_folder_drag = dragged.data(0, Qt.UserRole) == "FOLDER"
         
         if is_folder_drag:
-            # Folders can only be reordered at root level
-            # Determine drop position among top-level items
-            drop_indicator = self.dropIndicatorPosition()
+            # ── Folder reordering at root level ──
+            if target is None:
+                event.ignore()
+                return
             
-            if target and target.data(0, Qt.UserRole) == "FOLDER":
-                # Reorder: remove and re-insert at new position
+            # If dropped on a desktop, use its parent folder as target
+            target_folder = target
+            if target.data(0, Qt.UserRole) != "FOLDER":
+                target_folder = target.parent()
+            
+            if target_folder and target_folder.data(0, Qt.UserRole) == "FOLDER":
                 root = self.invisibleRootItem()
                 old_idx = self.indexOfTopLevelItem(dragged)
-                new_idx = self.indexOfTopLevelItem(target)
+                new_idx = self.indexOfTopLevelItem(target_folder)
                 
                 if old_idx >= 0 and new_idx >= 0 and old_idx != new_idx:
                     root.takeChild(old_idx)
-                    # Adjust index if we removed from before the target
                     if old_idx < new_idx:
                         new_idx -= 1
                     if drop_indicator == QAbstractItemView.BelowItem:
                         new_idx += 1
                     root.insertChild(new_idx, dragged)
                     self.setCurrentItem(dragged)
-            event.ignore()  # Don't let Qt's default handling mess things up
+            event.ignore()
         else:
-            # Desktop drag: only allow into folders
+            # ── Desktop drag: move + reorder anywhere ──
             if target is None:
                 event.ignore()
                 return
-            # If dropping on a desktop, redirect to its parent folder
-            if target.data(0, Qt.UserRole) != "FOLDER":
-                target = target.parent()
-            if target and target.data(0, Qt.UserRole) == "FOLDER":
-                # Move desktop to this folder
-                parent = dragged.parent()
-                if parent:
-                    idx = parent.indexOfChild(dragged)
-                    if idx >= 0:
-                        taken = parent.takeChild(idx)
-                        target.addChild(taken)
-                        target.setExpanded(True)
-                        self.setCurrentItem(taken)
-            event.ignore()  # Don't let Qt's default handling run
+            
+            # Remove dragged from its current parent
+            old_parent = dragged.parent()
+            if not old_parent:
+                event.ignore()
+                return
+            old_idx = old_parent.indexOfChild(dragged)
+            if old_idx < 0:
+                event.ignore()
+                return
+            
+            target_is_folder = target.data(0, Qt.UserRole) == "FOLDER"
+            
+            if target_is_folder:
+                # Dropped ON a folder → insert at top of that folder
+                taken = old_parent.takeChild(old_idx)
+                target.insertChild(0, taken)
+                target.setExpanded(True)
+                self.setCurrentItem(taken)
+            else:
+                # Dropped on another desktop → insert above or below it
+                target_parent = target.parent()
+                if not target_parent:
+                    event.ignore()
+                    return
+                
+                taken = old_parent.takeChild(old_idx)
+                target_idx = target_parent.indexOfChild(target)
+                
+                # If same parent AND we removed from before the target, adjust
+                if old_parent == target_parent and old_idx < target_idx:
+                    target_idx -= 1
+                
+                if drop_indicator == QAbstractItemView.BelowItem:
+                    target_idx += 1
+                
+                target_parent.insertChild(target_idx, taken)
+                target_parent.setExpanded(True)
+                self.setCurrentItem(taken)
+            
+            event.ignore()
         
         # Save session after drop
         QTimer.singleShot(50, self._save_after_drop)
@@ -123,7 +156,8 @@ class SwitcherMenu(QWidget):
         self.height_collapsed = 480
         
         # Start collapsed
-        self.setFixedSize(self.hud_width, self.height_collapsed)
+        self.setMinimumSize(280, 300)
+        self.resize(self.hud_width, self.height_collapsed)
         self.reset_geometry()
         
         main_layout = QVBoxLayout()
@@ -370,7 +404,7 @@ class SwitcherMenu(QWidget):
         main_layout.addWidget(self.container)
         
         # Behaviors
-        self.tree.itemDoubleClicked.connect(self._on_tree_double_click)
+        self.tree.itemClicked.connect(self._on_tree_click)
         
         # Load session and populate
         self.session_data = self.load_session()
@@ -416,6 +450,7 @@ class SwitcherMenu(QWidget):
         try:
             SESSION_DIR.mkdir(parents=True, exist_ok=True)
             data = {"folders": {}, "folder_order": []}
+            collapsed = []
             root = self.tree.invisibleRootItem()
             for i in range(root.childCount()):
                 folder_item = root.child(i)
@@ -430,9 +465,14 @@ class SwitcherMenu(QWidget):
                     if did:
                         desktop_ids.append(did)
                 data["folders"][folder_name] = desktop_ids
+                
+                # Track collapsed state
+                if not folder_item.isExpanded():
+                    collapsed.append(folder_name)
             
             # Save which folder is currently the default catch-all
             data["default_folder"] = self.default_folder_name
+            data["collapsed_folders"] = collapsed
             
             with open(SESSION_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -587,26 +627,40 @@ class SwitcherMenu(QWidget):
         """Output LOAD_TEMPLATE action for the TypeScript orchestrator."""
         print(f"LOAD_TEMPLATE:{filename}", flush=True)
         sys.exit(0)
-
     def _delete_template(self, filename):
-        """Delete a template file."""
-        filepath = TEMPLATES_DIR / filename
-        try:
-            filepath.unlink()
-        except Exception:
-            pass
+        """Output DELETE_TEMPLATE action for the TypeScript orchestrator."""
+        print(f"DELETE_TEMPLATE:{filename}", flush=True)
+        sys.exit(0)
 
     # ─── Tree Expand/Collapse Indicators ───
 
+    def _has_active_children(self, folder_item):
+        """Check if any desktop in this folder has active windows."""
+        for j in range(folder_item.childCount()):
+            child = folder_item.child(j)
+            did = child.data(0, Qt.UserRole)
+            if did and did != "FOLDER" and "___" in did:
+                kwin_idx_str = did.split("___")[1]
+                if int(kwin_idx_str) in self.active_kwin_indices:
+                    return True
+        return False
+
+    def _update_folder_text(self, folder_item):
+        """Update folder display text with expand arrow and activity dot."""
+        name = folder_item.data(0, Qt.UserRole + 1)
+        arrow = "▾" if folder_item.isExpanded() else "▸"
+        dot = "  •" if self._has_active_children(folder_item) else ""
+        folder_item.setText(0, f"{arrow} {name}{dot}")
+
     def _on_folder_expanded(self, item):
         if item.data(0, Qt.UserRole) == "FOLDER":
-            name = item.data(0, Qt.UserRole + 1)
-            item.setText(0, f"▾ {name}")
+            self._update_folder_text(item)
+            self.save_session()
 
     def _on_folder_collapsed(self, item):
         if item.data(0, Qt.UserRole) == "FOLDER":
-            name = item.data(0, Qt.UserRole + 1)
-            item.setText(0, f"▸ {name}")
+            self._update_folder_text(item)
+            self.save_session()
 
     # ─── Tree Population ───
     
@@ -642,9 +696,14 @@ class SwitcherMenu(QWidget):
         id_map = {pair[0]: pair[1] for pair in self.current_pairs}
         placed_ids = set()
         
-        # Create folders from session in order
+        # Create folders from session in order (skip duplicates)
         folder_items = {}
+        seen_folders = set()
         for folder_name in self.session_data.get("folder_order", []):
+            if folder_name in seen_folders:
+                continue
+            seen_folders.add(folder_name)
+            
             folder_item = self._make_folder_item(folder_name)
             self.tree.addTopLevelItem(folder_item)
             folder_items[folder_name] = folder_item
@@ -662,8 +721,12 @@ class SwitcherMenu(QWidget):
         # Add catch-all for remaining desktops
         unfiled_ids = [did for did in id_map if did not in placed_ids]
         if unfiled_ids:
-            unfiled_item = self._make_folder_item(self.default_folder_name)
-            self.tree.addTopLevelItem(unfiled_item)
+            # Reuse existing default folder if it was already created
+            if self.default_folder_name in folder_items:
+                unfiled_item = folder_items[self.default_folder_name]
+            else:
+                unfiled_item = self._make_folder_item(self.default_folder_name)
+                self.tree.addTopLevelItem(unfiled_item)
             for did in unfiled_ids:
                 desktop_item = self._make_desktop_item(did, id_map[did])
                 unfiled_item.addChild(desktop_item)
@@ -671,8 +734,16 @@ class SwitcherMenu(QWidget):
             # Sort the catch-all folder
             self._sort_folder_children(unfiled_item)
         
-        # Expand all folders
-        self.tree.expandAll()
+        # Restore expand/collapse state from session
+        collapsed_folders = set(self.session_data.get("collapsed_folders", []))
+        root = self.tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            folder_item = root.child(i)
+            folder_name = folder_item.data(0, Qt.UserRole + 1)
+            if folder_name in collapsed_folders:
+                folder_item.setExpanded(False)
+            else:
+                folder_item.setExpanded(True)
         
         # Select current desktop if initial
         if initial_set and self.current_desktop_uuid:
@@ -691,7 +762,7 @@ class SwitcherMenu(QWidget):
                     return
 
     def refresh_tree(self):
-        """Update display text for active window indicators."""
+        """Update display text for active window indicators (desktops + folders)."""
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             folder = root.child(i)
@@ -707,6 +778,9 @@ class SwitcherMenu(QWidget):
                             break
                     if name:
                         child.setText(0, self.get_display_name(did, name))
+            
+            # Update folder activity indicator
+            self._update_folder_text(folder)
 
     # ─── Folder Management ───
     
@@ -826,6 +900,56 @@ class SwitcherMenu(QWidget):
         for child in children:
             folder_item.addChild(child)
 
+    def sort_by_activity(self):
+        """Sort folders and desktops by activity: active items float to the top."""
+        root = self.tree.invisibleRootItem()
+        
+        # 1. Sort desktops within each folder: active first, then labeled, then empty
+        for i in range(root.childCount()):
+            folder_item = root.child(i)
+            children = []
+            for j in range(folder_item.childCount()):
+                children.append(folder_item.takeChild(0))
+            
+            def desktop_sort_key(item):
+                did = item.data(0, Qt.UserRole)
+                text = item.text(0).lower()
+                
+                # Is this desktop active (has windows)?
+                is_active = False
+                if did and "___" in did:
+                    kwin_idx_str = did.split("___")[1]
+                    is_active = int(kwin_idx_str) in self.active_kwin_indices
+                
+                # Priority: active=0, labeled=1, empty=2
+                if is_active:
+                    activity = 0
+                elif "empty" not in text and "desktop " not in text:
+                    activity = 1
+                else:
+                    activity = 2
+                
+                return activity
+            
+            children.sort(key=desktop_sort_key)
+            for child in children:
+                folder_item.addChild(child)
+        
+        # 2. Sort folders: folders with active children float to the top
+        folders = []
+        for i in range(root.childCount()):
+            folders.append(root.takeChild(0))
+        
+        def folder_sort_key(folder_item):
+            has_active = self._has_active_children(folder_item)
+            return 0 if has_active else 1
+        
+        folders.sort(key=folder_sort_key)
+        for folder in folders:
+            root.addChild(folder)
+        
+        self.save_session()
+
     # ─── Context Menu ───
     
     def on_context_menu(self, pos):
@@ -870,7 +994,16 @@ class SwitcherMenu(QWidget):
             action_new = menu.addAction("New Folder")
             action_new.triggered.connect(self.create_folder)
         else:
-            # Clicked on a desktop
+            # Clicked on a desktop — select it first so actions target it
+            self.tree.setCurrentItem(item)
+            
+            action_go = menu.addAction("🚀 Go")
+            action_go.triggered.connect(self.on_switch)
+            
+            action_rename = menu.addAction("✏️ Rename")
+            action_rename.triggered.connect(self.on_rename)
+            
+            menu.addSeparator()
             move_menu = menu.addMenu("Move to...")
             move_menu.setStyleSheet(menu.styleSheet())
             root = self.tree.invisibleRootItem()
@@ -887,7 +1020,11 @@ class SwitcherMenu(QWidget):
             action_new = menu.addAction("New Folder")
             action_new.triggered.connect(self.create_folder)
         
-        # ── Template Options (always available) ──
+        # ── Sort & Template Options (always available) ──
+        menu.addSeparator()
+        action_sort = menu.addAction("⚡ Sort by Activity")
+        action_sort.triggered.connect(self.sort_by_activity)
+        
         menu.addSeparator()
         action_save_tpl = menu.addAction("💾 Save as Template...")
         action_save_tpl.triggered.connect(self.save_template)
@@ -899,6 +1036,13 @@ class SwitcherMenu(QWidget):
             for filename, display_name in templates:
                 action = load_menu.addAction(display_name)
                 action.triggered.connect(lambda checked, fn=filename: self._apply_template(fn))
+            
+            menu.addSeparator()
+            delete_menu = menu.addMenu("🗑  Delete Template")
+            delete_menu.setStyleSheet(menu.styleSheet())
+            for filename, display_name in templates:
+                action = delete_menu.addAction(display_name)
+                action.triggered.connect(lambda checked, fn=filename: self._delete_template(fn))
         
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
 
@@ -963,7 +1107,7 @@ class SwitcherMenu(QWidget):
         # ▼ = collapsed (buttons hidden), ▲ = expanded (buttons showing)
         self.toggle_btn.setText("▲" if not is_visible else "▼")
         new_height = self.height_expanded if not is_visible else self.height_collapsed
-        self.setFixedSize(self.hud_width, new_height)
+        self.resize(self.hud_width, new_height)
         self.reset_geometry()
 
     def on_search(self, text):
@@ -998,8 +1142,8 @@ class SwitcherMenu(QWidget):
         if first_match:
             self.tree.setCurrentItem(first_match)
 
-    def _on_tree_double_click(self, item, column):
-        """Handle double-click: switch desktop if it's a desktop item."""
+    def _on_tree_click(self, item, column):
+        """Handle single-click: switch desktop if it's a desktop item."""
         if item.data(0, Qt.UserRole) != "FOLDER":
             self.on_switch()
 
