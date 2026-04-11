@@ -28,6 +28,30 @@ function runCommand(command: string): string | undefined {
     }
 }
 
+/**
+ * Triggers assigned startup apps for a specific desktop.
+ */
+function launchAppsForDesktop(uuid: string) {
+    const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+    const sessionPath = join(sessionDir, 'session.json');
+    try {
+        const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+        const apps = data.startup_apps?.[uuid] || [];
+        if (apps.length > 0) {
+            console.log(`🚀 Launching ${apps.length} apps for desktop ${uuid}...`);
+            apps.forEach((cmd: string) => {
+                spawn('bash', ['-c', cmd], {
+                    detached: true,
+                    stdio: 'ignore',
+                    env: { ...process.env, DISPLAY: ':0' } // Ensure GUI apps find the display
+                }).unref();
+            });
+        }
+    } catch (e) {
+        console.error(`❌ Error launching apps: ${e}`);
+    }
+}
+
 function main() {
     // Start the history tracker in the background
     spawn('/home/dod/projects/Desktop Manager/scripts/desktop-tracker.py', [], {
@@ -211,6 +235,46 @@ function main() {
                 console.log(`✅ Success! Closed windows on virtual desktop index ${kwinIndex}`);
             }
             
+        } else if (result.startsWith('SUMMON:')) {
+            const fullKey = result.substring(7); // uuid___index string
+            const selectedId = fullKey.split("___")[0]; // Raw UUID
+            
+            // 1. Switch to the desktop
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selectedId}"`);
+            
+            // 2. Launch associated apps
+            launchAppsForDesktop(selectedId);
+            
+            console.log(`🚀 Summoned desktop: ${selectedId}`);
+            // Loop restarts menu on the new desktop
+
+        } else if (result.startsWith('SUMMON_ALL:')) {
+            // Summon everything across all desktops
+            const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+            const sessionPath = join(sessionDir, 'session.json');
+            try {
+                const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                const startupApps = data.startup_apps || {};
+                const uuids = Object.keys(startupApps);
+                
+                let lastUuid = "";
+                for (const uuid of uuids) {
+                    if (startupApps[uuid] && startupApps[uuid].length > 0) {
+                        // Switch and launch
+                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
+                        launchAppsForDesktop(uuid);
+                        lastUuid = uuid;
+                        // Tiny delay to prevent KDE from tripping over rapid switches
+                        execSync('sleep 0.2');
+                    }
+                }
+                
+                // Finally, ensure we land on the last summoned desktop
+                if (lastUuid) {
+                   runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${lastUuid}"`);
+                }
+            } catch (e) {}
+
         } else if (result.startsWith('UNDO')) {
             const lastChange = undoStack.pop();
             if (lastChange) {

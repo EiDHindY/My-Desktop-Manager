@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QMenu, QInputDialog, QAbstractItemView,
                              QDialog, QListWidget, QListWidgetItem,
                              QFileDialog)
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir, QPropertyAnimation, QEasingCurve, QPoint, QRect
 from PyQt5.QtGui import QFont, QColor, QBrush
 
 # Session persistence
@@ -156,6 +156,8 @@ class FolderTreeWidget(QTreeWidget):
         while parent:
             if hasattr(parent, 'save_session'):
                 parent.save_session()
+                if hasattr(parent, 'refresh_tree'):
+                    parent.refresh_tree()
                 return
             parent = parent.parent()
 
@@ -169,7 +171,7 @@ class SwitcherMenu(QWidget):
         self.current_desktop_uuid = current_desktop_uuid
         self.active_kwin_indices = set()
         
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Window)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
         # Geometry setup (Flush Right Edge)
@@ -181,7 +183,23 @@ class SwitcherMenu(QWidget):
         # Start collapsed
         self.setMinimumSize(280, 300)
         self.resize(self.hud_width, self.height_collapsed)
-        self.reset_geometry()
+        
+        # Position Setup
+        x_target = self.screen_geom.width() - self.hud_width + 20
+        x_start = self.screen_geom.width() + 10 # Start off-screen
+        y = 0
+        self.move(x_start, y)
+        
+        # Slide-In Animation
+        self.anim = QPropertyAnimation(self, b"pos")
+        self.anim.setDuration(250)
+        self.anim.setStartValue(QPoint(x_start, y))
+        self.anim.setEndValue(QPoint(x_target, y))
+        self.anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.anim.start()
+        
+        # Force position fixing (delayed)
+        QTimer.singleShot(300, self.force_position)
         
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(20, 2, 20, 20)
@@ -236,8 +254,8 @@ class SwitcherMenu(QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setFont(QFont("Inter", 10))
         self.tree.setFocusPolicy(Qt.NoFocus)
-        self.tree.setIndentation(0)
-        self.tree.setRootIsDecorated(False)
+        self.tree.setIndentation(32)  # Much clearer nesting
+        self.tree.setRootIsDecorated(False) # Use our custom icons
         
         # Drag-and-drop
         self.tree.setDragEnabled(True)
@@ -251,21 +269,27 @@ class SwitcherMenu(QWidget):
                 color: #c8d3f5;
                 border: 1px solid #3b4261;
                 border-radius: 8px;
-                padding: 4px 2px;
+                padding: 2px 0px;
                 outline: none;
             }
             QTreeWidget::item {
-                padding: 4px 6px;
+                padding: 4px 2px;
                 border-radius: 4px;
-                margin: 1px 0px;
+                margin: 0px;
             }
             QTreeWidget::item:hover {
                 background-color: rgba(47, 51, 77, 0.7);
+            }
+            QTreeWidget::branch:hover {
+                background-color: #222436;
             }
             QTreeWidget::item:selected {
                 background-color: rgba(130, 170, 255, 0.85);
                 color: #1e2030;
                 font-weight: bold;
+            }
+            QTreeWidget::branch:selected {
+                background-color: #222436;
             }
             /* Scrollbar */
             QScrollBar:vertical {
@@ -423,11 +447,23 @@ class SwitcherMenu(QWidget):
         btns_container_layout.addLayout(row7)
         btns_container_layout.addLayout(row8)
         
+        # Finally add container to main
+        main_layout.addWidget(self.container)
+        
+        # Shadow logic (moved below container layout setup)
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
         # Buttons Widget (Collapsible)
         self.btn_container_widget = QWidget()
         self.btn_container_widget.setLayout(btns_container_layout)
         self.btn_container_widget.setVisible(False) # Start collapsed
         
+        main_layout.addWidget(self.btn_container_widget)
+
         # Toggle Button (Tiny Arrow)
         self.toggle_btn = QPushButton("▼")
         self.toggle_btn.setFixedHeight(16)
@@ -460,7 +496,7 @@ class SwitcherMenu(QWidget):
         # Load session and populate
         self.session_data = self.load_session()
         self.default_folder_name = self.session_data.get("default_folder", UNFILED)
-        self.sort_mode = self.session_data.get("sort_mode", "priority")
+        self.sort_mode = self.session_data.get("sort_mode", "activity")
         self.populate_tree(initial_set=True)
         
         # Connect Background Fetcher
@@ -542,7 +578,7 @@ class SwitcherMenu(QWidget):
         """Reload the last saved session from disk."""
         self.session_data = self.load_session()
         self.default_folder_name = self.session_data.get("default_folder", UNFILED)
-        self.sort_mode = self.session_data.get("sort_mode", "priority")
+        self.sort_mode = self.session_data.get("sort_mode", "activity")
         self.populate_tree(initial_set=True)
 
     # ─── Template Management ───
@@ -577,7 +613,20 @@ class SwitcherMenu(QWidget):
 
     def save_template(self):
         """Save the current folder layout + desktop labels as a named template."""
-        name, ok = QInputDialog.getText(self, "Save Template", "Template name:")
+        # Get pre-fill name from current selection
+        item = self.tree.currentItem()
+        default_name = ""
+        if item:
+            if item.data(0, Qt.UserRole) == "FOLDER":
+                default_name = item.data(0, Qt.UserRole + 1)
+            else:
+                did = item.data(0, Qt.UserRole)
+                for pair_id, pair_name in self.id_name_pairs:
+                    if pair_id == did:
+                        default_name = pair_name
+                        break
+
+        name, ok = QInputDialog.getText(self, "Save Template", "Template name:", text=default_name)
         if not ok or not name.strip():
             return
         name = name.strip()
@@ -695,32 +744,14 @@ class SwitcherMenu(QWidget):
 
     # ─── Tree Expand/Collapse Indicators ───
 
-    def _has_active_children(self, folder_item):
-        """Check if any desktop in this folder has active windows."""
-        for j in range(folder_item.childCount()):
-            child = folder_item.child(j)
-            did = child.data(0, Qt.UserRole)
-            if did and did != "FOLDER" and "___" in did:
-                kwin_idx_str = did.split("___")[1]
-                if int(kwin_idx_str) in self.active_kwin_indices:
-                    return True
-        return False
-
-    def _update_folder_text(self, folder_item):
-        """Update folder display text with expand arrow and activity dot."""
-        name = folder_item.data(0, Qt.UserRole + 1)
-        arrow = "▾" if folder_item.isExpanded() else "▸"
-        dot = "  •" if self._has_active_children(folder_item) else ""
-        folder_item.setText(0, f"{arrow} {name}{dot}")
-
     def _on_folder_expanded(self, item):
         if item.data(0, Qt.UserRole) == "FOLDER":
-            self._update_folder_text(item)
+            self.refresh_tree()
             self.save_session()
 
     def _on_folder_collapsed(self, item):
         if item.data(0, Qt.UserRole) == "FOLDER":
-            self._update_folder_text(item)
+            self.refresh_tree()
             self.save_session()
 
     # ─── Tree Population ───
@@ -728,7 +759,7 @@ class SwitcherMenu(QWidget):
     def _make_folder_item(self, name):
         """Create a styled folder tree item."""
         item = QTreeWidgetItem()
-        item.setText(0, f"▸ {name}")
+        item.setText(0, f"📂 {name}")
         item.setFont(0, QFont("Inter", 9, QFont.DemiBold))
         item.setForeground(0, QBrush(QColor("#7a88cf")))
         item.setData(0, Qt.UserRole, "FOLDER")      # type marker
@@ -831,25 +862,68 @@ class SwitcherMenu(QWidget):
                     return
 
     def refresh_tree(self):
-        """Update display text for active window indicators (desktops + folders)."""
+        """Update display text and RICH styles for active window indicators."""
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             folder = root.child(i)
+            folder_busy_count = 0
+            folder_has_current = False
+            
             for j in range(folder.childCount()):
                 child = folder.child(j)
                 did = child.data(0, Qt.UserRole)
                 if did and did != "FOLDER":
-                    # Find the name from id_name_pairs
-                    name = None
-                    for pair_id, pair_name in self.id_name_pairs:
-                        if pair_id == did:
-                            name = pair_name
+                    raw_uuid = did.split("___")[0] if "___" in did else did
+                    if raw_uuid == self.current_desktop_uuid:
+                        folder_has_current = True
+                        
+                    # Check if busy
+                    is_busy = False
+                    if "___" in did:
+                        kidx = int(did.split("___")[1])
+                        if kidx in self.active_kwin_indices:
+                            is_busy = True
+                            folder_busy_count += 1
+                            
+                    # Get Original Name
+                    name = ""
+                    for pid, pname in self.id_name_pairs:
+                        if pid == did:
+                            name = pname
                             break
-                    if name:
-                        child.setText(0, self.get_display_name(did, name))
+                    
+                    # Update Text
+                    child.setText(0, self.get_display_name(did, name))
+                    
+                    # Apply Rich Styles
+                    bg, fg, bold = self._get_item_style(did, name)
+                    child.setBackground(0, bg)
+                    child.setForeground(0, fg)
+                    font = child.font(0)
+                    font.setBold(bold)
+                    child.setFont(0, font)
+
+            # Update folder text with busy badge and section styling
+            folder_name = folder.data(0, Qt.UserRole + 1)
+            display_text = f"📂 {folder_name}"
+            if folder_busy_count > 0:
+                display_text += f" ({folder_busy_count})"
+            folder.setText(0, display_text)
             
-            # Update folder activity indicator
-            self._update_folder_text(folder)
+            # Apply 'Section' Background for Folders
+            folder.setBackground(0, QBrush(QColor("#1e2030")))
+            
+            # Highlight folder if it contains current desktop
+            if folder_has_current:
+                folder.setForeground(0, QColor("#bb9af7")) # Brighter Purple
+                font = folder.font(0)
+                font.setBold(True)
+                folder.setFont(0, font)
+            else:
+                folder.setForeground(0, QColor("#9d7cd8")) # Muted Purple
+                font = folder.font(0)
+                font.setBold(True)
+                folder.setFont(0, font)
 
     # ─── Folder Management ───
     
@@ -1031,6 +1105,17 @@ class SwitcherMenu(QWidget):
         if save:
             self.save_session()
 
+    def _has_active_children(self, folder_item):
+        """Check if any desktop within this folder has active windows."""
+        for i in range(folder_item.childCount()):
+            child = folder_item.child(i)
+            did = child.data(0, Qt.UserRole)
+            if did and "___" in did:
+                parts = did.split("___")
+                if len(parts) > 1 and int(parts[1]) in self.active_kwin_indices:
+                    return True
+        return False
+
     # ─── Context Menu ───
     
     def on_context_menu(self, pos):
@@ -1177,11 +1262,47 @@ class SwitcherMenu(QWidget):
 
     def get_display_name(self, id_val, name_val):
         display_name = name_val
+        raw_uuid = id_val.split("___")[0] if "___" in id_val else id_val
+        is_current = (raw_uuid == self.current_desktop_uuid)
+        
+        is_busy = False
         if "___" in id_val:
             kwin_idx_str = id_val.split("___")[1]
             if int(kwin_idx_str) in self.active_kwin_indices:
-                return f" •  {display_name}"
-        return f"    {display_name}"
+                is_busy = True
+                
+        if is_current:
+            return f"▶  {display_name}"
+        elif is_busy:
+            return f"◉  {display_name}"
+        return f"○  {display_name}"
+
+    def _get_item_style(self, id_val, name_val):
+        """Return (background_brush, foreground_color, is_bold) based on state."""
+        raw_uuid = id_val.split("___")[0] if "___" in id_val else id_val
+        is_current = (raw_uuid == self.current_desktop_uuid)
+        
+        is_busy = False
+        if "___" in id_val:
+            kwin_idx_str = id_val.split("___")[1]
+            if int(kwin_idx_str) in self.active_kwin_indices:
+                is_busy = True
+        
+        # 1. Background
+        bg = QBrush(Qt.NoBrush)
+        
+        # 2. Foreground
+        fg = self.get_color(name_val) # Default label color
+        if is_current:
+            fg = QColor("#ffffff")
+        elif is_busy:
+            fg = QColor("#7aa2f7")
+        elif "empty" in name_val.lower():
+            fg = QColor("#565f89")
+        else:
+            fg = QColor("#c8d3f5")
+            
+        return bg, fg, is_current
 
     def get_color(self, name_val):
         lower_name = name_val.lower()
@@ -1193,13 +1314,22 @@ class SwitcherMenu(QWidget):
             return QColor("#5c636a")
         return QColor("#c8d3f5")
 
-    def reset_geometry(self):
+    def reset_geometry(self, animate=True):
         # Place container at top-right corner
-        x = self.screen_geom.width() - self.width() + 20
+        x_target = self.screen_geom.width() - self.width() + 20
         y = 0
-        self.move(x, y)
-        # Also force via wmctrl after a short delay to override KDE struts
-        QTimer.singleShot(50, self.force_position)
+        
+        if animate:
+            self.anim = QPropertyAnimation(self, b"pos")
+            self.anim.setDuration(200)
+            self.anim.setEndValue(QPoint(x_target, y))
+            self.anim.setEasingCurve(QEasingCurve.OutCubic)
+            self.anim.start()
+        else:
+            self.move(x_target, y)
+            
+        # Also force via wmctrl after a short delay
+        QTimer.singleShot(300, self.force_position)
 
     def on_toggle_buttons(self):
         is_visible = self.btn_container_widget.isVisible()
@@ -1278,8 +1408,9 @@ class SwitcherMenu(QWidget):
     def on_summon_this_desktop(self, item):
         """Summon windows for a specific desktop selected from the tree."""
         desktop_id = item.data(0, Qt.UserRole)
-        desktop_uuid = desktop_id.split("___")[0] if "___" in desktop_id else desktop_id
-        self.summon_one_desktop(desktop_uuid)
+        if desktop_id:
+            print(f"SUMMON:{desktop_id}", flush=True)
+            sys.exit(0)
 
     def summon_one_desktop(self, uuid):
         """Helper to switch to a desktop and launch its assigned apps."""
@@ -1311,15 +1442,8 @@ class SwitcherMenu(QWidget):
 
     def on_summon(self):
         """Execute all startup workflows across all desktops."""
-        startup_apps = self.session_data.get("startup_apps", {})
-        if not startup_apps:
-            return
-            
-        # Get all UUIDs that have apps
-        uuids_to_summon = [u for u, apps in startup_apps.items() if apps]
-        
-        for uuid in uuids_to_summon:
-            self.summon_one_desktop(uuid)
+        print("SUMMON_ALL:", flush=True)
+        sys.exit(0)
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
