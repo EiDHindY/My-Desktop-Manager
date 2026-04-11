@@ -21,6 +21,7 @@ from PyQt5.QtGui import QFont, QColor, QBrush
 SESSION_DIR = Path.home() / ".config" / "desktop-manager"
 SESSION_FILE = SESSION_DIR / "session.json"
 TEMPLATES_DIR = SESSION_DIR / "templates"
+HISTORY_FILE = SESSION_DIR / "history.json"
 
 UNFILED = "Unfiled"
 CHROME_LOCAL_STATE = Path.home() / ".config/google-chrome/Local State"
@@ -369,6 +370,16 @@ class SwitcherMenu(QWidget):
         self.summon_btn.setStyleSheet(btn_style + "background-color: #3d3b5a;")
         self.summon_btn.setToolTip("Launch all startup apps assigned to desktops")
         self.summon_btn.clicked.connect(self.on_summon)
+
+        self.toggle_last_btn = QPushButton("🔂 Toggle Last")
+        self.toggle_last_btn.setStyleSheet(btn_style)
+        self.toggle_last_btn.setToolTip("Jump to previous desktop (Ctrl+H)")
+        self.toggle_last_btn.clicked.connect(self.on_back)
+
+        self.cleanup_btn = QPushButton("🧹 Cleanup Empties")
+        self.cleanup_btn.setStyleSheet(btn_style + "background-color: #3b4261;")
+        self.cleanup_btn.setToolTip("Move all 'Empty' desktops to root folder")
+        self.cleanup_btn.clicked.connect(self.cleanup_empty_desktops)
         
         # Buttons Layout (Organized Grid)
         btns_container_layout = QVBoxLayout()
@@ -380,6 +391,8 @@ class SwitcherMenu(QWidget):
         row4 = QHBoxLayout(); row4.setSpacing(6)
         row5 = QHBoxLayout(); row5.setSpacing(6)
         row6 = QHBoxLayout(); row6.setSpacing(6)
+        row7 = QHBoxLayout(); row7.setSpacing(6)
+        row8 = QHBoxLayout(); row8.setSpacing(6)
         
         row1.addWidget(self.rename_btn)
         row1.addWidget(self.close_btn)
@@ -397,6 +410,9 @@ class SwitcherMenu(QWidget):
         row5.addWidget(self.load_tpl_btn)
         
         row6.addWidget(self.summon_btn)
+
+        row7.addWidget(self.toggle_last_btn)
+        row8.addWidget(self.cleanup_btn)
         
         btns_container_layout.addLayout(row1)
         btns_container_layout.addLayout(row2)
@@ -404,6 +420,8 @@ class SwitcherMenu(QWidget):
         btns_container_layout.addLayout(row4)
         btns_container_layout.addLayout(row5)
         btns_container_layout.addLayout(row6)
+        btns_container_layout.addLayout(row7)
+        btns_container_layout.addLayout(row8)
         
         # Buttons Widget (Collapsible)
         self.btn_container_widget = QWidget()
@@ -436,10 +454,13 @@ class SwitcherMenu(QWidget):
         
         # Behaviors
         self.tree.itemClicked.connect(self._on_tree_click)
+        self.tree.itemExpanded.connect(self.save_session)
+        self.tree.itemCollapsed.connect(self.save_session)
         
         # Load session and populate
         self.session_data = self.load_session()
         self.default_folder_name = self.session_data.get("default_folder", UNFILED)
+        self.sort_mode = self.session_data.get("sort_mode", "priority")
         self.populate_tree(initial_set=True)
         
         # Connect Background Fetcher
@@ -508,8 +529,9 @@ class SwitcherMenu(QWidget):
             data["default_folder"] = self.default_folder_name
             data["collapsed_folders"] = collapsed
             
-            # Preserve startup apps
+            # Preserve startup apps and sorting mode
             data["startup_apps"] = getattr(self, "session_data", {}).get("startup_apps", {})
+            data["sort_mode"] = getattr(self, "sort_mode", "priority")
             
             with open(SESSION_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -520,6 +542,7 @@ class SwitcherMenu(QWidget):
         """Reload the last saved session from disk."""
         self.session_data = self.load_session()
         self.default_folder_name = self.session_data.get("default_folder", UNFILED)
+        self.sort_mode = self.session_data.get("sort_mode", "priority")
         self.populate_tree(initial_set=True)
 
     # ─── Template Management ───
@@ -753,8 +776,9 @@ class SwitcherMenu(QWidget):
                     folder_item.addChild(desktop_item)
                     placed_ids.add(did)
             
-            # Sort after adding all desktops to this folder
-            self._sort_folder_children(folder_item)
+            # Sort after adding all desktops to this folder (if not in activity mode)
+            if self.sort_mode != "activity":
+                self._sort_folder_children(folder_item)
         
         # Add catch-all for remaining desktops
         unfiled_ids = [did for did in id_map if did not in placed_ids]
@@ -769,10 +793,17 @@ class SwitcherMenu(QWidget):
                 desktop_item = self._make_desktop_item(did, id_map[did])
                 unfiled_item.addChild(desktop_item)
             
-            # Sort the catch-all folder
-            self._sort_folder_children(unfiled_item)
+            # Sort the catch-all folder (if not in activity mode)
+            if self.sort_mode != "activity":
+                self._sort_folder_children(unfiled_item)
         
-        # Restore expand/collapse state from session
+        # 4. Apply persistent sorting mode first
+        if self.sort_mode == "activity":
+            self.sort_by_activity(save=False)
+        else:
+            self.sort_by_priority(save=False)
+
+        # 5. NOW Restore expand/collapse state (at the very end so sorting doesn't reset it)
         collapsed_folders = set(self.session_data.get("collapsed_folders", []))
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
@@ -783,7 +814,7 @@ class SwitcherMenu(QWidget):
             else:
                 folder_item.setExpanded(True)
         
-        # Select current desktop if initial
+        # 6. Select current desktop if initial
         if initial_set and self.current_desktop_uuid:
             self._select_desktop_by_uuid(self.current_desktop_uuid)
     
@@ -938,7 +969,17 @@ class SwitcherMenu(QWidget):
         for child in children:
             folder_item.addChild(child)
 
-    def sort_by_activity(self):
+    def sort_by_priority(self, save=True):
+        """Sort desktops within folders by labels (original behavior)."""
+        root = self.tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            self._sort_folder_children(root.child(i))
+        
+        self.sort_mode = "priority"
+        if save:
+            self.save_session()
+
+    def sort_by_activity(self, save=True):
         """Sort folders and desktops by activity: active items float to the top."""
         root = self.tree.invisibleRootItem()
         
@@ -986,7 +1027,9 @@ class SwitcherMenu(QWidget):
         for folder in folders:
             root.addChild(folder)
         
-        self.save_session()
+        self.sort_mode = "activity"
+        if save:
+            self.save_session()
 
     # ─── Context Menu ───
     
@@ -1065,10 +1108,22 @@ class SwitcherMenu(QWidget):
             action_new = menu.addAction("New Folder")
             action_new.triggered.connect(self.create_folder)
         
+        # ── Cleanup Options ──
+        menu.addSeparator()
+        action_cleanup = menu.addAction("🧹 Cleanup Empty Desktops")
+        action_cleanup.triggered.connect(self.cleanup_empty_desktops)
+
         # ── Sort & Template Options (always available) ──
         menu.addSeparator()
-        action_sort = menu.addAction("⚡ Sort by Activity")
-        action_sort.triggered.connect(self.sort_by_activity)
+        action_sort_act = menu.addAction("⚡ Sort by Activity")
+        action_sort_act.setCheckable(True)
+        action_sort_act.setChecked(self.sort_mode == "activity")
+        action_sort_act.triggered.connect(self.sort_by_activity)
+
+        action_sort_pri = menu.addAction("🔤 Sort by Priority")
+        action_sort_pri.setCheckable(True)
+        action_sort_pri.setChecked(self.sort_mode == "priority")
+        action_sort_pri.triggered.connect(self.sort_by_priority)
         
         menu.addSeparator()
         action_save_tpl = menu.addAction("💾 Save as Template...")
@@ -1300,6 +1355,9 @@ class SwitcherMenu(QWidget):
                 elif key == Qt.Key_K:
                     self.move_up()
                     return True
+                elif key == Qt.Key_H:
+                    self.on_back()
+                    return True
                     
             if key == Qt.Key_Up:
                 self.move_up()
@@ -1398,6 +1456,99 @@ class SwitcherMenu(QWidget):
         if sid: print(f"CLOSE_WINDOWS:{sid}", flush=True); sys.exit(0)
     def on_undo(self): 
         print("UNDO", flush=True); sys.exit(0)
+
+    def cleanup_empty_desktops(self):
+        """Find all desktops labeled 'Empty' across all folders and move them to root."""
+        root_item = self.tree.invisibleRootItem()
+        target_folder = None
+        
+        # 1. Find the target 'root' folder (default folder)
+        for i in range(root_item.childCount()):
+            folder = root_item.child(i)
+            if folder.data(0, Qt.UserRole + 1) == self.default_folder_name:
+                target_folder = folder
+                break
+        
+        if not target_folder:
+            return
+
+        # 2. Iterate through all other folders
+        found_any = False
+        for i in range(root_item.childCount()):
+            folder = root_item.child(i)
+            if folder == target_folder:
+                continue
+            
+            # Find empty desktops (desktops with 'empty' in name)
+            to_move = []
+            for j in range(folder.childCount()):
+                child = folder.child(j)
+                # Check for "Empty" case-insensitively
+                text = child.text(0).lower()
+                if "empty" in text and "desktop" not in text:
+                    to_move.append(child)
+                elif text == "":
+                    to_move.append(child)
+            
+            # Move them
+            for item in to_move:
+                idx = folder.indexOfChild(item)
+                if idx >= 0:
+                    item = folder.takeChild(idx)
+                    target_folder.addChild(item)
+                    found_any = True
+        
+        if found_any:
+            # 3. Sort target folder and save
+            self.sort_by_priority(save=True) # Reset sort to ensure priority is saved
+            self.save_session()
+            self.refresh_tree()
+            self.search_entry.clear()
+            QApplication.processEvents()
+
+    def on_back(self):
+        """Toggle to the last-used desktop (Alt+Tab style)."""
+        try:
+            with open(HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+            
+            target_uuid = data.get("last_uuid")
+            
+            # Smart Fallback: If no last_uuid (fresh session), try the history stack
+            if not target_uuid or target_uuid == self.current_desktop_uuid:
+                stack = data.get("stack", [])
+                idx = data.get("index", -1)
+                if idx > 0:
+                    target_uuid = stack[idx-1]
+                elif len(stack) > 1:
+                    target_uuid = stack[1] if stack[0] == self.current_desktop_uuid else stack[0]
+            
+            # Ultra Fallback: Just toggle to the next desktop in the list
+            if not target_uuid or target_uuid == self.current_desktop_uuid:
+                for pair in self.id_name_pairs:
+                    if pair[0] != self.current_desktop_uuid:
+                        target_uuid = pair[0]
+                        break
+
+            if target_uuid and target_uuid != self.current_desktop_uuid:
+                # Strip kwinIndex payload for the history file target (must be raw UUID)
+                raw_uuid = target_uuid.split("___")[0]
+                
+                # Set lock so tracker knows this is intentional
+                data["lock"] = True
+                data["target"] = raw_uuid
+                with open(HISTORY_FILE, 'w') as f:
+                    json.dump(data, f, indent=2)
+                
+                # Switch using the raw UUID
+                print(f"SWITCH_UUID:{raw_uuid}", flush=True)
+                sys.exit(0)
+        except Exception:
+            pass
+
+    def on_forward(self):
+        """Removed in favor of Ctrl+H Toggle."""
+        pass
 
 def main():
     title_win = "Menu"

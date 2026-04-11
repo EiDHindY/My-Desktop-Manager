@@ -11,7 +11,7 @@
  * We also added Regex (Regular Expressions) to parse text!
  */
 
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
@@ -29,6 +29,12 @@ function runCommand(command: string): string | undefined {
 }
 
 function main() {
+    // Start the history tracker in the background
+    spawn('/home/dod/projects/Desktop Manager/scripts/desktop-tracker.py', [], {
+        detached: true,
+        stdio: 'ignore'
+    }).unref();
+
     let undoStack: { id: string, oldName: string }[] = [];
     // Wrap everything in a continuous loop so you can always go back!
     while (true) {
@@ -110,6 +116,11 @@ function main() {
             console.log(`🚀 Switched to desktop: ${selectedId}`);
             
             // Loop automatically restarts the menu on the new desktop!
+            
+        } else if (result.startsWith('SWITCH_UUID:')) {
+            const selectedId = result.substring(12);
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selectedId}"`);
+            console.log(`🚀 Switched to desktop (UUID): ${selectedId}`);
             
         } else if (result.startsWith('RENAME:')) {
             const fullKey = result.substring(7); // uuid___index string
