@@ -6,6 +6,7 @@ import subprocess
 import threading
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem,
                              QPushButton, QGraphicsDropShadowEffect,
@@ -16,6 +17,7 @@ from PyQt5.QtGui import QFont, QColor, QBrush
 # Session persistence
 SESSION_DIR = Path.home() / ".config" / "desktop-manager"
 SESSION_FILE = SESSION_DIR / "session.json"
+TEMPLATES_DIR = SESSION_DIR / "templates"
 
 UNFILED = "Unfiled"
 
@@ -297,6 +299,16 @@ class SwitcherMenu(QWidget):
         self.restore_btn.setToolTip("Restore last saved session")
         self.restore_btn.clicked.connect(self.restore_session)
         
+        self.save_tpl_btn = QPushButton("💾 Save Template")
+        self.save_tpl_btn.setStyleSheet(btn_style)
+        self.save_tpl_btn.setToolTip("Save current layout as a reusable template")
+        self.save_tpl_btn.clicked.connect(self.save_template)
+        
+        self.load_tpl_btn = QPushButton("📂 Load Template")
+        self.load_tpl_btn.setStyleSheet(btn_style)
+        self.load_tpl_btn.setToolTip("Apply a saved template")
+        self.load_tpl_btn.clicked.connect(self.show_load_template_menu)
+        
         # Buttons Layout (Organized Grid)
         btns_container_layout = QVBoxLayout()
         btns_container_layout.setSpacing(6)
@@ -305,6 +317,7 @@ class SwitcherMenu(QWidget):
         row2 = QHBoxLayout(); row2.setSpacing(6)
         row3 = QHBoxLayout(); row3.setSpacing(6)
         row4 = QHBoxLayout(); row4.setSpacing(6)
+        row5 = QHBoxLayout(); row5.setSpacing(6)
         
         row1.addWidget(self.rename_btn)
         row1.addWidget(self.close_btn)
@@ -318,10 +331,14 @@ class SwitcherMenu(QWidget):
         row4.addWidget(self.new_folder_btn)
         row4.addWidget(self.restore_btn)
         
+        row5.addWidget(self.save_tpl_btn)
+        row5.addWidget(self.load_tpl_btn)
+        
         btns_container_layout.addLayout(row1)
         btns_container_layout.addLayout(row2)
         btns_container_layout.addLayout(row3)
         btns_container_layout.addLayout(row4)
+        btns_container_layout.addLayout(row5)
         
         # Buttons Widget (Collapsible)
         self.btn_container_widget = QWidget()
@@ -427,6 +444,157 @@ class SwitcherMenu(QWidget):
         self.session_data = self.load_session()
         self.default_folder_name = self.session_data.get("default_folder", UNFILED)
         self.populate_tree(initial_set=True)
+
+    # ─── Template Management ───
+
+    def _get_desktop_names_from_kde(self):
+        """Query KDE for all desktop names in order, returns list of (uuid, name)."""
+        try:
+            result = subprocess.run(
+                ["bash", "-c", "qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops"],
+                capture_output=True, text=True
+            )
+            import re
+            regex = re.compile(r'\[Argument: \(uss\) \d+, "([^"]+)", "([^"]+)"\]')
+            matches = regex.findall(result.stdout)
+            return [(uuid, name) for uuid, name in matches]
+        except Exception:
+            return []
+
+    def _list_templates(self):
+        """Return list of (filename, display_name) for all saved templates."""
+        templates = []
+        if TEMPLATES_DIR.exists():
+            for f in sorted(TEMPLATES_DIR.glob("*.json")):
+                try:
+                    with open(f, "r") as fh:
+                        data = json.load(fh)
+                        display = data.get("name", f.stem)
+                        templates.append((f.name, display))
+                except Exception:
+                    pass
+        return templates
+
+    def save_template(self):
+        """Save the current folder layout + desktop labels as a named template."""
+        name, ok = QInputDialog.getText(self, "Save Template", "Template name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        
+        # Get actual desktop names from KDE (ordered by position)
+        kde_desktops = self._get_desktop_names_from_kde()
+        if not kde_desktops:
+            return
+        
+        desktop_names = [d[1] for d in kde_desktops]
+        desktop_uuids = [d[0] for d in kde_desktops]
+        
+        # Build a uuid -> position index map
+        uuid_to_pos = {}
+        for idx, uuid in enumerate(desktop_uuids):
+            uuid_to_pos[uuid] = idx
+        
+        # Read folder structure from the tree and convert desktop IDs to position indices
+        folders = {}
+        folder_order = []
+        root = self.tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            folder_item = root.child(i)
+            folder_name = folder_item.data(0, Qt.UserRole + 1)
+            if folder_name is None:
+                continue
+            folder_order.append(folder_name)
+            indices = []
+            for j in range(folder_item.childCount()):
+                child = folder_item.child(j)
+                did = child.data(0, Qt.UserRole)
+                if did and did != "FOLDER":
+                    # Extract raw UUID from the "uuid___kwinIndex" format
+                    raw_uuid = did.split("___")[0] if "___" in did else did
+                    if raw_uuid in uuid_to_pos:
+                        indices.append(uuid_to_pos[raw_uuid])
+            folders[folder_name] = indices
+        
+        template = {
+            "name": name,
+            "created": datetime.now(timezone.utc).isoformat(),
+            "desktop_count": len(desktop_names),
+            "desktops": desktop_names,
+            "folders": folders,
+            "folder_order": folder_order,
+            "default_folder": self.default_folder_name
+        }
+        
+        # Write template file
+        TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+        safe_filename = name.lower().replace(" ", "_") + ".json"
+        filepath = TEMPLATES_DIR / safe_filename
+        try:
+            with open(filepath, "w") as f:
+                json.dump(template, f, indent=2)
+        except Exception:
+            pass
+
+    def show_load_template_menu(self):
+        """Show a popup menu to select and load a template."""
+        templates = self._list_templates()
+        if not templates:
+            return
+        
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #2f334d;
+                color: #c8d3f5;
+                border: 1px solid #3b4261;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #82aaff;
+                color: #1e2030;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #3b4261;
+                margin: 4px 8px;
+            }
+        """)
+        
+        # Add template entries
+        for filename, display_name in templates:
+            action = menu.addAction(f"📋 {display_name}")
+            action.triggered.connect(lambda checked, fn=filename: self._apply_template(fn))
+        
+        # Separator + delete submenu
+        menu.addSeparator()
+        delete_menu = menu.addMenu("🗑  Delete...")
+        delete_menu.setStyleSheet(menu.styleSheet())
+        for filename, display_name in templates:
+            action = delete_menu.addAction(display_name)
+            action.triggered.connect(lambda checked, fn=filename: self._delete_template(fn))
+        
+        # Show menu near the load button
+        btn_pos = self.load_tpl_btn.mapToGlobal(self.load_tpl_btn.rect().topLeft())
+        menu.exec_(btn_pos)
+
+    def _apply_template(self, filename):
+        """Output LOAD_TEMPLATE action for the TypeScript orchestrator."""
+        print(f"LOAD_TEMPLATE:{filename}", flush=True)
+        sys.exit(0)
+
+    def _delete_template(self, filename):
+        """Delete a template file."""
+        filepath = TEMPLATES_DIR / filename
+        try:
+            filepath.unlink()
+        except Exception:
+            pass
 
     # ─── Tree Expand/Collapse Indicators ───
 
@@ -718,6 +886,19 @@ class SwitcherMenu(QWidget):
             menu.addSeparator()
             action_new = menu.addAction("New Folder")
             action_new.triggered.connect(self.create_folder)
+        
+        # ── Template Options (always available) ──
+        menu.addSeparator()
+        action_save_tpl = menu.addAction("💾 Save as Template...")
+        action_save_tpl.triggered.connect(self.save_template)
+        
+        templates = self._list_templates()
+        if templates:
+            load_menu = menu.addMenu("📂 Load Template")
+            load_menu.setStyleSheet(menu.styleSheet())
+            for filename, display_name in templates:
+                action = load_menu.addAction(display_name)
+                action.triggered.connect(lambda checked, fn=filename: self._apply_template(fn))
         
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
 

@@ -12,6 +12,8 @@
  */
 
 import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 
 /**
  * Executes a shell command and returns the output.
@@ -205,6 +207,107 @@ function main() {
                 console.log(`✅ Success! Reversed rename. Restored to: "${lastChange.oldName}"`);
             } else {
                 console.log(`❌ Nothing to undo!`);
+            }
+        } else if (result.startsWith('LOAD_TEMPLATE:')) {
+            // ─── Template Application ───
+            const templateFilename = result.substring(14);
+            const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
+            const templatePath = join(templatesDir, templateFilename);
+            
+            try {
+                const templateData = JSON.parse(readFileSync(templatePath, 'utf-8'));
+                const templateDesktops: string[] = templateData.desktops || [];
+                
+                // Get current desktops from KDE
+                const currentOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
+                if (!currentOutput) {
+                    console.log('❌ Could not read current desktops.');
+                    continue;
+                }
+                
+                const currentRegex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
+                let currentMatch: RegExpExecArray | null;
+                const currentDesktops: { position: number, uuid: string, name: string }[] = [];
+                
+                while ((currentMatch = currentRegex.exec(currentOutput)) !== null) {
+                    currentDesktops.push({
+                        position: parseInt(currentMatch[1]),
+                        uuid: currentMatch[2],
+                        name: currentMatch[3]
+                    });
+                }
+                
+                // Sort by position to ensure correct ordering
+                currentDesktops.sort((a, b) => a.position - b.position);
+                
+                // Rename each desktop by position
+                for (let idx = 0; idx < currentDesktops.length; idx++) {
+                    const desktop = currentDesktops[idx];
+                    const newName = idx < templateDesktops.length ? templateDesktops[idx] : 'Empty';
+                    
+                    if (desktop.name !== newName) {
+                        const safeName = newName.replace(/"/g, '\\"');
+                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${desktop.uuid}" "${safeName}"`);
+                    }
+                }
+                
+                // Update session.json with template's folder layout, mapping position indices to real UUIDs
+                const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+                const sessionPath = join(sessionDir, 'session.json');
+                
+                const templateFolders: Record<string, number[]> = templateData.folders || {};
+                const sessionFolders: Record<string, string[]> = {};
+                
+                for (const [folderName, indices] of Object.entries(templateFolders)) {
+                    sessionFolders[folderName] = (indices as number[]).map((posIdx: number) => {
+                        if (posIdx < currentDesktops.length) {
+                            const kwinIdx = posIdx + 1;
+                            return `${currentDesktops[posIdx].uuid}___${kwinIdx}`;
+                        }
+                        return '';
+                    }).filter((id: string) => id !== '');
+                }
+                
+                // Handle extra desktops not covered by template — put them in default folder
+                const coveredPositions = new Set<number>();
+                for (const indices of Object.values(templateFolders)) {
+                    for (const idx of (indices as number[])) {
+                        coveredPositions.add(idx);
+                    }
+                }
+                
+                const defaultFolder = templateData.default_folder || 'root';
+                const extraIds: string[] = [];
+                for (let idx = 0; idx < currentDesktops.length; idx++) {
+                    if (!coveredPositions.has(idx)) {
+                        const kwinIdx = idx + 1;
+                        extraIds.push(`${currentDesktops[idx].uuid}___${kwinIdx}`);
+                    }
+                }
+                if (extraIds.length > 0) {
+                    if (!sessionFolders[defaultFolder]) {
+                        sessionFolders[defaultFolder] = [];
+                    }
+                    sessionFolders[defaultFolder].push(...extraIds);
+                }
+                
+                const sessionData = {
+                    folders: sessionFolders,
+                    folder_order: templateData.folder_order || [],
+                    default_folder: defaultFolder
+                };
+                
+                // Ensure default folder is in folder_order
+                if (!sessionData.folder_order.includes(defaultFolder) && sessionFolders[defaultFolder]) {
+                    sessionData.folder_order.push(defaultFolder);
+                }
+                
+                mkdirSync(sessionDir, { recursive: true });
+                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
+                
+                console.log(`✅ Template "${templateData.name}" applied! Renamed ${currentDesktops.length} desktops.`);
+            } catch (err) {
+                console.log(`❌ Failed to load template: ${err}`);
             }
         }
     }
