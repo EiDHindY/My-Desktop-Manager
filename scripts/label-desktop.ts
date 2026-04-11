@@ -294,7 +294,8 @@ function main() {
                 const sessionData = {
                     folders: sessionFolders,
                     folder_order: templateData.folder_order || [],
-                    default_folder: defaultFolder
+                    default_folder: defaultFolder,
+                    startup_apps: templateData.startup_apps || {}
                 };
                 
                 // Ensure default folder is in folder_order

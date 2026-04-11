@@ -7,11 +7,14 @@ import threading
 import json
 from pathlib import Path
 from datetime import datetime, timezone
+import time
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QLineEdit, QTreeWidget, QTreeWidgetItem,
                              QPushButton, QGraphicsDropShadowEffect,
-                             QMenu, QInputDialog, QAbstractItemView)
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer
+                             QMenu, QInputDialog, QAbstractItemView,
+                             QDialog, QListWidget, QListWidgetItem,
+                             QFileDialog)
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir
 from PyQt5.QtGui import QFont, QColor, QBrush
 
 # Session persistence
@@ -20,6 +23,25 @@ SESSION_FILE = SESSION_DIR / "session.json"
 TEMPLATES_DIR = SESSION_DIR / "templates"
 
 UNFILED = "Unfiled"
+CHROME_LOCAL_STATE = Path.home() / ".config/google-chrome/Local State"
+
+def get_chrome_profiles():
+    """Parse Google Chrome's Local State to get profile names and IDs."""
+    try:
+        if not CHROME_LOCAL_STATE.exists():
+            return []
+        with open(CHROME_LOCAL_STATE, 'r') as f:
+            data = json.load(f)
+        profiles = []
+        cache = data.get("profile", {}).get("info_cache", {})
+        for key, value in cache.items():
+            if key != "System Profile":
+                name = value.get("name", "Unknown")
+                email = value.get("user_name", "")
+                profiles.append((key, f"{name} ({email})" if email else name))
+        return sorted(profiles, key=lambda x: x[1].lower())
+    except Exception:
+        return []
 
 class WindowFetcher(QObject):
     finished = pyqtSignal(set)
@@ -343,6 +365,11 @@ class SwitcherMenu(QWidget):
         self.load_tpl_btn.setToolTip("Apply a saved template")
         self.load_tpl_btn.clicked.connect(self.show_load_template_menu)
         
+        self.summon_btn = QPushButton("🚀 Summon Workflows")
+        self.summon_btn.setStyleSheet(btn_style + "background-color: #3d3b5a;")
+        self.summon_btn.setToolTip("Launch all startup apps assigned to desktops")
+        self.summon_btn.clicked.connect(self.on_summon)
+        
         # Buttons Layout (Organized Grid)
         btns_container_layout = QVBoxLayout()
         btns_container_layout.setSpacing(6)
@@ -352,6 +379,7 @@ class SwitcherMenu(QWidget):
         row3 = QHBoxLayout(); row3.setSpacing(6)
         row4 = QHBoxLayout(); row4.setSpacing(6)
         row5 = QHBoxLayout(); row5.setSpacing(6)
+        row6 = QHBoxLayout(); row6.setSpacing(6)
         
         row1.addWidget(self.rename_btn)
         row1.addWidget(self.close_btn)
@@ -368,11 +396,14 @@ class SwitcherMenu(QWidget):
         row5.addWidget(self.save_tpl_btn)
         row5.addWidget(self.load_tpl_btn)
         
+        row6.addWidget(self.summon_btn)
+        
         btns_container_layout.addLayout(row1)
         btns_container_layout.addLayout(row2)
         btns_container_layout.addLayout(row3)
         btns_container_layout.addLayout(row4)
         btns_container_layout.addLayout(row5)
+        btns_container_layout.addLayout(row6)
         
         # Buttons Widget (Collapsible)
         self.btn_container_widget = QWidget()
@@ -440,10 +471,13 @@ class SwitcherMenu(QWidget):
                     data = json.load(f)
                     # Validate structure
                     if "folders" in data and "folder_order" in data:
+                        # Ensure startup_apps exists in loaded data
+                        if "startup_apps" not in data:
+                            data["startup_apps"] = {}
                         return data
         except Exception:
             pass
-        return {"folders": {}, "folder_order": [], "default_folder": UNFILED}
+        return {"folders": {}, "folder_order": [], "default_folder": UNFILED, "startup_apps": {}}
     
     def save_session(self):
         """Save current folder layout to disk."""
@@ -473,6 +507,9 @@ class SwitcherMenu(QWidget):
             # Save which folder is currently the default catch-all
             data["default_folder"] = self.default_folder_name
             data["collapsed_folders"] = collapsed
+            
+            # Preserve startup apps
+            data["startup_apps"] = getattr(self, "session_data", {}).get("startup_apps", {})
             
             with open(SESSION_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -563,7 +600,8 @@ class SwitcherMenu(QWidget):
             "desktops": desktop_names,
             "folders": folders,
             "folder_order": folder_order,
-            "default_folder": self.default_folder_name
+            "default_folder": self.default_folder_name,
+            "startup_apps": self.session_data.get("startup_apps", {})
         }
         
         # Write template file
@@ -1003,6 +1041,13 @@ class SwitcherMenu(QWidget):
             action_rename = menu.addAction("✏️ Rename")
             action_rename.triggered.connect(self.on_rename)
             
+            # Context menu for linking scripts
+            action_link = menu.addAction("🔗 Link Startup Script")
+            action_link.triggered.connect(lambda: self.link_startup_script(item))
+            
+            action_summon_one = menu.addAction("🚀 Summon This Desktop")
+            action_summon_one.triggered.connect(lambda: self.on_summon_this_desktop(item))
+            
             menu.addSeparator()
             move_menu = menu.addMenu("Move to...")
             move_menu.setStyleSheet(menu.styleSheet())
@@ -1146,6 +1191,80 @@ class SwitcherMenu(QWidget):
         """Handle single-click: switch desktop if it's a desktop item."""
         if item.data(0, Qt.UserRole) != "FOLDER":
             self.on_switch()
+
+    def link_startup_script(self, item):
+        """Directly open file picker to link a script to this desktop."""
+        desktop_id = item.data(0, Qt.UserRole)
+        desktop_uuid = desktop_id.split("___")[0] if "___" in desktop_id else desktop_id
+        
+        default_dir = os.path.expanduser("~/.local/bin")
+        if not os.path.isdir(default_dir):
+            default_dir = os.path.expanduser("~")
+            
+        dialog = QFileDialog(self)
+        dialog.setWindowTitle("Select Startup Script")
+        dialog.setDirectory(default_dir)
+        dialog.setNameFilter("Scripts (*.sh);;All Files (*)")
+        dialog.setFileMode(QFileDialog.ExistingFile)
+        # Enable showing hidden files
+        dialog.setFilter(dialog.filter() | QDir.Hidden)
+        
+        if dialog.exec_():
+            file_path = dialog.selectedFiles()[0]
+            # Ensure dict exists
+            if "startup_apps" not in self.session_data:
+                self.session_data["startup_apps"] = {}
+                
+            # Store it as a single-item list for compatibility
+            cmd = f"bash '{file_path}'" if file_path.endswith('.sh') else f"'{file_path}'"
+            self.session_data["startup_apps"][desktop_uuid] = [cmd]
+            self.save_session()
+
+    def on_summon_this_desktop(self, item):
+        """Summon windows for a specific desktop selected from the tree."""
+        desktop_id = item.data(0, Qt.UserRole)
+        desktop_uuid = desktop_id.split("___")[0] if "___" in desktop_id else desktop_id
+        self.summon_one_desktop(desktop_uuid)
+
+    def summon_one_desktop(self, uuid):
+        """Helper to switch to a desktop and launch its assigned apps."""
+        startup_apps = self.session_data.get("startup_apps", {})
+        apps = startup_apps.get(uuid, [])
+        if not apps:
+            return
+
+        # Map uuid to idx
+        uuid_to_idx = {}
+        for pair in self.current_pairs:
+            did = pair[0]
+            if "___" in did:
+                parts = did.split("___")
+                uuid_to_idx[parts[0]] = parts[1]
+
+        if uuid in uuid_to_idx:
+            idx = uuid_to_idx[uuid]
+            # Switch to desktop
+            subprocess.run(["kdotool", "set_desktop", str(idx)])
+            time.sleep(0.3)
+            
+            for cmd in apps:
+                subprocess.Popen(["bash", "-c", cmd], 
+                                 start_new_session=True,
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+                time.sleep(0.1)
+
+    def on_summon(self):
+        """Execute all startup workflows across all desktops."""
+        startup_apps = self.session_data.get("startup_apps", {})
+        if not startup_apps:
+            return
+            
+        # Get all UUIDs that have apps
+        uuids_to_summon = [u for u, apps in startup_apps.items() if apps]
+        
+        for uuid in uuids_to_summon:
+            self.summon_one_desktop(uuid)
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
