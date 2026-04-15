@@ -397,13 +397,16 @@ class SwitcherMenu(QWidget):
 
         self.toggle_last_btn = QPushButton("🔂 Toggle Last")
         self.toggle_last_btn.setStyleSheet(btn_style)
-        self.toggle_last_btn.setToolTip("Jump to previous desktop (Ctrl+H)")
+        self.toggle_last_btn.setToolTip("Jump to previous desktop (Ctrl+R)")
         self.toggle_last_btn.clicked.connect(self.on_back)
+
+        self.new_desktop_btn = QPushButton("+ New Desktop")
+        self.new_desktop_btn.setStyleSheet(btn_style + "background-color: #3b4261;")
+        self.new_desktop_btn.setToolTip("Increase the total number of virtual desktops")
+        self.new_desktop_btn.clicked.connect(self.on_new_desktop)
 
         self.cleanup_btn = QPushButton("🧹 Cleanup Empties")
         self.cleanup_btn.setStyleSheet(btn_style + "background-color: #3b4261;")
-        self.cleanup_btn.setToolTip("Move all 'Empty' desktops to root folder")
-        self.cleanup_btn.clicked.connect(self.cleanup_empty_desktops)
         
         # Buttons Layout (Organized Grid)
         btns_container_layout = QVBoxLayout()
@@ -436,6 +439,7 @@ class SwitcherMenu(QWidget):
         row6.addWidget(self.summon_btn)
 
         row7.addWidget(self.toggle_last_btn)
+        row8.addWidget(self.new_desktop_btn)
         row8.addWidget(self.cleanup_btn)
         
         btns_container_layout.addLayout(row1)
@@ -1175,6 +1179,13 @@ class SwitcherMenu(QWidget):
             
             action_summon_one = menu.addAction("🚀 Summon This Desktop")
             action_summon_one.triggered.connect(lambda: self.on_summon_this_desktop(item))
+
+            menu.addSeparator()
+            action_save_ws = menu.addAction("💾 Save As Workspace...")
+            action_save_ws.triggered.connect(lambda: self.on_save_workspace(item))
+
+            action_apply_ws = menu.addAction("🔗 Apply Workspace Here...")
+            action_apply_ws.triggered.connect(lambda: self.on_apply_workspace(item))
             
             menu.addSeparator()
             move_menu = menu.addMenu("Move to...")
@@ -1479,7 +1490,7 @@ class SwitcherMenu(QWidget):
                 elif key == Qt.Key_K:
                     self.move_up()
                     return True
-                elif key == Qt.Key_H:
+                elif key == Qt.Key_R:
                     self.on_back()
                     return True
                     
@@ -1581,6 +1592,39 @@ class SwitcherMenu(QWidget):
     def on_undo(self): 
         print("UNDO", flush=True); sys.exit(0)
 
+    def on_new_desktop(self):
+        print("NEW_DESKTOP", flush=True); sys.exit(0)
+
+    def on_save_workspace(self, item):
+        sid = item.data(0, Qt.UserRole)
+        if sid: print(f"SAVE_WORKSPACE:{sid}", flush=True); sys.exit(0)
+
+    def on_apply_workspace(self, item):
+        sid = item.data(0, Qt.UserRole)
+        if not sid: return
+        
+        # We need a picker to choose which workspace file to apply!
+        workspaces_dir = SESSION_DIR / "workspaces"
+        if not workspaces_dir.exists():
+            return
+        
+        workspaces = sorted(workspaces_dir.glob("*.json"))
+        if not workspaces:
+            return
+
+        picker_menu = QMenu(self)
+        picker_menu.setStyleSheet(self.tree.contextMenuPolicy()) # Use similar style
+        
+        for ws_file in workspaces:
+            action = picker_menu.addAction(f"📦 {ws_file.stem}")
+            action.triggered.connect(lambda checked, fn=ws_file.name: self._trigger_apply_ws(sid, fn))
+        
+        picker_menu.exec_(self.cursor().pos())
+
+    def _trigger_apply_ws(self, sid, filename):
+        print(f"APPLY_WORKSPACE:{sid}|{filename}", flush=True)
+        sys.exit(0)
+
     def cleanup_empty_desktops(self):
         """Find all desktops labeled 'Empty' across all folders and move them to root."""
         root_item = self.tree.invisibleRootItem()
@@ -1671,7 +1715,7 @@ class SwitcherMenu(QWidget):
             pass
 
     def on_forward(self):
-        """Removed in favor of Ctrl+H Toggle."""
+        """Removed in favor of Ctrl+R Toggle."""
         pass
 
 def main():

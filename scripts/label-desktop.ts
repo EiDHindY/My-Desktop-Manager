@@ -385,6 +385,75 @@ function main() {
             } catch (err) {
                 console.log(`❌ Failed to load template: ${err}`);
             }
+        } else if (result.startsWith('NEW_DESKTOP')) {
+            // ─── Create a New Virtual Desktop ───
+            const countRes = runCommand('qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.count');
+            const pos = countRes ? parseInt(countRes) : 0;
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop ${pos} "Empty"`);
+            console.log(`✅ Success! Created new virtual desktop at position ${pos}.`);
+
+        } else if (result.startsWith('SAVE_WORKSPACE:')) {
+            // ─── Save Current Desktop as Portable Workspace ───
+            const desktopIdFull = result.substring(15); // uuid___index
+            const desktopUuid = desktopIdFull.split("___")[0];
+            const desktopName = (desktopMap.get(desktopIdFull) || "Workspace").replace(/"/g, '');
+            
+            const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+            const sessionPath = join(sessionDir, 'session.json');
+            const workspacesDir = join(sessionDir, 'workspaces');
+            mkdirSync(workspacesDir, { recursive: true });
+
+            try {
+                const sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                const apps = sessionData.startup_apps?.[desktopUuid] || [];
+                
+                const workspaceData = {
+                    name: desktopName,
+                    apps: apps,
+                    created: new Date().toISOString()
+                };
+
+                const safeName = desktopName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                const workspacePath = join(workspacesDir, `${safeName}.json`);
+                writeFileSync(workspacePath, JSON.stringify(workspaceData, null, 2));
+                console.log(`✅ Workspace "${desktopName}" saved!`);
+            } catch (e) {
+                console.log(`❌ Failed to save workspace: ${e}`);
+            }
+
+        } else if (result.startsWith('APPLY_WORKSPACE:')) {
+            // ─── Apply Workspace Definition to a Desktop Slot ───
+            const payload = result.substring(16); // uuid___index|filename.json
+            const [desktopIdFull, filename] = payload.split('|');
+            const desktopUuid = desktopIdFull.split("___")[0];
+            
+            const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+            const workspacePath = join(sessionDir, 'workspaces', filename);
+
+            try {
+                const wsData = JSON.parse(readFileSync(workspacePath, 'utf-8'));
+                const newName = wsData.name;
+                const apps = wsData.apps || [];
+
+                // 1. Rename the desktop
+                const safeName = newName.replace(/"/g, '\\"');
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${desktopUuid}" "${safeName}"`);
+
+                // 2. Update startup apps in session.json
+                const sessionPath = join(sessionDir, 'session.json');
+                const sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                if (!sessionData.startup_apps) sessionData.startup_apps = {};
+                sessionData.startup_apps[desktopUuid] = apps;
+                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
+
+                // 3. Launch apps
+                launchAppsForDesktop(desktopUuid);
+
+                console.log(`✅ Applied workspace "${newName}" to desktop!`);
+            } catch (e) {
+                console.log(`❌ Failed to apply workspace: ${e}`);
+            }
+
         } else if (result.startsWith('DELETE_TEMPLATE:')) {
             const templateFilename = result.substring(16);
             const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
