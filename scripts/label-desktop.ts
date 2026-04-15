@@ -579,8 +579,75 @@ function main() {
                 console.log(`❌ Failed deploy: ${err}`);
             }
         } else if (result.startsWith('DEPLOY_TASK:')) {
-            const taskId = result.substring(12);
-            // Future implementation for single task assignment...
+            const parts = result.substring(12).split(':');
+            const folderName = parts[0];
+            const taskId = parts[1];
+            
+            try {
+                const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+                const libraryPath = join(libraryDir, 'library.json');
+                const libData = JSON.parse(readFileSync(libraryPath, 'utf-8'));
+                
+                let sessionData: any = { folders: {}, folder_order: [], startup_apps: {} };
+                if (existsSync(sessionPath)) {
+                    sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                }
+                if (!sessionData.startup_apps) sessionData.startup_apps = {};
+                if (!sessionData.folders) sessionData.folders = {};
+                if (!sessionData.folder_order) sessionData.folder_order = [];
+
+                // 1. Find the task in libData
+                const tasksList = libData.folders[folderName] || [];
+                const task = tasksList.find((t: any) => t.id === taskId);
+                
+                if (!task) {
+                    console.log(`❌ Task not found: ${taskId} in ${folderName}`);
+                    return;
+                }
+                
+                // 2. Find internal empty desktops
+                const emptyDesktops = currentDesktops.filter(d => {
+                    const name = d.name.toLowerCase().trim();
+                    return name === "" || name === "empty" || /^desktop \d+$/.test(name);
+                });
+                
+                if (emptyDesktops.length === 0) {
+                     runCommand(`kdialog --msgbox "No empty desktops available to deploy this task."`);
+                     continue;
+                }
+                
+                const targetDesktop = emptyDesktops[0];
+                const safeName = task.name.replace(/"/g, '\\"');
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${targetDesktop.uuid}" "${safeName}"`);
+                
+                const kwinIdx = targetDesktop.position;
+                const sessionEntry = `${targetDesktop.uuid}___${kwinIdx}`;
+                
+                // Ensure folder exists in sessionData
+                if (!sessionData.folders[folderName]) sessionData.folders[folderName] = [];
+                if (!sessionData.folder_order.includes(folderName)) sessionData.folder_order.push(folderName);
+                
+                // Remove from ANY other existing folder to prevent duplicates
+                for (const fName of Object.keys(sessionData.folders)) {
+                    sessionData.folders[fName] = sessionData.folders[fName].filter((id: string) => id !== sessionEntry);
+                }
+
+                if (!sessionData.folders[folderName].includes(sessionEntry)) {
+                    sessionData.folders[folderName].push(sessionEntry);
+                }
+                
+                if (task.script) {
+                    sessionData.startup_apps[targetDesktop.uuid] = [task.script];
+                }
+                
+                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
+                console.log(`✅ Staged single task '${task.name}' to Live tab.`);
+                runCommand(`notify-send "Desktop Manager" "🚀 Deployed '${task.name}' to folder '${folderName}'"`);
+            } catch (err) {
+                console.log(`❌ Failed single task deploy: ${err}`);
+            }
+
+        } else if (result.startsWith('DELETE_TEMPLATE:')) {
 
         } else if (result.startsWith('DELETE_TEMPLATE:')) {
             const templateFilename = result.substring(16);

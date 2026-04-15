@@ -191,6 +191,7 @@ class SwitcherMenu(QWidget):
         self.current_desktop_uuid = current_desktop_uuid
         self.active_kwin_indices = set()
         self.managed_uids = set()
+        self.pinned_folders = []
         self._is_populating = False
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
@@ -437,40 +438,40 @@ class SwitcherMenu(QWidget):
         is_initial = not getattr(self, "_initial_sort_done", False)
         changed = False
         
-        # ─── AUTO-EMPTY CLEANUP ───
-        if not getattr(self, "_has_auto_cleaned", False):
-            self._has_auto_cleaned = True
-            for uid, name in self.id_name_pairs:
-                if uid == "ACTION_CHROME" or uid == self.current_desktop_uuid:
-                    continue
-                
-                # Protect desktops that belong to an organized folder (not root)
-                if uid in self.managed_uids:
-                    continue
-                    
-                # Robustly extract the physical index (0-based in UID) and match kdotool (1-based)
-                parts = uid.split("___")
-                if len(parts) < 2: continue
-                kwin_idx = int(parts[1]) + 1
-                
-                name_l = name.lower()
-                if kwin_idx not in new_indices and "empty" not in name_l:
-                    raw_uuid = parts[0]
-                    cmd = f'qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "{raw_uuid}" "Empty"'
-                    subprocess.run(["bash", "-c", cmd])
-                    # Update local state so UI reflects change immediately
-                    for idx, (ouid, oname) in enumerate(self.id_name_pairs):
-                        if ouid == uid:
-                            self.id_name_pairs[idx] = (uid, "Empty")
-                            break
-                    changed = True
-
         if is_initial:
             self._initial_sort_done = True
             self.active_kwin_indices = new_indices
             self.populate_live(initial=True)
-        self.active_kwin_indices = new_indices
-        self.populate_live(initial=is_initial)
+
+            # ─── AUTO-EMPTY CLEANUP (Runs once after initial population) ───
+            if not getattr(self, "_has_auto_cleaned", False):
+                self._has_auto_cleaned = True
+                for uid, name in self.id_name_pairs:
+                    if uid == "ACTION_CHROME" or uid == self.current_desktop_uuid:
+                        continue
+                    
+                    # Protect desktops that belong to an organized folder (not root)
+                    if uid in self.managed_uids:
+                        continue
+                        
+                    parts = uid.split("___")
+                    if len(parts) < 2: continue
+                    kwin_idx = int(parts[1]) + 1
+                    
+                    name_l = name.lower()
+                    if kwin_idx not in new_indices and "empty" not in name_l:
+                        raw_uuid = parts[0]
+                        cmd = f'qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "{raw_uuid}" "Empty"'
+                        subprocess.run(["bash", "-c", cmd])
+                        
+                        for idx, (ouid, oname) in enumerate(self.id_name_pairs):
+                            if ouid == uid:
+                                self.id_name_pairs[idx] = (uid, "Empty")
+                                break
+                        changed = True
+        else:
+            self.active_kwin_indices = new_indices
+            self.populate_live(initial=False)
         
         if not is_initial:
             self.update_live_sort_keys()
@@ -560,6 +561,7 @@ class SwitcherMenu(QWidget):
             session_data["folders"] = {}
             session_data["folder_order"] = []
             session_data["expanded"] = []
+            session_data["pinned_folders"] = self.pinned_folders
             
             root = self.live_list.invisibleRootItem()
             if root is None: return
@@ -569,7 +571,7 @@ class SwitcherMenu(QWidget):
                 if folder_item.data(0, Qt.UserRole) != "FOLDER":
                     continue
                 
-                folder_name = folder_item.text(0)
+                folder_name = folder_item.data(0, Qt.UserRole + 1) or folder_item.text(0)
                 session_data["folder_order"].append(folder_name)
                 
                 uids = []
@@ -628,10 +630,19 @@ class SwitcherMenu(QWidget):
                 
                 live_folders = session_data.get("folders", {})
                 folder_order = session_data.get("folder_order", [])
+                self.pinned_folders = session_data.get("pinned_folders", [])
                 
-                # Ensure 'root' is always processed last so other folders take priority
-                if "root" in folder_order:
-                    folder_order = [f for f in folder_order if f != "root"] + ["root"]
+                # Re-sort: Pinned first (excluding root), then others, root always last
+                others = [f for f in folder_order if f not in self.pinned_folders and f.lower() != "root"]
+                top = [f for f in folder_order if f in self.pinned_folders and f.lower() != "root"]
+                reordered = top + others
+                
+                # Find root with original casing
+                root_orig = next((f for f in folder_order if f.lower() == "root"), None)
+                if root_orig:
+                    reordered.append(root_orig)
+                
+                folder_order = reordered
                     
                 expanded_folders = session_data.get("expanded", [])
                 
@@ -647,7 +658,9 @@ class SwitcherMenu(QWidget):
                     if not member_uids: continue
                     
                     fitem = QTreeWidgetItem()
-                    fitem.setText(0, folder_name)
+                    display_name = folder_name + (" 📌" if folder_name in self.pinned_folders else "")
+                    fitem.setText(0, display_name)
+                    fitem.setData(0, Qt.UserRole + 1, folder_name)
                     is_expanded = folder_name in expanded_folders or "expanded" not in session_data
                     fitem.setIcon(0, QIcon.fromTheme("folder-open" if is_expanded else "folder"))
                     fitem.setFont(0, QFont("Inter", 10, QFont.DemiBold))
@@ -720,7 +733,8 @@ class SwitcherMenu(QWidget):
             uid = item.data(0, Qt.UserRole)
             
             if uid == "FOLDER":
-                folder_name = item.text(0).lower()
+                raw_name = item.data(0, Qt.UserRole + 1) or item.text(0).strip().replace(" 📌", "")
+                folder_name = raw_name.lower()
                 all_active = True
                 has_members = False
                 for j in range(item.childCount()):
@@ -735,11 +749,13 @@ class SwitcherMenu(QWidget):
                 
                 if folder_name == "root":
                     # Rule 4: Root Folder (Sink)
-                    item.setText(1, f"03_root")
+                    item.setText(1, f"08_root")
                 else:
-                    # Rule 1-2: Normal Folders (Active/Inactive)
+                    # New Priority Heirarchy:
+                    # 00 = Pinned, 05 = Normal
+                    prio = "00" if raw_name in self.pinned_folders else "05"
                     status_group = "00" if (all_active and has_members) else "01"
-                    item.setText(1, f"{status_group}_{item.text(0)}")
+                    item.setText(1, f"{prio}_{status_group}_{raw_name}")
                 
                 # Sort children within folder
                 for j in range(item.childCount()):
@@ -752,13 +768,13 @@ class SwitcherMenu(QWidget):
                         child.setText(1, f"I_{group}_{child.text(0)}")
             elif uid == "ACTION_CHROME":
                 # Rule 6: Always at bottom
-                item.setText(1, f"05_chrome")
+                item.setText(1, f"09_chrome")
             else:
                 # Rule 3rd & 5th: Unfiled desktops
                 kidx = int(uid.split("___")[1]) if "___" in uid else 0
                 is_active = (kidx + 1) in self.active_kwin_indices
-                # Group 02 = Active Unfiled, Group 04 = Inactive Unfiled
-                group = "02" if is_active else "04"
+                # Group 06 = Active Unfiled, Group 07 = Inactive Unfiled
+                group = "06" if is_active else "07"
                 item.setText(1, f"{group}_{item.text(0)}")
     def add_live_desktop_item(self, parent, uid, name):
         raw_uuid = uid.split("___")[0] if "___" in uid else uid
@@ -1005,7 +1021,17 @@ class SwitcherMenu(QWidget):
         menu.setStyleSheet("QMenu { background: #2f334d; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 6px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #82aaff; color: #1e2030; }")
         
         if uid == "FOLDER":
-            fn = item.text(0).strip()
+            fn = item.data(0, Qt.UserRole + 1) or item.text(0).strip()
+            
+            is_pinned = fn in self.pinned_folders
+            if is_pinned:
+                a_pin = menu.addAction("📍 Unpin Folder")
+                a_pin.triggered.connect(lambda: self.toggle_pin(fn))
+            else:
+                a_pin = menu.addAction("📌 Pin Folder")
+                a_pin.triggered.connect(lambda: self.toggle_pin(fn))
+            
+            menu.addSeparator()
             a_summon = menu.addAction("🚀 Summon Folder")
             a_summon.triggered.connect(lambda: sys.exit(print(f"SUMMON_FOLDER:{fn}", flush=True) or 0))
             
@@ -1078,6 +1104,12 @@ class SwitcherMenu(QWidget):
             a_del.triggered.connect(lambda: self.delete_lib_item(item))
         else:
             tid = item.data(0, Qt.UserRole)
+            parent = item.parent()
+            folder_name = parent.data(0, Qt.UserRole + 1) if parent else ""
+            
+            a_deploy = menu.addAction("🚀 Deploy Single Desktop")
+            a_deploy.triggered.connect(lambda: sys.exit(print(f"DEPLOY_TASK:{folder_name}:{tid}", flush=True) or 0))
+            
             menu.addSeparator()
             a_link = menu.addAction("🔗 Link Startup Script")
             a_link.triggered.connect(lambda: self.link_script(item))
@@ -1087,6 +1119,14 @@ class SwitcherMenu(QWidget):
             a_del.triggered.connect(lambda: self.delete_lib_item(item))
             
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
+
+    def toggle_pin(self, folder_name):
+        if folder_name in self.pinned_folders:
+            self.pinned_folders.remove(folder_name)
+        else:
+            self.pinned_folders.append(folder_name)
+        self.save_session()
+        self.populate_live(initial=True)
 
     def deploy_selected(self, folder_item):
         folder_name = folder_item.data(0, Qt.UserRole + 1)
