@@ -385,74 +385,54 @@ function main() {
             } catch (err) {
                 console.log(`❌ Failed to load template: ${err}`);
             }
-        } else if (result.startsWith('NEW_DESKTOP')) {
-            // ─── Create a New Virtual Desktop ───
-            const countRes = runCommand('qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.count');
-            const pos = countRes ? parseInt(countRes) : 0;
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop ${pos} "Empty"`);
-            console.log(`✅ Success! Created new virtual desktop at position ${pos}.`);
-
-        } else if (result.startsWith('SAVE_WORKSPACE:')) {
-            // ─── Save Current Desktop as Portable Workspace ───
-            const desktopIdFull = result.substring(15); // uuid___index
-            const desktopUuid = desktopIdFull.split("___")[0];
-            const desktopName = (desktopMap.get(desktopIdFull) || "Workspace").replace(/"/g, '');
+        } else if (result.startsWith('DEPLOY:')) {
+            const folderName = result.substring(7);
+            const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+            const libraryPath = join(libraryDir, 'library.json');
             
-            const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
-            const sessionPath = join(sessionDir, 'session.json');
-            const workspacesDir = join(sessionDir, 'workspaces');
-            mkdirSync(workspacesDir, { recursive: true });
-
             try {
-                const sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                const apps = sessionData.startup_apps?.[desktopUuid] || [];
+                const libData = JSON.parse(readFileSync(libraryPath, 'utf-8'));
+                const tasks = libData.folders[folderName] || [];
+                if (tasks.length === 0) {
+                    runCommand(`kdialog --error "Folder '${folderName}' is empty."`);
+                    continue;
+                }
                 
-                const workspaceData = {
-                    name: desktopName,
-                    apps: apps,
-                    created: new Date().toISOString()
-                };
-
-                const safeName = desktopName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-                const workspacePath = join(workspacesDir, `${safeName}.json`);
-                writeFileSync(workspacePath, JSON.stringify(workspaceData, null, 2));
-                console.log(`✅ Workspace "${desktopName}" saved!`);
-            } catch (e) {
-                console.log(`❌ Failed to save workspace: ${e}`);
-            }
-
-        } else if (result.startsWith('APPLY_WORKSPACE:')) {
-            // ─── Apply Workspace Definition to a Desktop Slot ───
-            const payload = result.substring(16); // uuid___index|filename.json
-            const [desktopIdFull, filename] = payload.split('|');
-            const desktopUuid = desktopIdFull.split("___")[0];
-            
-            const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
-            const workspacePath = join(sessionDir, 'workspaces', filename);
-
-            try {
-                const wsData = JSON.parse(readFileSync(workspacePath, 'utf-8'));
-                const newName = wsData.name;
-                const apps = wsData.apps || [];
-
-                // 1. Rename the desktop
-                const safeName = newName.replace(/"/g, '\\"');
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${desktopUuid}" "${safeName}"`);
-
-                // 2. Update startup apps in session.json
-                const sessionPath = join(sessionDir, 'session.json');
-                const sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                const emptyDesktops = currentDesktops.filter(d => d.name.toLowerCase().includes('empty') && !d.name.toLowerCase().includes('desktop'));
+                
+                if (emptyDesktops.length < tasks.length) {
+                    runCommand(`kdialog --msgbox "Not enough empty desktops.\\n\\nYou need to empty ${tasks.length - emptyDesktops.length} more desktops to deploy '${folderName}'.\\n\\n(Total tasks: ${tasks.length})"`);
+                    continue;
+                }
+                
+                const sessionPath = join(libraryDir, 'session.json');
+                let sessionData = { folders: {}, folder_order: [], default_folder: 'Unfiled', startup_apps: {} };
+                try { sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8')); } catch (e) { }
                 if (!sessionData.startup_apps) sessionData.startup_apps = {};
-                sessionData.startup_apps[desktopUuid] = apps;
-                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-
-                // 3. Launch apps
-                launchAppsForDesktop(desktopUuid);
-
-                console.log(`✅ Applied workspace "${newName}" to desktop!`);
-            } catch (e) {
-                console.log(`❌ Failed to apply workspace: ${e}`);
+                
+                runCommand(`notify-send "Desktop Manager" "Deploying '${folderName}'..."`);
+                
+                for (let i = 0; i < tasks.length; i++) {
+                    const task = tasks[i];
+                    const targetDesktop = emptyDesktops[i];
+                    
+                    const safeName = task.name.replace(/"/g, '\\"');
+                    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${targetDesktop.id}" "${safeName}"`);
+                    
+                    if (task.script) {
+                        sessionData.startup_apps[targetDesktop.id] = [task.script];
+                        writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
+                        launchAppsForDesktop(targetDesktop.id);
+                    }
+                }
+            } catch (err) {
+                console.log(`❌ Failed deploy: ${err}`);
             }
+
+        // Removed SUMMON_ALL logic block
+        } else if (result.startsWith('DEPLOY_TASK:')) {
+            const taskId = result.substring(12);
+            // Future implementation for single task assignment...
 
         } else if (result.startsWith('DELETE_TEMPLATE:')) {
             const templateFilename = result.substring(16);
