@@ -15,9 +15,10 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QGraphicsDropShadowEffect,
                              QMenu, QInputDialog, QAbstractItemView,
                              QDialog, QListWidget, QListWidgetItem,
-                             QFileDialog, QTabWidget)
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSize
-from PyQt5.QtGui import QFont, QColor, QBrush, QIcon
+                             QFileDialog, QTabWidget, QStyledItemDelegate,
+                             QStyleOptionViewItem, QCheckBox)
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSize, QCoreApplication
+from PyQt5.QtGui import QFont, QColor, QBrush, QIcon, QPainter, QPen, QKeyEvent
 
 CONFIG_DIR = Path.home() / ".config" / "desktop-manager"
 LIBRARY_FILE = CONFIG_DIR / "library.json"
@@ -37,6 +38,28 @@ class WindowFetcher(QObject):
                     new_indices.add(int(line.strip()))
             self.finished.emit(new_indices)
         except Exception: pass
+
+class OutlineDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        # Draw the standard item first
+        super().paint(painter, option, index)
+        
+        # Check if this item is the "Current" desktop
+        is_current = index.data(Qt.UserRole + 4)
+        if is_current:
+            painter.save()
+            painter.setRenderHint(QPainter.Antialiasing)
+            
+            # Use a clean 1px pen for the "outline"
+            pen = QPen(QColor("#82aaff"), 1.0)
+            painter.setPen(pen)
+            
+            # Adjust the rectangle to be perfectly inside the item bounds
+            rect = option.rect.adjusted(2, 2, -2, -2)
+            
+            # Draw a rounded rectangle for a premium look
+            painter.drawRoundedRect(rect, 4, 4)
+            painter.restore()
 
 class FolderTreeWidget(QTreeWidget):
     def dropEvent(self, event):
@@ -88,10 +111,77 @@ class FolderTreeWidget(QTreeWidget):
     def _save_after_drop(self):
         parent = self.parent()
         while parent:
+            if hasattr(parent, 'save_tree_state'):
+                parent.save_tree_state(self)
+                return
             if hasattr(parent, 'save_library'):
                 parent.save_library()
                 return
             parent = parent.parent()
+
+class SelectionDialog(QDialog):
+    def __init__(self, title, items, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumWidth(300)
+        self.setMinimumHeight(400)
+        self.setStyleSheet("QDialog { background-color: #1e2030; color: #c8d3f5; }")
+        
+        layout = QVBoxLayout(self)
+        self.label = QLabel("Select tasks to deploy to Life:")
+        self.label.setFont(QFont("Inter", 11, QFont.Bold))
+        self.label.setStyleSheet("color: #82aaff; margin-bottom: 5px;")
+        layout.addWidget(self.label)
+        
+        self.select_all_cb = QCheckBox("Select All")
+        self.select_all_cb.setStyleSheet("""
+            QCheckBox { color: #c8d3f5; font-size: 10pt; margin-bottom: 5px; }
+            QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid #3b4261; border-radius: 3px; background: #222436; }
+            QCheckBox::indicator:checked { background: #82aaff; image: url(none); }
+        """)
+        self.select_all_cb.stateChanged.connect(self.on_select_all_changed)
+        layout.addWidget(self.select_all_cb)
+        
+        self.list_widget = QListWidget()
+        self.list_widget.setStyleSheet("""
+            QListWidget { background-color: #222436; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 4px; padding: 5px; }
+            QListWidget::item { padding: 5px; }
+            QListWidget::item:hover { background-color: #2f334d; }
+        """)
+        
+        for item_text in items:
+            list_item = QListWidgetItem(item_text)
+            list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+            list_item.setCheckState(Qt.Unchecked)
+            self.list_widget.addItem(list_item)
+            
+        layout.addWidget(self.list_widget)
+        
+        btn_layout = QHBoxLayout()
+        self.btn_ok = QPushButton("Deploy Selected")
+        self.btn_ok.setStyleSheet("QPushButton { background-color: #82aaff; color: #1e2030; font-weight: bold; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #6593f5; }")
+        self.btn_ok.clicked.connect(self.accept)
+        
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.setStyleSheet("QPushButton { background-color: #3b4261; color: #c8d3f5; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #444b6a; }")
+        self.btn_cancel.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(self.btn_ok)
+        btn_layout.addWidget(self.btn_cancel)
+        layout.addLayout(btn_layout)
+
+    def on_select_all_changed(self, state):
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+
+    def get_selected(self):
+        selected = []
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            if item.checkState() == Qt.Checked:
+                selected.append(item.text())
+        return selected
 
 class SwitcherMenu(QWidget):
     def __init__(self, title_win, title_label, current_desktop_uuid, id_name_pairs):
@@ -100,16 +190,18 @@ class SwitcherMenu(QWidget):
         self.id_name_pairs = id_name_pairs
         self.current_desktop_uuid = current_desktop_uuid
         self.active_kwin_indices = set()
+        self.managed_uids = set()
+        self._is_populating = False
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
         self.screen_geom = QApplication.primaryScreen().geometry()
         self.hud_width = 400 
-        self.height_expanded = 800
-        self.height_collapsed = 600
+        self.height_expanded = 500
+        self.height_collapsed = 420
         
-        self.setMinimumSize(320, 400)
+        self.setMinimumSize(320, 300)
         self.resize(self.hud_width, self.height_collapsed)
         
         x_target = self.screen_geom.width() - self.hud_width + 20
@@ -130,7 +222,8 @@ class SwitcherMenu(QWidget):
         self.setLayout(main_layout)
         
         self.container = QWidget()
-        self.container.setStyleSheet("#container { background-color: rgba(30,32,48,0.95); border-radius: 4px; border: 1px solid #5a4a78; }")
+        self.container.setObjectName("container")
+        self.container.setStyleSheet("#container { background-color: rgba(30,32,48,0.92); border-radius: 10px; border: 1px solid #3b4261; }")
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(10)
         shadow.setColor(QColor(0, 0, 0, 120))
@@ -146,19 +239,55 @@ class SwitcherMenu(QWidget):
         self.search_entry = QLineEdit()
         self.search_entry.setFont(QFont("Inter", 11))
         self.search_entry.setPlaceholderText("Search...")
-        self.search_entry.setMinimumWidth(160)
-        self.search_entry.setStyleSheet("QLineEdit { background-color: #2f334d; color: #c8d3f5; border: 2px solid #3b4261; border-radius: 6px; padding: 4px 8px; margin-right: 6px; margin-bottom: 2px; } QLineEdit:focus { border: 2px solid #82aaff; background-color: #222436; }")
+        self.search_entry.setFixedWidth(140)
+        
+        # Add Search Icon
+        search_icon = QIcon.fromTheme("edit-find")
+        self.search_entry.addAction(search_icon, QLineEdit.LeadingPosition)
+        
+        self.search_entry.setStyleSheet("""
+            QLineEdit { 
+                background-color: #222436; 
+                color: #c8d3f5; 
+                border: none; 
+                border-radius: 12px; 
+                padding: 4px 6px; 
+                margin: 4px 4px 4px 8px;
+                outline: none;
+            } 
+            QLineEdit:focus { 
+                background-color: #1e2030; 
+            }
+        """)
         self.search_entry.textChanged.connect(self.on_search)
         # Search box is moved to corner widget of tabs below
 
         
         # Tabs
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.tabs.tabBar().setExpanding(True)
         self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #3b4261; border-radius: 4px; }
-            QTabBar::tab { background: #2f334d; color: #c8d3f5; padding: 8px 16px; border: 1px solid #3b4261; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; margin-right: 2px; }
-            QTabBar::tab:selected { background: #222436; color: #82aaff; font-weight: bold; border-top: 2px solid #82aaff; }
-            QTabBar::tab:hover { background: #3b4261; }
+            QTabWidget::pane { 
+                border-top: 1px solid #3b4261; 
+                background: transparent;
+            }
+            QTabBar::tab { 
+                background: transparent; 
+                color: #5c636a; 
+                padding: 10px 12px; 
+                margin-top: 4px;
+                border-bottom: 2px solid transparent;
+            }
+            QTabBar::tab:selected { 
+                color: #82aaff; 
+                font-weight: bold; 
+                border-bottom: 2px solid #82aaff; 
+            }
+            QTabBar::tab:hover { 
+                color: #c8d3f5;
+                background: rgba(130, 170, 255, 0.05);
+            }
         """)
         # The UI layout has been simplified to remove the bottom button rail entirely.
         
@@ -166,15 +295,25 @@ class SwitcherMenu(QWidget):
         self.live_tab = QWidget()
         live_layout = QVBoxLayout()
         live_layout.setContentsMargins(0,0,0,0)
-        self.live_list = QListWidget()
+        self.live_list = FolderTreeWidget(self)
+        self.live_list.setHeaderHidden(True)
+        self.live_list.setColumnCount(2)
+        self.live_list.hideColumn(1)
         self.live_list.setFont(QFont("Inter", 10))
+        self.live_list.setItemDelegate(OutlineDelegate(self.live_list))
+        self.live_list.setDragEnabled(True)
+        self.live_list.setAcceptDrops(True)
+        self.live_list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.live_list.setDefaultDropAction(Qt.MoveAction)
+        self.live_list.setIndentation(15)
+        self.live_list.setRootIsDecorated(False)
         self.live_list.setStyleSheet("""
-            QListWidget { background-color: #222436; color: #c8d3f5; border: none; padding: 4px; outline: none; } 
-            QListWidget::item { padding: 8px; border-radius: 4px; } 
-            QListWidget::item:hover { background-color: rgba(47, 51, 77, 0.7); } 
-            QListWidget::item:selected { background-color: rgba(130, 170, 255, 0.85); color: #1e2030; font-weight: bold; }
-            /* Scrollbar */
-            QScrollBar:vertical { background: #222436; width: 6px; border-radius: 3px; margin: 4px 0; }
+            QTreeWidget { background-color: #1e2030; color: #c8d3f5; border: none; padding: 2px 0px; outline: none; show-decoration-selected: 1; } 
+            QTreeWidget::branch { background-color: #1e2030; }
+            QTreeWidget::item { padding: 4px 2px; border-radius: 4px; margin: 0px; } 
+            QTreeWidget::item:hover { background-color: rgba(47, 51, 77, 0.7); } 
+            QTreeWidget::item:selected { background-color: rgba(130, 170, 255, 0.85); color: #1e2030; }
+            QScrollBar:vertical { background: transparent; width: 6px; border-radius: 3px; margin: 4px 0; }
             QScrollBar::handle:vertical { background: #3b4261; border-radius: 3px; min-height: 30px; }
             QScrollBar::handle:vertical:hover { background: #5a4a78; }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
@@ -182,6 +321,22 @@ class SwitcherMenu(QWidget):
         self.live_list.itemClicked.connect(self.on_live_item_clicked)
         self.live_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.live_list.customContextMenuRequested.connect(self.on_live_context_menu)
+        
+        def on_live_expanded(item):
+            if getattr(self, "_is_populating", False): return
+            if item.data(0, Qt.UserRole) == "FOLDER":
+                item.setIcon(0, QIcon.fromTheme("folder-open"))
+            self.save_session()
+            
+        def on_live_collapsed(item):
+            if getattr(self, "_is_populating", False): return
+            if item.data(0, Qt.UserRole) == "FOLDER":
+                item.setIcon(0, QIcon.fromTheme("folder"))
+            self.save_session()
+            
+        self.live_list.itemExpanded.connect(on_live_expanded)
+        self.live_list.itemCollapsed.connect(on_live_collapsed)
+        
         live_layout.addWidget(self.live_list)
         self.live_tab.setLayout(live_layout)
         
@@ -197,11 +352,12 @@ class SwitcherMenu(QWidget):
         self.tree.setDragDropMode(QAbstractItemView.InternalMove)
         self.tree.setDefaultDropAction(Qt.MoveAction)
         self.tree.setStyleSheet("""
-            QTreeWidget { background-color: #222436; color: #c8d3f5; border: none; padding: 2px 0px; outline: none; } 
+            QTreeWidget { background-color: #1e2030; color: #c8d3f5; border: none; padding: 2px 0px; outline: none; show-decoration-selected: 1; } 
+            QTreeWidget::branch { background-color: #1e2030; }
             QTreeWidget::item { padding: 4px 2px; border-radius: 4px; margin: 0px; } 
             QTreeWidget::item:hover { background-color: rgba(47, 51, 77, 0.7); } 
             QTreeWidget::item:selected { background-color: rgba(130, 170, 255, 0.85); color: #1e2030; }
-            QScrollBar:vertical { background: #222436; width: 6px; border-radius: 3px; margin: 4px 0; }
+            QScrollBar:vertical { background: transparent; width: 6px; border-radius: 3px; margin: 4px 0; }
             QScrollBar::handle:vertical { background: #3b4261; border-radius: 3px; min-height: 30px; }
             QScrollBar::handle:vertical:hover { background: #5a4a78; }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
@@ -212,11 +368,13 @@ class SwitcherMenu(QWidget):
         self.tree.customContextMenuRequested.connect(self.on_lib_context_menu)
         
         def on_item_expanded(item):
+            if getattr(self, "_is_populating", False): return
             if item.data(0, Qt.UserRole) == "FOLDER":
                 item.setIcon(0, QIcon.fromTheme("folder-open"))
             self.save_library()
             
         def on_item_collapsed(item):
+            if getattr(self, "_is_populating", False): return
             if item.data(0, Qt.UserRole) == "FOLDER":
                 item.setIcon(0, QIcon.fromTheme("folder"))
             self.save_library()
@@ -234,6 +392,11 @@ class SwitcherMenu(QWidget):
         
         container_layout.addWidget(self.tabs)
         main_layout.addWidget(self.container)
+        
+        self.status_label = QLabel("Active: - • Empty: -")
+        self.status_label.setStyleSheet("QLabel { color: #82aaff; font-family: 'Inter'; font-size: 11px; margin-top: 4px; margin-bottom: 2px; }")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.status_label)
         
         self.lib_data = self.load_library()
         self.populate_live(initial=True)
@@ -277,25 +440,53 @@ class SwitcherMenu(QWidget):
         # ─── AUTO-EMPTY CLEANUP ───
         if not getattr(self, "_has_auto_cleaned", False):
             self._has_auto_cleaned = True
-            for i, (uid, name) in enumerate(self.id_name_pairs):
+            for uid, name in self.id_name_pairs:
                 if uid == "ACTION_CHROME" or uid == self.current_desktop_uuid:
                     continue
-                kwin_idx = i + 1
+                
+                # Protect desktops that belong to an organized folder (not root)
+                if uid in self.managed_uids:
+                    continue
+                    
+                # Robustly extract the physical index (0-based in UID) and match kdotool (1-based)
+                parts = uid.split("___")
+                if len(parts) < 2: continue
+                kwin_idx = int(parts[1]) + 1
+                
                 name_l = name.lower()
                 if kwin_idx not in new_indices and "empty" not in name_l:
-                    raw_uuid = uid.split("___")[0] if "___" in uid else uid
+                    raw_uuid = parts[0]
                     cmd = f'qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "{raw_uuid}" "Empty"'
                     subprocess.run(["bash", "-c", cmd])
-                    self.id_name_pairs[i] = (uid, "Empty")
+                    # Update local state so UI reflects change immediately
+                    for idx, (ouid, oname) in enumerate(self.id_name_pairs):
+                        if ouid == uid:
+                            self.id_name_pairs[idx] = (uid, "Empty")
+                            break
                     changed = True
 
         if is_initial:
             self._initial_sort_done = True
             self.active_kwin_indices = new_indices
             self.populate_live(initial=True)
-        elif self.active_kwin_indices != new_indices or changed:
-            self.active_kwin_indices = new_indices
-            self.populate_live(initial=False)
+        self.active_kwin_indices = new_indices
+        self.populate_live(initial=is_initial)
+        
+        if not is_initial:
+            self.update_live_sort_keys()
+            self.live_list.sortItems(1, Qt.AscendingOrder)
+            
+        # Update Live Activity Indicator
+        physical_desktops = [p for p in self.id_name_pairs if "___" in p[0]]
+        active_count = 0
+        for uid, name in physical_desktops:
+            kwin_idx = int(uid.split("___")[1]) + 1
+            if kwin_idx in self.active_kwin_indices:
+                active_count += 1
+        
+        empty_count = len(physical_desktops) - active_count
+        self.status_label.setText(f"Active: {active_count} • Empty: {empty_count}")
+        self.tabs.setTabText(0, f"Live ({active_count})")
             
         QTimer.singleShot(1000, self.trigger_bg_check)
 
@@ -308,16 +499,30 @@ class SwitcherMenu(QWidget):
         return {"folders": {}, "folder_order": [], "expanded": []}
 
     def save_library(self):
+        if self._is_populating: return
         try:
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             data = {"folders": {}, "folder_order": [], "expanded": []}
             root = self.tree.invisibleRootItem()
             if root is None: return
             
+            seen_names = set()
             for i in range(root.childCount()):
                 folder_item = root.child(i)
                 folder_name = folder_item.data(0, Qt.UserRole + 1)
                 if folder_name is None: continue
+                
+                # Enforce Unique Names to prevent key collisions in the JSON
+                original_name = folder_name
+                count = 1
+                while folder_name in seen_names:
+                    folder_name = f"{original_name} ({count})"
+                    count += 1
+                seen_names.add(folder_name)
+                
+                if folder_name != original_name:
+                    folder_item.setData(0, Qt.UserRole + 1, folder_name)
+                    folder_item.setText(0, folder_name) # Reflect the change in UI
                 
                 data["folder_order"].append(folder_name)
                 
@@ -338,93 +543,252 @@ class SwitcherMenu(QWidget):
         except Exception as e:
             print(f"Error saving: {e}")
 
+    def save_session(self):
+        if self._is_populating: return
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            
+            # Load existing session data to preserve startup_apps and other fields
+            session_data = {}
+            if SESSION_FILE.exists():
+                with open(SESSION_FILE, "r") as f:
+                    try:
+                        session_data = json.load(f)
+                    except: pass
+            
+            # Update only the grouping and expansion state
+            session_data["folders"] = {}
+            session_data["folder_order"] = []
+            session_data["expanded"] = []
+            
+            root = self.live_list.invisibleRootItem()
+            if root is None: return
+            
+            for i in range(root.childCount()):
+                folder_item = root.child(i)
+                if folder_item.data(0, Qt.UserRole) != "FOLDER":
+                    continue
+                
+                folder_name = folder_item.text(0)
+                session_data["folder_order"].append(folder_name)
+                
+                uids = []
+                for j in range(folder_item.childCount()):
+                    child = folder_item.child(j)
+                    uid = child.data(0, Qt.UserRole)
+                    if uid and uid != "FOLDER":
+                        uids.append(uid)
+                
+                session_data["folders"][folder_name] = uids
+                if folder_item.isExpanded():
+                    session_data["expanded"].append(folder_name)
+                    
+            with open(SESSION_FILE, "w") as f:
+                json.dump(session_data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving session: {e}")
+
+    def save_tree_state(self, widget):
+        if widget == self.tree:
+            self.save_library()
+        elif widget == self.live_list:
+            self.save_session()
+
 
 
     def apply_live_styling(self, item, name, is_current, is_active):
-        font = item.font()
+        font = item.font(0)
         font.setBold(is_current)
-        item.setFont(font)
+        item.setFont(0, font)
         
-        if is_current:
-            item.setForeground(QColor("#ffffff"))
-            item.setBackground(QColor(130, 170, 255, 30))
+        # Color logic (current desktop now uses standard colors but remains bold)
+        item.setBackground(0, QBrush(Qt.NoBrush))
+        item.setData(0, Qt.UserRole + 4, is_current) # For OutlineDelegate
+        
+        if is_active:
+            item.setForeground(0, QColor("#7aa2f7"))
+        elif "empty" in name.lower() and len(name.strip()) <= 15:
+            item.setForeground(0, QColor("#5c636a"))
         else:
-            item.setBackground(QBrush(Qt.NoBrush))
-            if is_active:
-                item.setForeground(QColor("#7aa2f7"))
-            elif "empty" in name.lower() and len(name.strip()) <= 15:
-                item.setForeground(QColor("#5c636a"))
-            elif "(main)" in name.lower():
-                item.setForeground(QColor("#89c4f4"))
-            elif "(task)" in name.lower():
-                item.setForeground(QColor("#f5b041"))
-            else:
-                item.setForeground(QColor("#c8d3f5"))
+            item.setForeground(0, QColor("#c8d3f5"))
 
     def populate_live(self, initial=False):
-        if initial:
-            current_item = self.live_list.currentItem()
-            selected_uid = current_item.data(Qt.UserRole) if current_item else None
-            
-            self.live_list.clear()
-            
-            def live_sort_key(pair):
-                uid, name = pair[0], pair[1].lower()
-                if uid == "ACTION_CHROME": return (4, 0)
+        self._is_populating = True
+        try:
+            if initial:
+                self.live_list.clear()
                 
-                kidx_str = uid.split("___")[1] if "___" in uid else "0"
-                kidx = int(kidx_str) if kidx_str.isdigit() else 0
+                # Load session data for groupings
+                session_data = {}
+                try:
+                    if SESSION_FILE.exists():
+                        with open(SESSION_FILE, "r") as f:
+                            session_data = json.load(f)
+                except: pass
                 
-                is_empty = "empty" in name and "desktop" not in name
-                is_active = kidx in self.active_kwin_indices
+                live_folders = session_data.get("folders", {})
+                folder_order = session_data.get("folder_order", [])
                 
-                if is_active: weight = 1
-                elif not is_empty: weight = 2
-                else: weight = 3
-                return (weight, kidx)
-                
-            self._sorted_pairs = sorted(self.id_name_pairs, key=live_sort_key)
-            target_item_to_select = None
-            
-            for p in self._sorted_pairs:
-                if p[0] == "ACTION_CHROME":
-                    divider = QListWidgetItem("")
-                    divider.setFlags(Qt.NoItemFlags)
-                    divider.setBackground(QColor("#3b4261"))
-                    divider.setSizeHint(QSize(0, 1))
-                    self.live_list.addItem(divider)
+                # Ensure 'root' is always processed last so other folders take priority
+                if "root" in folder_order:
+                    folder_order = [f for f in folder_order if f != "root"] + ["root"]
                     
-                uid, name = p[0], p[1]
-                raw_uuid = uid.split("___")[0] if "___" in uid else uid
-                is_current = (raw_uuid == self.current_desktop_uuid)
+                expanded_folders = session_data.get("expanded", [])
+                
+                # Track which desktops are already assigned to a folder (to avoid root duplicates)
+                self.managed_uids.clear()
+                assigned_uids = set()
+                root_folder_item = None
+                
+                # 1. Create Folders from Session Data
+                for folder_name in folder_order:
+                    if folder_name not in live_folders: continue
+                    member_uids = live_folders[folder_name]
+                    if not member_uids: continue
+                    
+                    fitem = QTreeWidgetItem()
+                    fitem.setText(0, folder_name)
+                    is_expanded = folder_name in expanded_folders or "expanded" not in session_data
+                    fitem.setIcon(0, QIcon.fromTheme("folder-open" if is_expanded else "folder"))
+                    fitem.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                    fitem.setForeground(0, QBrush(QColor("#bb9af7")))
+                    fitem.setData(0, Qt.UserRole, "FOLDER")
+                    self.live_list.addTopLevelItem(fitem)
+                    fitem.setExpanded(is_expanded)
+                    
+                    if folder_name.lower() == "root":
+                        root_folder_item = fitem
+                    
+                    folder_seen = set()
+                    for uid in member_uids:
+                        if uid == "ACTION_CHROME" or uid in assigned_uids: continue
+                        # Find matching physical desktop
+                        name = next((p[1] for p in self.id_name_pairs if p[0] == uid), None)
+                        if name is not None:
+                            self.add_live_desktop_item(fitem, uid, name)
+                            assigned_uids.add(uid)
+                            folder_seen.add(uid)
+                            if folder_name.lower() != "root":
+                                self.managed_uids.add(uid)
+                
+                # 2. Add unfiled desktops at root (Move Empty ones to 'root' folder)
+                for uid, name in self.id_name_pairs:
+                    if uid == "ACTION_CHROME" or uid in assigned_uids:
+                        continue
+                    
+                    if "empty" in name.lower():
+                        if not root_folder_item:
+                            root_folder_item = QTreeWidgetItem()
+                            root_folder_item.setText(0, "root")
+                            is_root_expanded = "root" in expanded_folders or "expanded" not in session_data
+                            root_folder_item.setIcon(0, QIcon.fromTheme("folder-open" if is_root_expanded else "folder"))
+                            root_folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                            root_folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
+                            root_folder_item.setData(0, Qt.UserRole, "FOLDER")
+                            self.live_list.addTopLevelItem(root_folder_item)
+                            root_folder_item.setExpanded(is_root_expanded)
+                        
+                        self.add_live_desktop_item(root_folder_item, uid, name)
+                    else:
+                        self.add_live_desktop_item(None, uid, name)
+                    
+                # 3. Add Chrome Profile at bottom
+                for uid, name in self.id_name_pairs:
+                    if uid == "ACTION_CHROME":
+                        display_name = name if "🌐" in name else f"🌐 {name}"
+                        item = QTreeWidgetItem([f"  {display_name}"])
+                        item.setData(0, Qt.UserRole, uid)
+                        item.setForeground(0, QColor("#c8d3f5"))
+                        self.live_list.addTopLevelItem(item)
+                
+                self.update_live_sort_keys()
+                self.live_list.sortItems(1, Qt.AscendingOrder)
+            else:
+                # Steady Update
+                root = self.live_list.invisibleRootItem()
+                self.update_tree_items_recursive(root)
+        finally:
+            self._is_populating = False
+
+    def update_live_sort_keys(self):
+        root = self.live_list.invisibleRootItem()
+        if not root: return
+        
+        # 1. Update Items Status
+        for i in range(root.childCount()):
+            item = root.child(i)
+            uid = item.data(0, Qt.UserRole)
+            
+            if uid == "FOLDER":
+                folder_name = item.text(0).lower()
+                all_active = True
+                has_members = False
+                for j in range(item.childCount()):
+                    has_members = True
+                    child = item.child(j)
+                    cuid = child.data(0, Qt.UserRole)
+                    if cuid:
+                        kidx = int(cuid.split("___")[1]) if "___" in cuid else 0
+                        if (kidx + 1) not in self.active_kwin_indices:
+                            all_active = False
+                            break
+                
+                if folder_name == "root":
+                    # Rule 4: Root Folder (Sink)
+                    item.setText(1, f"03_root")
+                else:
+                    # Rule 1-2: Normal Folders (Active/Inactive)
+                    status_group = "00" if (all_active and has_members) else "01"
+                    item.setText(1, f"{status_group}_{item.text(0)}")
+                
+                # Sort children within folder
+                for j in range(item.childCount()):
+                    child = item.child(j)
+                    cuid = child.data(0, Qt.UserRole)
+                    if cuid:
+                        kidx = int(cuid.split("___")[1]) if "___" in cuid else 0
+                        is_active = (kidx + 1) in self.active_kwin_indices
+                        group = "0" if is_active else "1"
+                        child.setText(1, f"I_{group}_{child.text(0)}")
+            elif uid == "ACTION_CHROME":
+                # Rule 6: Always at bottom
+                item.setText(1, f"05_chrome")
+            else:
+                # Rule 3rd & 5th: Unfiled desktops
                 kidx = int(uid.split("___")[1]) if "___" in uid else 0
-                is_active = kidx in self.active_kwin_indices
-                
-                prefix = "▶ " if is_current else ("◉ " if is_active else "○ ")
-                display = f"{prefix} {name}"
-                
-                item = QListWidgetItem(display)
-                item.setData(Qt.UserRole, uid)
-                self.apply_live_styling(item, name, is_current, is_active)
-                self.live_list.addItem(item)
-                
-                if uid == selected_uid:
-                    target_item_to_select = item
-                    
-            if target_item_to_select:
-                self.live_list.setCurrentItem(target_item_to_select)
-                
+                is_active = (kidx + 1) in self.active_kwin_indices
+                # Group 02 = Active Unfiled, Group 04 = Inactive Unfiled
+                group = "02" if is_active else "04"
+                item.setText(1, f"{group}_{item.text(0)}")
+    def add_live_desktop_item(self, parent, uid, name):
+        raw_uuid = uid.split("___")[0] if "___" in uid else uid
+        is_current = (raw_uuid == self.current_desktop_uuid)
+        kidx = int(uid.split("___")[1]) if "___" in uid else 0
+        is_active = (kidx + 1) in self.active_kwin_indices
+        
+        # Standard indicators (no more play button prefix)
+        prefix = "◉ " if is_active else "○ "
+        display = f"{prefix}{name}"
+        
+        item = QTreeWidgetItem([display])
+        item.setData(0, Qt.UserRole, uid)
+        self.apply_live_styling(item, name, is_current, is_active)
+        
+        if parent:
+            parent.addChild(item)
         else:
-            # IN-PLACE STEADY UPDATE (No UI Jitter)
-            for i in range(self.live_list.count()):
-                item = self.live_list.item(i)
-                uid = item.data(Qt.UserRole)
-                if not uid or uid == "ACTION_CHROME": continue
-                
+            self.live_list.addTopLevelItem(item)
+
+    def update_tree_items_recursive(self, parent_item):
+        for i in range(parent_item.childCount()):
+            item = parent_item.child(i)
+            uid = item.data(0, Qt.UserRole)
+            
+            if uid and uid != "FOLDER" and uid != "ACTION_CHROME":
                 raw_uuid = uid.split("___")[0] if "___" in uid else uid
                 kidx = int(uid.split("___")[1]) if "___" in uid else 0
                 is_current = (raw_uuid == self.current_desktop_uuid)
-                is_active = kidx in self.active_kwin_indices
+                is_active = (kidx + 1) in self.active_kwin_indices
                 
                 name = ""
                 for p in self.id_name_pairs:
@@ -432,74 +796,134 @@ class SwitcherMenu(QWidget):
                         name = p[1]
                         break
                         
-                prefix = "▶ " if is_current else ("◉ " if is_active else "○ ")
-                display = f"{prefix} {name}"
+                prefix = "◉ " if is_current or is_active else "○ "
+                display = f"{prefix}{name}"
                 
-                if item.text() != display:
-                    item.setText(display)
+                if item.text(0) != display:
+                    item.setText(0, display)
                 self.apply_live_styling(item, name, is_current, is_active)
+            
+            if item.childCount() > 0:
+                self.update_tree_items_recursive(item)
 
     def populate_library(self):
-        self.tree.clear()
-        for folder_name in self.lib_data.get("folder_order", []):
-            folder_item = QTreeWidgetItem()
-            folder_item.setText(0, folder_name)
-            folder_item.setIcon(0, QIcon.fromTheme("folder"))
-            folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
-            folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
-            folder_item.setData(0, Qt.UserRole, "FOLDER")
-            folder_item.setData(0, Qt.UserRole + 1, folder_name)
-            folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
-            self.tree.addTopLevelItem(folder_item)
-            
-            for task in self.lib_data.get("folders", {}).get(folder_name, []):
-                titem = QTreeWidgetItem()
-                tname = task.get("name", "Task")
-                script = task.get("script", "")
-                display = tname + (" 🔗" if script else "")
-                titem.setText(0, display)
-                titem.setIcon(0, QIcon.fromTheme("system-run") if script else QIcon.fromTheme("text-plain"))
+        self._is_populating = True
+        try:
+            self.tree.clear()
+            for folder_name in self.lib_data.get("folder_order", []):
+                folder_item = QTreeWidgetItem()
+                folder_item.setText(0, folder_name)
+                folder_item.setIcon(0, QIcon.fromTheme("folder"))
+                folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
+                folder_item.setData(0, Qt.UserRole, "FOLDER")
+                folder_item.setData(0, Qt.UserRole + 1, folder_name)
+                folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
+                self.tree.addTopLevelItem(folder_item)
                 
-                if "(main)" in tname.lower(): titem.setForeground(0, QBrush(QColor("#89c4f4")))
-                elif "(task)" in tname.lower(): titem.setForeground(0, QBrush(QColor("#f5b041")))
-                else: titem.setForeground(0, QBrush(QColor("#c8d3f5")))
-                
-                titem.setData(0, Qt.UserRole, task.get("id"))
-                titem.setData(0, Qt.UserRole + 1, tname)
-                titem.setData(0, Qt.UserRole + 2, script)
-                titem.setFlags(titem.flags() | Qt.ItemIsDragEnabled)
-                titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
-                folder_item.addChild(titem)
-                
-            if folder_name in self.lib_data.get("expanded", []):
-                folder_item.setIcon(0, QIcon.fromTheme("folder-open"))
-                folder_item.setExpanded(True)
+                for task in self.lib_data.get("folders", {}).get(folder_name, []):
+                    titem = QTreeWidgetItem()
+                    tname = task.get("name", "Task")
+                    script = task.get("script", "")
+                    display = tname + (" 🔗" if script else "")
+                    titem.setText(0, display)
+                    titem.setIcon(0, QIcon.fromTheme("system-run") if script else QIcon.fromTheme("text-plain"))
+                    
+                    if "(main)" in tname.lower(): titem.setForeground(0, QBrush(QColor("#89c4f4")))
+                    elif "(task)" in tname.lower(): titem.setForeground(0, QBrush(QColor("#f5b041")))
+                    else: titem.setForeground(0, QBrush(QColor("#c8d3f5")))
+                    
+                    titem.setData(0, Qt.UserRole, task.get("id"))
+                    titem.setData(0, Qt.UserRole + 1, tname)
+                    titem.setData(0, Qt.UserRole + 2, script)
+                    titem.setFlags(titem.flags() | Qt.ItemIsDragEnabled)
+                    titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
+                    folder_item.addChild(titem)
+                    
+                if folder_name in self.lib_data.get("expanded", []):
+                    folder_item.setIcon(0, QIcon.fromTheme("folder-open"))
+                    folder_item.setExpanded(True)
+        finally:
+            self._is_populating = False
 
     def on_search(self, text):
         query = text.lower()
+        first_item = None
         if self.tabs.currentIndex() == 0:
-            for i in range(self.live_list.count()):
-                item = self.live_list.item(i)
-                item.setHidden(bool(query and query not in item.text().lower()))
+            root = self.live_list.invisibleRootItem()
+            if not root: return
+            for i in range(root.childCount()):
+                item = root.child(i)
+                if item.data(0, Qt.UserRole) == "FOLDER":
+                    folder_matches = not query or query in item.text(0).lower()
+                    any_child_match = False
+                    for j in range(item.childCount()):
+                        child = item.child(j)
+                        matches = not query or query in child.text(0).lower()
+                        
+                        # Show child if either it matches OR its parent folder matches
+                        child.setHidden(not (matches or folder_matches))
+                        
+                        if matches or folder_matches: 
+                            any_child_match = True
+                            if not first_item: first_item = child
+                    
+                    item.setHidden(not (folder_matches or any_child_match))
+                    if (folder_matches or any_child_match) and query: item.setExpanded(True)
+                else:
+                    matches = not query or query in item.text(0).lower()
+                    item.setHidden(not matches)
+                    if matches and not first_item: first_item = item
+            
+            if first_item:
+                self.live_list.setCurrentItem(first_item)
+                first_item.setSelected(True)
+            elif not query:
+                self.live_list.clearSelection()
         else:
             root = self.tree.invisibleRootItem()
+            if not root: return
             for i in range(root.childCount()):
                 folder = root.child(i)
+                folder_matches = not query or query in folder.text(0).lower()
                 any_visible = False
                 for j in range(folder.childCount()):
                     child = folder.child(j)
                     tname = child.data(0, Qt.UserRole + 1)
-                    matches = not query or query in tname.lower()
-                    child.setHidden(not matches)
-                    if matches: any_visible = True
-                folder.setHidden(not any_visible)
-                if any_visible: folder.setExpanded(True)
+                    matches = not query or query in str(tname).lower()
+                    
+                    # Show child if it matches OR if folder matches
+                    child.setHidden(not (matches or folder_matches))
+                    
+                    if matches or folder_matches: 
+                        any_visible = True
+                        if not first_item: first_item = child
+                
+                folder.setHidden(not (folder_matches or any_visible))
+                if (folder_matches or any_visible) and query: folder.setExpanded(True)
+            
+            if first_item:
+                self.tree.setCurrentItem(first_item)
+                first_item.setSelected(True)
+            elif not query:
+                self.tree.clearSelection()
 
     def create_folder(self):
         name, ok = QInputDialog.getText(self, "New Folder", "Folder name:", text="")
         if ok and name.strip():
+            folder_name = name.strip()
+            
+            # Prevent immediate duplicate creation
+            existing = [self.tree.topLevelItem(i).data(0, Qt.UserRole + 1) for i in range(self.tree.topLevelItemCount())]
+            if folder_name in existing:
+                orig = folder_name
+                c = 1
+                while folder_name in existing:
+                    folder_name = f"{orig} ({c})"
+                    c += 1
+
             folder_item = QTreeWidgetItem()
-            folder_item.setText(0, name.strip())
+            folder_item.setText(0, folder_name)
             folder_item.setIcon(0, QIcon.fromTheme("folder"))
             folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
             folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
@@ -510,47 +934,141 @@ class SwitcherMenu(QWidget):
             folder_item.setExpanded(True)
             self.save_library()
 
+    def import_folder(self):
+        default_dir = os.path.expanduser("~/.local/bin")
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Folder to Import", default_dir)
+        if not folder_path:
+            return
+        
+        dir_path = Path(folder_path)
+        folder_name = dir_path.name
+        
+        # Prevent immediate duplicate creation
+        existing = [self.tree.topLevelItem(i).data(0, Qt.UserRole + 1) for i in range(self.tree.topLevelItemCount())]
+        if folder_name in existing:
+            orig = folder_name
+            c = 1
+            while folder_name in existing:
+                folder_name = f"{orig} ({c})"
+                c += 1
+
+        # Create folder item
+        folder_item = QTreeWidgetItem()
+        folder_item.setText(0, folder_name)
+        folder_item.setIcon(0, QIcon.fromTheme("folder"))
+        folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+        folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
+        folder_item.setData(0, Qt.UserRole, "FOLDER")
+        folder_item.setData(0, Qt.UserRole + 1, folder_name)
+        folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
+        self.tree.addTopLevelItem(folder_item)
+        folder_item.setExpanded(True)
+        
+        # Scan for scripts
+        files = sorted(list(dir_path.iterdir()))
+        for file in files:
+            if file.is_file():
+                is_script = file.suffix == '.sh'
+                is_exec = os.access(file, os.X_OK)
+                if is_script or is_exec:
+                    titem = QTreeWidgetItem()
+                    tname = file.stem if file.suffix == '.sh' else file.name
+                    titem.setText(0, tname + " 🔗")
+                    titem.setIcon(0, QIcon.fromTheme("system-run"))
+                    titem.setForeground(0, QBrush(QColor("#c8d3f5")))
+                    titem.setData(0, Qt.UserRole, str(uuid.uuid4()))
+                    titem.setData(0, Qt.UserRole + 1, tname)
+                    cmd = f"bash '{file.absolute()}'" if is_script else f"'{file.absolute()}'"
+                    titem.setData(0, Qt.UserRole + 2, cmd)
+                    titem.setFlags(titem.flags() | Qt.ItemIsDragEnabled)
+                    titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
+                    folder_item.addChild(titem)
+        
+        self.save_library()
+
     def on_live_item_clicked(self, item):
-        uid = item.data(Qt.UserRole)
-        print(f"SWITCH:{uid}", flush=True)
-        sys.exit(0)
+        uid = item.data(0, Qt.UserRole)
+        if uid == "FOLDER":
+            item.setExpanded(not item.isExpanded())
+            return
+        if uid:
+            print(f"SWITCH:{uid}", flush=True)
+            sys.exit(0)
 
     def on_live_context_menu(self, pos):
         item = self.live_list.itemAt(pos)
         if not item: return
-        uid = item.data(Qt.UserRole)
+        uid = item.data(0, Qt.UserRole)
         
         menu = QMenu(self)
+        menu.installEventFilter(self)
         menu.setStyleSheet("QMenu { background: #2f334d; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 6px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #82aaff; color: #1e2030; }")
         
-        action_go = menu.addAction("🚀 Go")
-        action_go.triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}") or 0))
-        
+        if uid == "FOLDER":
+            fn = item.text(0).strip()
+            a_summon = menu.addAction("🚀 Summon Folder")
+            a_summon.triggered.connect(lambda: sys.exit(print(f"SUMMON_FOLDER:{fn}", flush=True) or 0))
+            
+            a_ungroup = menu.addAction("🗑 Remove Folder Grouping")
+            a_ungroup.triggered.connect(lambda: sys.exit(print(f"REMOVE_LIVE_FOLDER:{fn}", flush=True) or 0))
+            menu.exec_(self.live_list.viewport().mapToGlobal(pos))
+            return
+
+        if uid == "ACTION_CHROME":
+            action_go = menu.addAction("🚀 Go")
+            action_go.triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}") or 0))
+            menu.exec_(self.live_list.viewport().mapToGlobal(pos))
+            return
+            
+        # 1. Rename
         action_rename = menu.addAction("✏️ Rename")
         action_rename.triggered.connect(lambda: sys.exit(print(f"RENAME:{uid}") or 0))
 
-        if uid == "ACTION_CHROME":
-            return
-            
-        action_clear = menu.addAction("🧹 Clear to 'Empty' & Close Windows")
-        action_clear.triggered.connect(lambda: sys.exit(print(f"CLEAR:{uid}") or 0))
+        # 2. Ungroup (if applicable)
+        if item.parent() and item.parent().data(0, Qt.UserRole) == "FOLDER":
+            folder_name = item.parent().text(0).strip()
+            action_ungroup = menu.addAction("🔓 Remove from Group")
+            action_ungroup.triggered.connect(lambda: sys.exit(print(f"UNGROUP_DESKTOP:{folder_name}:{uid}") or 0))
+        
+        # 3. Summon
+        action_summon = menu.addAction("🚀 Summon Desktop")
+        action_summon.triggered.connect(lambda: sys.exit(print(f"SUMMON:{uid}", flush=True) or 0))
+        
+        # 4. Close Windows
+        action_close = menu.addAction("🧹 Close Windows")
+        action_close.triggered.connect(lambda: sys.exit(print(f"CLOSE_WINDOWS:{uid}", flush=True) or 0))
 
         menu.addSeparator()
-        
+
+        # 5. Go
+        action_go = menu.addAction("🚀 Go")
+        action_go.triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}", flush=True) or 0))
+
         menu.exec_(self.live_list.viewport().mapToGlobal(pos))
 
     def on_lib_context_menu(self, pos):
         item = self.tree.itemAt(pos)
         menu = QMenu(self)
+        menu.installEventFilter(self)
         menu.setStyleSheet("QMenu { background: #2f334d; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 6px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #82aaff; color: #1e2030; }")
         
         if item is None:
             a = menu.addAction("New Folder")
             a.triggered.connect(self.create_folder)
+            a_imp = menu.addAction("📂 Import Folder from Computer")
+            a_imp.triggered.connect(self.import_folder)
         elif item.data(0, Qt.UserRole) == "FOLDER":
             fn = item.data(0, Qt.UserRole + 1)
-            a_deploy = menu.addAction("🚀 Deploy Folder to Linux")
-            a_deploy.triggered.connect(lambda: sys.exit(print(f"DEPLOY:{fn}") or 0))
+            
+            deploy_menu = menu.addMenu("🚀 Deploy to Live")
+            deploy_menu.setStyleSheet("QMenu { background: #2f334d; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 6px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #82aaff; color: #1e2030; }")
+            
+            a_deploy_all = deploy_menu.addAction("🚀 Deploy All tasks")
+            a_deploy_all.triggered.connect(lambda: sys.exit(print(f"DEPLOY_ALL:{fn}") or 0))
+            
+            a_deploy_sel = deploy_menu.addAction("✅ Select Tasks to Deploy...")
+            a_deploy_sel.triggered.connect(lambda: self.deploy_selected(item))
+            
             menu.addSeparator()
             a_add = menu.addAction("➕ Add App Desktop")
             a_add.triggered.connect(lambda: self.add_app_desktop(item))
@@ -569,6 +1087,23 @@ class SwitcherMenu(QWidget):
             a_del.triggered.connect(lambda: self.delete_lib_item(item))
             
         menu.exec_(self.tree.viewport().mapToGlobal(pos))
+
+    def deploy_selected(self, folder_item):
+        folder_name = folder_item.data(0, Qt.UserRole + 1)
+        tasks = []
+        for i in range(folder_item.childCount()):
+            tasks.append(folder_item.child(i).data(0, Qt.UserRole + 1))
+            
+        if not tasks:
+            return
+            
+        dialog = SelectionDialog(f"Deploy {folder_name}", tasks, self)
+        if dialog.exec_():
+            selected = dialog.get_selected()
+            if selected:
+                # Use a special separator | that won't appear in task names usually
+                task_list = "|".join(selected)
+                sys.exit(print(f"DEPLOY_SELECTED:{folder_name}:{task_list}") or 0)
 
     def add_app_desktop(self, folder_item):
         name, ok = QInputDialog.getText(self, "New App Desktop", "Task name:")
@@ -627,46 +1162,44 @@ class SwitcherMenu(QWidget):
 
     def move_up(self):
         if self.tabs.currentIndex() == 0:
-            # Live System List
-            row = self.live_list.currentRow()
-            if row > 0:
-                self.live_list.setCurrentRow(row - 1)
+            current = self.live_list.currentItem()
+            if not current: return
+            above = self.live_list.itemAbove(current)
+            if above: self.live_list.setCurrentItem(above)
         else:
-            # App Library Tree
             current = self.tree.currentItem()
-            if current is None: return
+            if not current: return
             above = self.tree.itemAbove(current)
             while above and above.data(0, Qt.UserRole) == "FOLDER":
                 above = self.tree.itemAbove(above)
-            if above:
-                self.tree.setCurrentItem(above)
+            if above: self.tree.setCurrentItem(above)
 
     def move_down(self):
         if self.tabs.currentIndex() == 0:
-            # Live System List
-            row = self.live_list.currentRow()
-            if row < self.live_list.count() - 1:
-                self.live_list.setCurrentRow(row + 1 if row >= 0 else 0)
+            current = self.live_list.currentItem()
+            if not current:
+                root = self.live_list.invisibleRootItem()
+                if root.childCount() > 0: self.live_list.setCurrentItem(root.child(0))
+                return
+            below = self.live_list.itemBelow(current)
+            if below: self.live_list.setCurrentItem(below)
         else:
-            # App Library Tree
             current = self.tree.currentItem()
-            if current is None:
+            if not current:
                 root = self.tree.invisibleRootItem()
                 if root.childCount() > 0:
                     folder = root.child(0)
-                    if folder.childCount() > 0:
-                        self.tree.setCurrentItem(folder.child(0))
+                    if folder.childCount() > 0: self.tree.setCurrentItem(folder.child(0))
                 return
             below = self.tree.itemBelow(current)
             while below and below.data(0, Qt.UserRole) == "FOLDER":
                 below = self.tree.itemBelow(below)
-            if below:
-                self.tree.setCurrentItem(below)
+            if below: self.tree.setCurrentItem(below)
                 
     def get_selected_uid(self):
         if self.tabs.currentIndex() == 0:
             item = self.live_list.currentItem()
-            if item: return item.data(Qt.UserRole)
+            if item: return item.data(0, Qt.UserRole)
         else:
             item = self.tree.currentItem()
             if item and item.data(0, Qt.UserRole) != "FOLDER":
@@ -700,6 +1233,21 @@ class SwitcherMenu(QWidget):
         except Exception: pass
 
     def eventFilter(self, obj, event):
+        if isinstance(obj, QMenu) and event.type() == QEvent.KeyPress:
+            key = event.key()
+            mod = event.modifiers()
+            if mod == Qt.ControlModifier:
+                if key == Qt.Key_J:
+                    simulate = QKeyEvent(QEvent.KeyPress, Qt.Key_Down, Qt.NoModifier)
+                    QCoreApplication.sendEvent(obj, simulate)
+                    return True
+                elif key == Qt.Key_K:
+                    simulate = QKeyEvent(QEvent.KeyPress, Qt.Key_Up, Qt.NoModifier)
+                    QCoreApplication.sendEvent(obj, simulate)
+                    return True
+            # Stop any other KeyPress events from hitting the main window logic below
+            return False
+
         if event.type() == QEvent.KeyPress:
             key = event.key()
             mod = event.modifiers()
@@ -721,9 +1269,14 @@ class SwitcherMenu(QWidget):
                     self.move_up()
                     return True
                 elif key == Qt.Key_Slash:
-                    uid = self.get_selected_uid()
-                    if uid and self.tabs.currentIndex() == 0:
-                        sys.exit(print(f"RENAME:{uid}") or 0)
+                    widget = self.live_list if self.tabs.currentIndex() == 0 else self.tree
+                    item = widget.currentItem()
+                    if item:
+                        rect = widget.visualItemRect(item)
+                        if self.tabs.currentIndex() == 0:
+                            self.on_live_context_menu(rect.center())
+                        else:
+                            self.on_lib_context_menu(rect.center())
                     return True
                 elif key == Qt.Key_Y:
                     uid = self.get_selected_uid()
@@ -751,6 +1304,14 @@ class SwitcherMenu(QWidget):
                 return True
                 
         return super().eventFilter(obj, event)
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.ActivationChange:
+            if self.isActiveWindow():
+                self.container.setStyleSheet("#container { background-color: rgba(30,32,48,0.95); border-radius: 4px; border: 1.5px solid #82aaff; }")
+            else:
+                self.container.setStyleSheet("#container { background-color: rgba(30,32,48,0.95); border-radius: 4px; border: 1px solid #5a4a78; }")
+        super().changeEvent(event)
 
 def main():
     title_win = "Menu"
