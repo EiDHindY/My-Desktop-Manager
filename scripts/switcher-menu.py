@@ -25,6 +25,7 @@ LIBRARY_FILE = CONFIG_DIR / "library.json"
 HISTORY_FILE = CONFIG_DIR / "history.json"
 SESSION_FILE = CONFIG_DIR / "session.json"
 CHROME_LOCAL_STATE = Path.home() / ".config/google-chrome/Local State"
+UI_STATE_FILE = CONFIG_DIR / "ui_state.json"
 
 class WindowFetcher(QObject):
     finished = pyqtSignal(set)
@@ -198,12 +199,12 @@ class SwitcherMenu(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         
         self.screen_geom = QApplication.primaryScreen().geometry()
-        self.hud_width = 400 
-        self.height_expanded = 500
-        self.height_collapsed = 420
+        state = self.load_ui_state()
+        self.hud_width = state.get("width", 400)
+        self.height_current = state.get("height", 420)
         
         self.setMinimumSize(320, 300)
-        self.resize(self.hud_width, self.height_collapsed)
+        self.resize(self.hud_width, self.height_current)
         
         x_target = self.screen_geom.width() - self.hud_width + 20
         x_start = self.screen_geom.width() + 10 
@@ -420,8 +421,8 @@ class SwitcherMenu(QWidget):
 
     def force_position(self):
         try:
-            x = self.screen_geom.width() - self.hud_width + 20
-            cmd = f'wmctrl -F -r "{self.force_focus_title}" -e 0,{x},0,{self.hud_width},{self.height()}'
+            x = self.screen_geom.width() - self.width() + 20
+            cmd = f'wmctrl -F -r "{self.force_focus_title}" -e 0,{x},0,{self.width()},{self.height()}'
             subprocess.run(["bash", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except: pass
 
@@ -458,8 +459,10 @@ class SwitcherMenu(QWidget):
                     if len(parts) < 2: continue
                     kwin_idx = int(parts[1]) + 1
                     
-                    name_l = name.lower()
-                    if kwin_idx not in new_indices and "empty" not in name_l:
+                    name_l = name.lower().strip()
+                    # Only auto-clean if it has no windows AND it has a generic name (like "Desktop 1")
+                    is_generic = name_l.startswith("desktop ") or name_l == "" or name_l.startswith("virtual desktop ")
+                    if kwin_idx not in new_indices and is_generic and name_l != "empty":
                         raw_uuid = parts[0]
                         cmd = f'qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "{raw_uuid}" "Empty"'
                         subprocess.run(["bash", "-c", cmd])
@@ -597,6 +600,29 @@ class SwitcherMenu(QWidget):
             self.save_session()
 
 
+
+    def load_ui_state(self):
+        try:
+            if UI_STATE_FILE.exists():
+                with open(UI_STATE_FILE, "r") as f:
+                    return json.load(f)
+        except: pass
+        return {"width": 400, "height": 420}
+
+    def save_ui_state(self):
+        try:
+            # Don't save if width/height are zero (invalid states)
+            if self.width() < 100 or self.height() < 100: return
+            state = {"width": self.width(), "height": self.height()}
+            with open(UI_STATE_FILE, "w") as f:
+                json.dump(state, f)
+        except: pass
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Use a small delay to avoid excessive writes during smooth resizing
+        if not getattr(self, "_is_populating", False):
+            QTimer.singleShot(500, self.save_ui_state)
 
     def apply_live_styling(self, item, name, is_current, is_active):
         font = item.font(0)
