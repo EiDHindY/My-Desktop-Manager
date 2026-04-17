@@ -202,6 +202,8 @@ class SwitcherMenu(QWidget):
         state = self.load_ui_state()
         self.hud_width = state.get("width", 400)
         self.height_current = state.get("height", 420)
+        self.opacity_current = state.get("opacity", 0.95)
+        self.setWindowOpacity(self.opacity_current)
         
         self.setMinimumSize(320, 300)
         self.resize(self.hud_width, self.height_current)
@@ -607,13 +609,17 @@ class SwitcherMenu(QWidget):
                 with open(UI_STATE_FILE, "r") as f:
                     return json.load(f)
         except: pass
-        return {"width": 400, "height": 420}
+        return {"width": 400, "height": 420, "opacity": 0.95}
 
     def save_ui_state(self):
         try:
             # Don't save if width/height are zero (invalid states)
             if self.width() < 100 or self.height() < 100: return
-            state = {"width": self.width(), "height": self.height()}
+            state = {
+                "width": self.width(), 
+                "height": self.height(),
+                "opacity": self.windowOpacity()
+            }
             with open(UI_STATE_FILE, "w") as f:
                 json.dump(state, f)
         except: pass
@@ -1348,6 +1354,18 @@ class SwitcherMenu(QWidget):
                     uid = self.get_selected_uid()
                     if uid and self.tabs.currentIndex() == 0:
                         sys.exit(print(f"CLEAR:{uid}") or 0)
+                    return True
+                elif key == Qt.Key_BracketLeft:
+                    # Decrease Opacity
+                    new_op = max(0.1, self.windowOpacity() - 0.05)
+                    self.setWindowOpacity(new_op)
+                    self.save_ui_state()
+                    return True
+                elif key == Qt.Key_BracketRight:
+                    # Increase Opacity
+                    new_op = min(1.0, self.windowOpacity() + 0.05)
+                    self.setWindowOpacity(new_op)
+                    self.save_ui_state()
                     return True
                 elif key == Qt.Key_Backspace:
                     self.search_entry.clear()
