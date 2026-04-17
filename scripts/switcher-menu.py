@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QMenu, QInputDialog, QAbstractItemView,
                              QDialog, QListWidget, QListWidgetItem,
                              QFileDialog, QTabWidget, QStyledItemDelegate,
-                             QStyleOptionViewItem, QCheckBox)
+                             QStyleOptionViewItem, QCheckBox, QHeaderView)
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QObject, QTimer, QDir, QPropertyAnimation, QEasingCurve, QPoint, QRect, QSize, QCoreApplication
 from PyQt5.QtGui import QFont, QColor, QBrush, QIcon, QPainter, QPen, QKeyEvent
 
@@ -61,6 +61,15 @@ class OutlineDelegate(QStyledItemDelegate):
             # Draw a rounded rectangle for a premium look
             painter.drawRoundedRect(rect, 4, 4)
             painter.restore()
+            
+        # Draw Notes Icon if present
+        if index.data(Qt.UserRole + 5):
+            icon = QIcon.fromTheme("text-plain")
+            rect = option.rect
+            icon_size = 14
+            # Draw on the right edge, slightly padded
+            icon_rect = QRect(rect.right() - icon_size - 8, rect.top() + (rect.height() - icon_size) // 2, icon_size, icon_size)
+            icon.paint(painter, icon_rect)
 
 class FolderTreeWidget(QTreeWidget):
     def dropEvent(self, event):
@@ -194,6 +203,7 @@ class SwitcherMenu(QWidget):
         self.managed_uids = set()
         self.pinned_folders = []
         self._is_populating = False
+        self.desktop_notes = {}
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -270,6 +280,7 @@ class SwitcherMenu(QWidget):
         # Tabs
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
+        self.tabs.setUsesScrollButtons(False)
         self.tabs.tabBar().setExpanding(True)
         self.tabs.setStyleSheet("""
             QTabWidget::pane { 
@@ -413,6 +424,7 @@ class SwitcherMenu(QWidget):
         self.installEventFilter(self)
         self.search_entry.installEventFilter(self)
         self.live_list.installEventFilter(self)
+        self.live_list.viewport().installEventFilter(self)
         self.tree.installEventFilter(self)
         
         self.force_focus_title = title_win
@@ -567,6 +579,7 @@ class SwitcherMenu(QWidget):
             session_data["folder_order"] = []
             session_data["expanded"] = []
             session_data["pinned_folders"] = self.pinned_folders
+            session_data["desktop_notes"] = self.desktop_notes
             
             root = self.live_list.invisibleRootItem()
             if root is None: return
@@ -600,6 +613,28 @@ class SwitcherMenu(QWidget):
             self.save_library()
         elif widget == self.live_list:
             self.save_session()
+
+    def edit_desktop_note(self, uid):
+        # Use raw UUID for notes persistence
+        raw_uuid = uid.split("___")[0] if "___" in uid else uid
+        current_note = self.desktop_notes.get(raw_uuid, "")
+        
+        # Get desktop name for the dialog title
+        name = next((p[1] for p in self.id_name_pairs if p[0] == uid), "Desktop")
+        
+        note, ok = QInputDialog.getMultiLineText(self, f"Note for {name}", "Enter reminder/task:", current_note)
+        if ok:
+            raw_uuid = uid.split("___")[0] if "___" in uid else uid
+            self.desktop_notes[raw_uuid] = note.strip()
+            self.save_session()
+            
+            # Update the UI item immediately (Integrated approach)
+            items = self.live_list.findItems("", Qt.MatchContains | Qt.MatchRecursive, 0)
+            for item in items:
+                if item.data(0, Qt.UserRole) == uid:
+                    item.setData(0, Qt.UserRole + 5, bool(note.strip()))
+                    self.live_list.viewport().update()
+                    break
 
 
 
@@ -658,6 +693,7 @@ class SwitcherMenu(QWidget):
                     if SESSION_FILE.exists():
                         with open(SESSION_FILE, "r") as f:
                             session_data = json.load(f)
+                            self.desktop_notes = session_data.get("desktop_notes", {})
                 except: pass
                 
                 live_folders = session_data.get("folders", {})
@@ -820,6 +856,7 @@ class SwitcherMenu(QWidget):
         
         item = QTreeWidgetItem([display])
         item.setData(0, Qt.UserRole, uid)
+        item.setData(0, Qt.UserRole + 5, bool(self.desktop_notes.get(raw_uuid)))
         self.apply_live_styling(item, name, is_current, is_active)
         
         if parent:
@@ -849,6 +886,7 @@ class SwitcherMenu(QWidget):
                 
                 if item.text(0) != display:
                     item.setText(0, display)
+                item.setData(0, Qt.UserRole + 5, bool(self.desktop_notes.get(raw_uuid)))
                 self.apply_live_styling(item, name, is_current, is_active)
             
             if item.childCount() > 0:
@@ -1034,11 +1072,12 @@ class SwitcherMenu(QWidget):
         
         self.save_library()
 
-    def on_live_item_clicked(self, item):
+    def on_live_item_clicked(self, item, column):
         uid = item.data(0, Qt.UserRole)
         if uid == "FOLDER":
             item.setExpanded(not item.isExpanded())
             return
+            
         if uid:
             print(f"SWITCH:{uid}", flush=True)
             sys.exit(0)
@@ -1095,6 +1134,10 @@ class SwitcherMenu(QWidget):
         # 4. Close Windows
         action_close = menu.addAction("🧹 Close Windows")
         action_close.triggered.connect(lambda: sys.exit(print(f"CLOSE_WINDOWS:{uid}", flush=True) or 0))
+
+        # 5. Edit Note
+        action_note = menu.addAction("📝 Edit Desktop Note")
+        action_note.triggered.connect(lambda: self.edit_desktop_note(uid))
 
         menu.addSeparator()
 
@@ -1305,6 +1348,17 @@ class SwitcherMenu(QWidget):
         except Exception: pass
 
     def eventFilter(self, obj, event):
+        if obj == self.live_list.viewport() and event.type() == QEvent.MouseButtonRelease:
+            if event.button() == Qt.LeftButton:
+                item = self.live_list.itemAt(event.pos())
+                if item:
+                    rect = self.live_list.visualItemRect(item)
+                    if event.pos().x() >= rect.right() - 30:
+                        uid = item.data(0, Qt.UserRole)
+                        if uid and uid != "FOLDER":
+                            QTimer.singleShot(0, lambda: self.edit_desktop_note(uid))
+                            return True
+                            
         if isinstance(obj, QMenu) and event.type() == QEvent.KeyPress:
             key = event.key()
             mod = event.modifiers()
