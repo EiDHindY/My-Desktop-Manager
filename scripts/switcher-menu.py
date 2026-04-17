@@ -64,11 +64,37 @@ class OutlineDelegate(QStyledItemDelegate):
             
         # Draw Notes Icon if present
         if index.data(Qt.UserRole + 5):
+            uid = index.data(Qt.UserRole)
+            is_hovered = getattr(option.widget, "_hovered_notes_uid", None) == uid
+            
             icon = QIcon.fromTheme("text-plain")
             rect = option.rect
-            icon_size = 14
-            # Draw on the right edge, slightly padded
-            icon_rect = QRect(rect.right() - icon_size - 8, rect.top() + (rect.height() - icon_size) // 2, icon_size, icon_size)
+            
+            # Pop up a bit when hovered
+            icon_size = 14 if not is_hovered else 16
+            offset = 18 if not is_hovered else 17
+            
+            # Draw slightly to the left (padded from right edge)
+            icon_rect = QRect(rect.right() - icon_size - offset, rect.top() + (rect.height() - icon_size) // 2, icon_size, icon_size)
+            
+            # Subtle background badge for the icon
+            painter.save()
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(Qt.NoPen)
+            
+            if is_hovered:
+                # Stronger, brighter background and slightly rounder
+                painter.setBrush(QColor(130, 170, 255, 100))
+                bg_rect = icon_rect.adjusted(-5, -3, 5, 3)
+                painter.drawRoundedRect(bg_rect, 6, 6)
+            else:
+                # Soft premium blue
+                painter.setBrush(QColor(130, 170, 255, 35)) 
+                bg_rect = icon_rect.adjusted(-6, -4, 6, 4)
+                painter.drawRoundedRect(bg_rect, 4, 4)
+                
+            painter.restore()
+            
             icon.paint(painter, icon_rect)
 
 class FolderTreeWidget(QTreeWidget):
@@ -322,6 +348,8 @@ class SwitcherMenu(QWidget):
         self.live_list.setDefaultDropAction(Qt.MoveAction)
         self.live_list.setIndentation(15)
         self.live_list.setRootIsDecorated(False)
+        self.live_list.setMouseTracking(True)
+        self.live_list.viewport().setMouseTracking(True)
         self.live_list.setStyleSheet("""
             QTreeWidget { background-color: #1e2030; color: #c8d3f5; border: none; padding: 2px 0px; outline: none; show-decoration-selected: 1; } 
             QTreeWidget::branch { background-color: #1e2030; }
@@ -1348,16 +1376,46 @@ class SwitcherMenu(QWidget):
         except Exception: pass
 
     def eventFilter(self, obj, event):
-        if obj == self.live_list.viewport() and event.type() == QEvent.MouseButtonRelease:
-            if event.button() == Qt.LeftButton:
+        if obj == self.live_list.viewport():
+            if event.type() == QEvent.MouseMove:
                 item = self.live_list.itemAt(event.pos())
+                tree = self.live_list
+                old_hover = getattr(tree, "_hovered_notes_uid", None)
+                new_hover = None
+                
                 if item:
-                    rect = self.live_list.visualItemRect(item)
-                    if event.pos().x() >= rect.right() - 30:
+                    rect = tree.visualItemRect(item)
+                    if event.pos().x() >= rect.right() - 40:
                         uid = item.data(0, Qt.UserRole)
-                        if uid and uid != "FOLDER":
-                            QTimer.singleShot(0, lambda: self.edit_desktop_note(uid))
-                            return True
+                        # Only hover if the desktop actually has a note flag set
+                        if uid and item.data(0, Qt.UserRole + 5):
+                            new_hover = uid
+                
+                if old_hover != new_hover:
+                    tree._hovered_notes_uid = new_hover
+                    tree.viewport().update()
+                    if new_hover:
+                        self.setCursor(Qt.PointingHandCursor)
+                    else:
+                        self.setCursor(Qt.ArrowCursor)
+                        
+            elif event.type() == QEvent.Leave:
+                tree = self.live_list
+                if getattr(tree, "_hovered_notes_uid", None) is not None:
+                    tree._hovered_notes_uid = None
+                    tree.viewport().update()
+                    self.setCursor(Qt.ArrowCursor)
+                    
+            elif event.type() == QEvent.MouseButtonRelease:
+                if event.button() == Qt.LeftButton:
+                    item = self.live_list.itemAt(event.pos())
+                    if item:
+                        rect = self.live_list.visualItemRect(item)
+                        if event.pos().x() >= rect.right() - 40:
+                            uid = item.data(0, Qt.UserRole)
+                            if uid and uid != "FOLDER":
+                                QTimer.singleShot(0, lambda: self.edit_desktop_note(uid))
+                                return True
                             
         if isinstance(obj, QMenu) and event.type() == QEvent.KeyPress:
             key = event.key()
