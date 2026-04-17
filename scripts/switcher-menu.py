@@ -515,8 +515,8 @@ class SwitcherMenu(QWidget):
             seen_names = set()
             for i in range(root.childCount()):
                 folder_item = root.child(i)
-                folder_name = folder_item.data(0, Qt.UserRole + 1)
-                if folder_name is None: continue
+                folder_name = (folder_item.data(0, Qt.UserRole + 1) or "").strip()
+                if not folder_name: continue
                 
                 # Enforce Unique Names to prevent key collisions in the JSON
                 original_name = folder_name

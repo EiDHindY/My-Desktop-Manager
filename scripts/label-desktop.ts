@@ -21,7 +21,7 @@ import { join } from 'path';
  */
 function runCommand(command: string): string | undefined {
     try {
-        return execSync(command).toString().trim();
+        return execSync(command).toString().replace(/\n$/, '');
     } catch (error) {
         // This is normal if a user cancels the menu (exit status 1)
         return undefined;
@@ -73,6 +73,72 @@ function launchAppsForDesktop(uuid: string, waitUntilFinished: boolean = false) 
     }
 }
 
+/**
+ * Checks if this is a fresh boot session or a new day.
+ * If so, clears the live session data and desktop names.
+ */
+function checkFreshSession(sessionPath: string) {
+    const today = new Date().toISOString().split('T')[0];
+    const flagPath = '/tmp/desktop-manager-session.flag';
+    
+    let needsCleanup = false;
+
+    if (!existsSync(flagPath)) {
+        console.log("🆕 Fresh boot detected (no session flag).");
+        needsCleanup = true;
+    } else {
+        const flagDate = readFileSync(flagPath, 'utf-8').trim();
+        if (flagDate !== today) {
+            console.log(`🌅 New day detected (${flagDate} -> ${today}).`);
+            needsCleanup = true;
+        }
+    }
+
+    if (needsCleanup) {
+        console.log("🧹 Performing session cleanup...");
+        
+        // 1. Reset KWin Desktop Names
+        try {
+            const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
+            if (desktopsOutput) {
+                const currentRegex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
+                let match;
+                while ((match = currentRegex.exec(desktopsOutput)) !== null) {
+                    const uuid = match[2];
+                    const name = match[3];
+                    if (name && name !== "Empty" && !name.toLowerCase().startsWith("desktop ")) {
+                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(`❌ Error resetting desktop names: ${e}`);
+        }
+
+        // 2. Clear Live Session Data
+        try {
+            if (existsSync(sessionPath)) {
+                const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                data.folders = {};
+                data.folder_order = [];
+                data.expanded = [];
+                data.startup_apps = {};
+                writeFileSync(sessionPath, JSON.stringify(data, null, 2));
+                console.log("✅ Session data cleared.");
+            }
+        } catch (e) {
+            console.error(`❌ Error clearing session data: ${e}`);
+        }
+    }
+
+    // Update the flag with today's date
+    try {
+        writeFileSync(flagPath, today);
+    } catch (e) {
+        console.error(`❌ Error updating session flag: ${e}`);
+    }
+}
+
 function main() {
     // Start the history tracker in the background
     spawn('/home/dod/projects/Desktop Manager/scripts/desktop-tracker.py', [], {
@@ -84,6 +150,9 @@ function main() {
     const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
     const sessionPath = join(libraryDir, 'session.json');
     const templatesDir = join(libraryDir, 'templates');
+
+    // --- Fresh Session Check ---
+    checkFreshSession(sessionPath);
 
     // Wrap everything in a continuous loop so you can always go back!
     while (true) {
