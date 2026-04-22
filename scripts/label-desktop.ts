@@ -1,736 +1,93 @@
 /// <reference types="node" />
-/**
- * label-desktop.ts
- * 
- * A TypeScript tool for managing KDE Plasma 6 virtual desktops.
- * Changed: Now skips the first menu entirely and jumps straight to the desktop list!
- * 
- * Learning Note for DoD:
- * We're using 'child_process' to run terminal commands from within 
- * our TypeScript code. This is very common in Node.js for automation.
- * We also added Regex (Regular Expressions) to parse text!
- */
-
-import { execSync, spawn } from 'child_process';
-import { readFileSync, writeFileSync, mkdirSync, unlinkSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
 import { join } from 'path';
+import { spawn, execSync } from 'child_process';
 
-/**
- * Executes a shell command and returns the output.
- * If the user cancels a dialog, it returns undefined instead of crashing the script.
- */
-function runCommand(command: string): string | undefined {
-    try {
-        return execSync(command).toString().replace(/\n$/, '');
-    } catch (error) {
-        // This is normal if a user cancels the menu (exit status 1)
-        return undefined;
-    }
-}
-
-/**
- * Triggers assigned startup apps for a specific desktop.
- */
-function launchAppsForDesktop(uuid: string, waitUntilFinished: boolean = false) {
-    const sessionDir = join(process.env.HOME || '', '.config', 'desktop-manager');
-    const sessionPath = join(sessionDir, 'session.json');
-    try {
-        const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-        const apps = data.startup_apps?.[uuid] || [];
-        if (apps.length > 0) {
-            console.log(`🚀 Launching ${apps.length} apps for desktop ${uuid}...`);
-            apps.forEach((cmd: string) => {
-                // Verify script exists before launching
-                const scriptPathMatch = cmd.match(/'([^']+)'/);
-                if (scriptPathMatch && scriptPathMatch[1]) {
-                     const path = scriptPathMatch[1];
-                     if (!existsSync(path)) {
-                         runCommand(`notify-send "Desktop Manager" "❌ Script not found:\n${path}"`);
-                         return;
-                     }
-                }
-
-                if (waitUntilFinished) {
-                    try {
-                        execSync(cmd, { stdio: 'ignore', env: { ...process.env, DISPLAY: ':0' } });
-                    } catch (e) {
-                        runCommand(`notify-send "Desktop Manager" "❌ Failed to run: ${cmd}"`);
-                    }
-                } else {
-                    spawn('bash', ['-c', cmd], {
-                        detached: true,
-                        stdio: 'ignore',
-                        env: { ...process.env, DISPLAY: ':0' }
-                    }).on('error', (err) => {
-                        runCommand(`notify-send "Desktop Manager" "❌ Failed to launch: ${cmd}"`);
-                    }).unref();
-                }
-            });
-        }
-    } catch (e) {
-        runCommand(`notify-send "Desktop Manager" "❌ Error launching apps: ${e}"`);
-        console.error(`❌ Error launching apps: ${e}`);
-    }
-}
-
-/**
- * Checks if this is a fresh boot session or a new day.
- * If so, clears the live session data and desktop names.
- */
-function checkFreshSession(sessionPath: string) {
-    const today = new Date().toISOString().split('T')[0];
-    const flagPath = '/tmp/desktop-manager-session.flag';
-    
-    let needsCleanup = false;
-
-    if (!existsSync(flagPath)) {
-        console.log("🆕 Fresh boot detected (no session flag).");
-        needsCleanup = true;
-    } else {
-        const flagDate = readFileSync(flagPath, 'utf-8').trim();
-        if (flagDate !== today) {
-            console.log(`🌅 New day detected (${flagDate} -> ${today}).`);
-            needsCleanup = true;
-        }
-    }
-
-    if (needsCleanup) {
-        console.log("🧹 Performing session cleanup...");
-        
-        // 1. Reset KWin Desktop Names
-        try {
-            const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
-            if (desktopsOutput) {
-                const currentRegex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
-                let match;
-                while ((match = currentRegex.exec(desktopsOutput)) !== null) {
-                    const uuid = match[2];
-                    const name = match[3];
-                    if (name && name !== "Empty" && !name.toLowerCase().startsWith("desktop ")) {
-                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error(`❌ Error resetting desktop names: ${e}`);
-        }
-
-        // 2. Clear Live Session Data
-        try {
-            if (existsSync(sessionPath)) {
-                const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                data.folders = {};
-                data.folder_order = [];
-                data.expanded = [];
-                data.startup_apps = {};
-                writeFileSync(sessionPath, JSON.stringify(data, null, 2));
-                console.log("✅ Session data cleared.");
-            }
-        } catch (e) {
-            console.error(`❌ Error clearing session data: ${e}`);
-        }
-    }
-
-    // Update the flag with today's date
-    try {
-        writeFileSync(flagPath, today);
-    } catch (e) {
-        console.error(`❌ Error updating session flag: ${e}`);
-    }
-}
+// Helpers
+import { runCommand, launchAppsForDesktop } from './helpers/kwin_utils';
+import { checkFreshSession, saveSnapshot, applyTemplate } from './helpers/session_manager';
+import { fetchDesktops, buildMenuCommand } from './helpers/desktop_utils';
+import { handleClear, handleSummonFolder, handleDeploy, handleRemoveLibraryFolder, handleRemoveLiveFolder, handleCreateLiveDesktop, handleUngroupDesktop } from './helpers/command_handlers';
 
 function main() {
-    // Start the history tracker in the background
-    spawn('/home/dod/projects/Desktop Manager/scripts/desktop-tracker.py', [], {
-        detached: true,
-        stdio: 'ignore'
-    }).unref();
+    const lockPath = '/tmp/desktop-manager.lock';
+    if (existsSync(lockPath)) {
+        try {
+            const oldPid = readFileSync(lockPath, 'utf-8').trim();
+            process.kill(parseInt(oldPid), 0);
+            process.exit(0);
+        } catch (e) { unlinkSync(lockPath); }
+    }
+    writeFileSync(lockPath, process.pid.toString());
+    process.on('exit', () => { try { unlinkSync(lockPath); } catch(e) {} });
+    process.on('SIGINT', () => { process.exit(); });
+    process.on('SIGTERM', () => { process.exit(); });
 
-    let undoStack: { id: string, oldName: string }[] = [];
+    spawn(join(__dirname, 'desktop-tracker.py'), [], { detached: true, stdio: 'ignore' }).unref();
+
+    let undoStack: any[] = [];
     const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
     const sessionPath = join(libraryDir, 'session.json');
     const templatesDir = join(libraryDir, 'templates');
 
-    // --- Fresh Session Check ---
     checkFreshSession(sessionPath);
 
-    // Wrap everything in a continuous loop so you can always go back!
     while (true) {
+        const currentDesktops = fetchDesktops();
+        if (currentDesktops.length === 0) break;
         
-        // 1. Instantly pull the list of desktops using D-Bus.
-        const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
-        if (!desktopsOutput) break; // Safety check
+        const currentUuid = runCommand('qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current') || "";
+        const menuCmd = buildMenuCommand(currentDesktops, currentUuid);
+        const desktopMap = new Map<string, string>();
+        for (const d of currentDesktops) desktopMap.set(`${d.uuid}___${d.position}`, d.name || `Desktop ${d.position}`);
         
-        // Parse desktops into a reusable array of objects
-        const currentRegex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
-        let currentMatch: RegExpExecArray | null;
-        const currentDesktops: { position: number, uuid: string, name: string }[] = [];
-        while ((currentMatch = currentRegex.exec(desktopsOutput)) !== null) {
-            currentDesktops.push({
-                position: parseInt(currentMatch[1]),
-                uuid: currentMatch[2],
-                name: currentMatch[3]
-            });
-        }
-        currentDesktops.sort((a, b) => a.position - b.position);
-
-        const currentDesktop = runCommand('qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current');
+        const result = (runCommand(menuCmd) || "").trim();
+        if (!result) process.exit(0);
+        console.log(`📡 Command received: "${result}"`);
         
-        // We construct the menu command. "Ctrl+/ to Rename"
-        let menuCmd = `'/home/dod/projects/Desktop Manager/scripts/switcher-menu.py' --title "Desktop Manager" --menu "Hit Enter/Click to Jump, or press Ctrl+/ to Rename:" --current "${currentDesktop}"`;
-        let desktopMap = new Map<string, string>();
-        
-        for (const desktop of currentDesktops) {
-            const id = `${desktop.uuid}___${desktop.position}`;
-            const name = desktop.name || `Desktop ${desktop.position}`;
-            desktopMap.set(id, name);
-        }
-        
-        // Smart Sort: Categorical Priority Hierarchy
-        let desktopEntries = Array.from(desktopMap.entries());
-        desktopEntries.sort((a, b) => {
-            const nameA = a[1] ? a[1].trim().toLowerCase() : "";
-            const nameB = b[1] ? b[1].trim().toLowerCase() : "";
-            
-            const getScore = (rawName: string) => {
-                const name = rawName.toLowerCase();
-                
-                if (!name || name === "" || name === "empty" || name.startsWith("desktop ")) return 4; // Bottom priority (Empties)
-                if (name.startsWith("(main)")) return 1; // Top Priority
-                if (name.startsWith("(task)")) return 2; // Second Priority
-                return 3; // Everything else (Custom names like 'Anti')
-            };
-            
-            return getScore(nameA) - getScore(nameB);
-        });
-        
-        let counter = 1;
-        for (const [id, label] of desktopEntries) {
-            const name = label || `Desktop ${counter}`;
-            menuCmd += ` "${id}" "${name}"`;
-            counter++;
-        }
-        
-        // --- CHROME INJECTION ---
-        menuCmd += ` "ACTION_CHROME" "  🌐 Launch Chrome Profile..."`;
-        
-        // 2. Launch the custom UI and wait for the user to do something!
-        const rawResult = runCommand(menuCmd);
-        const result = rawResult ? rawResult.trim() : "";
-        
-        if (!result) {
-            // User hit Cancel or Escape. Completely close the app.
-            console.log('❌ App closed.');
-            process.exit(0);
-        }        // 3. Process the response from switcher-menu.py!
-        if (result.startsWith('REMOVE_LIVE_FOLDER:')) {
-            const folderName = result.substring(19);
-            try {
-                let sessionData: any = { folders: {}, folder_order: [] };
-                if (existsSync(sessionPath)) {
-                    sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                }
-                
-                if (sessionData.folders && sessionData.folders[folderName]) {
-                    delete sessionData.folders[folderName];
-                }
-                if (sessionData.folder_order) {
-                    sessionData.folder_order = sessionData.folder_order.filter((f: string) => f !== folderName);
-                }
-                
-                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-                runCommand(`notify-send "Desktop Manager" "🗑 Removed folder grouping '${folderName}'."`);
-            } catch (e) {
-                runCommand(`notify-send "DEBUG" "CRASH: ${e}"`);
-                console.log(`❌ Failed to remove live folder: ${e}`);
-            }
-            continue;
-        }
-        if (result.startsWith('UNGROUP_DESKTOP:')) {
-            const payload = result.substring(16);
-            const parts = payload.split(':');
-            if (parts.length >= 2) {
-                const folderName = parts[0];
-                const fullUid = parts[1];
-                const selectedId = fullUid.split("___")[0];
-                const kwinIndex = fullUid.split("___")[1];
-
-                try {
-                    // 1. Rename to Empty
-                    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${selectedId}" "Empty"`);
-
-                    // 2. Close All Windows
-                    if (kwinIndex) {
-                        const kdotoolIndex = parseInt(kwinIndex) + 1;
-                        runCommand(`
-                            for id in $(kdotool search --class '.*'); do 
-                                wname=$(kdotool getwindowname $id 2>/dev/null)
-                                if [[ "$wname" != "Desktop Manager" ]] && [[ "$wname" != "Menu" ]]; then
-                                    desk=$(kdotool get_desktop_for_window $id 2>/dev/null)
-                                    if [[ "$desk" == "${kdotoolIndex}" ]]; then
-                                        kdotool windowclose $id
-                                    fi
-                                fi
-                            done
-                        `);
-                    }
-
-                    // 3. Remove from session grouping
-                    let sessionData: any = { folders: {}, folder_order: [] };
-                    if (existsSync(sessionPath)) {
-                        sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                    }
-                    if (sessionData.folders && sessionData.folders[folderName]) {
-                        sessionData.folders[folderName] = sessionData.folders[folderName].filter((id: string) => id !== fullUid);
-                    }
-                    writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-                    
-                    runCommand(`notify-send "Desktop Manager" "🔓 Desktop reset and moved to root."`);
-                } catch (e) {
-                    console.error(`❌ Error ungrouping desktop: ${e}`);
-                }
-            }
-            continue;
-        }
-        if (result.startsWith('SWITCH:')) {
-            // They hit Enter or Clicked the mouse! Jump to the desktop.
-            const rawOutput = result.substring(7); // Remove the "SWITCH:" prefix
-            const selectedId = rawOutput.split("___")[0]; // Rip out the kwinIndex payload mapping
-            
-            if (selectedId === 'ACTION_CHROME') {
-                runCommand('/home/dod/.local/bin/chrome_launcher.sh');
-                console.log(`✅ Chrome Profile selection finished.`);
-                continue;
-            }
-            
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selectedId}"`);
-            console.log(`🚀 Switched to desktop: ${selectedId}`);
-            
-            // Loop automatically restarts the menu on the new desktop!
-            
-        } else if (result.startsWith('SWITCH_UUID:')) {
-            const selectedId = result.substring(12);
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selectedId}"`);
-            console.log(`🚀 Switched to desktop (UUID): ${selectedId}`);
-            
+        if (result.startsWith('REMOVE_LIBRARY_FOLDER:')) {
+            handleRemoveLibraryFolder(result.substring(22), templatesDir);
+        } else if (result.startsWith('REMOVE_LIVE_FOLDER:')) {
+            handleRemoveLiveFolder(result.substring(19), sessionPath);
+        } else if (result.startsWith('CREATE_LIVE_DESKTOP:')) {
+            handleCreateLiveDesktop(result.substring(20), sessionPath, currentDesktops, currentUuid);
+        } else if (result.startsWith('UNGROUP_DESKTOP:')) {
+            handleUngroupDesktop(result, sessionPath);
+        } else if (result.startsWith('SAVE_SNAPSHOT:')) {
+            saveSnapshot(result.split(':')[1], templatesDir, sessionPath, currentDesktops);
+        } else if (result.startsWith('SWITCH:')) {
+            const id = result.substring(7).split("___")[0];
+            if (id === 'ACTION_CHROME') runCommand('/home/dod/.local/bin/chrome_launcher.sh');
+            else runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${id}"`);
+            // Wait for KWin to process the switch before re-opening the menu
+            execSync('sleep 0.3');
         } else if (result.startsWith('RENAME:')) {
-            const fullKey = result.substring(7); // uuid___index string
-            const selectedId = fullKey.split("___")[0]; // Raw UUID
-            const currentName = (desktopMap.get(fullKey) || "Empty").replace(/"/g, '\\"');
-            
-            const newNameRaw = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "${currentName}"`);
-            
-            if (newNameRaw !== undefined && newNameRaw !== null) {
-                const newName = newNameRaw.replace(/"/g, '\\"');
-                undoStack.push({ id: selectedId, oldName: (desktopMap.get(fullKey) || "Empty") });
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${selectedId}" "${newName}"`);
-                console.log(`✅ Success! Desktop renamed to: "${newNameRaw}"`);
+            const key = result.substring(7), id = key.split("___")[0], old = desktopMap.get(key) || "";
+            const fresh = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "${old}"`);
+            if (fresh) {
+                undoStack.push({ id, oldName: old });
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "${fresh.replace(/"/g, '\\"')}"`);
             }
-            
-            // Loop automatically restarts to show the updated desktop list!
-            
         } else if (result.startsWith('CLEAR:')) {
-            // They hit Ctrl+Enter! Instantly set the desktop name to Empty!
-            const rawOutput = result.substring(6); // Remove the "CLEAR:" prefix
-            const selectedParts = rawOutput.split("___");
-            const selectedId = selectedParts[0];
-            const kwinIndex = selectedParts.length > 1 ? selectedParts[1] : null;
-            const currentName = desktopMap.get(rawOutput) || "";
-            
-            undoStack.push({ id: selectedId, oldName: currentName });
-            
-            // 1. Rename to Empty
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${selectedId}" "Empty"`);
-            
-            // 2. Close All Windows
-            if (kwinIndex) {
-                const kdotoolIndex = parseInt(kwinIndex) + 1;
-                runCommand(`
-                    for id in $(kdotool search --class '.*'); do 
-                        wname=$(kdotool getwindowname $id 2>/dev/null)
-                        if [[ "$wname" != "Desktop Manager" ]] && [[ "$wname" != "Menu" ]]; then
-                            desk=$(kdotool get_desktop_for_window $id 2>/dev/null)
-                            if [[ "$desk" == "${kdotoolIndex}" ]]; then
-                                kdotool windowclose $id
-                            fi
-                        fi
-                    done
-                `);
-            }
-            console.log(`✅ Success! Desktop name set to Empty and windows closed.`);
-            
-        } else if (result.startsWith('RENAME_MAIN:')) {
-            const fullKey = result.substring(12);
-            const selectedId = fullKey.split("___")[0];
-            const currentName = desktopMap.get(fullKey) || "";
-            const newNameRaw = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "(Main) "`);
-            if (newNameRaw !== undefined && newNameRaw !== null) {
-                const newName = newNameRaw.replace(/"/g, '\\"');
-                undoStack.push({ id: selectedId, oldName: currentName });
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${selectedId}" "${newName}"`);
-                console.log(`✅ Success! Desktop renamed to: "${newNameRaw}"`);
-            }
-            
-        } else if (result.startsWith('RENAME_TASK:')) {
-            const fullKey = result.substring(12);
-            const selectedId = fullKey.split("___")[0];
-            const currentName = desktopMap.get(fullKey) || "";
-            const newNameRaw = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "(Task) "`);
-            if (newNameRaw !== undefined && newNameRaw !== null) {
-                const newName = newNameRaw.replace(/"/g, '\\"');
-                undoStack.push({ id: selectedId, oldName: currentName });
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${selectedId}" "${newName}"`);
-                console.log(`✅ Success! Desktop renamed to: "${newNameRaw}"`);
-            }
-            
-        } else if (result.startsWith('CLOSE_WINDOWS:')) {
-            const rawOutput = result.substring(14);
-            const selectedParts = rawOutput.split("___");
-            const kwinIndex = selectedParts.length > 1 ? selectedParts[1] : null;
-            
-            if (kwinIndex) {
-                const kdotoolIndex = parseInt(kwinIndex) + 1;
-                runCommand(`
-                    for id in $(kdotool search --class '.*'); do 
-                        wname=$(kdotool getwindowname $id 2>/dev/null)
-                        if [[ "$wname" != "Desktop Manager" ]] && [[ "$wname" != "Menu" ]]; then
-                            desk=$(kdotool get_desktop_for_window $id 2>/dev/null)
-                            if [[ "$desk" == "${kdotoolIndex}" ]]; then
-                                kdotool windowclose $id
-                            fi
-                        fi
-                    done
-                `);
-                console.log(`✅ Success! Closed windows on virtual desktop index ${kdotoolIndex}`);
-            }
-            
+            handleClear(result, sessionPath, desktopMap, undoStack);
         } else if (result.startsWith('SUMMON:')) {
-            const fullKey = result.substring(7); // uuid___index string
-            const selectedId = fullKey.split("___")[0]; // Raw UUID
-            
-            // 1. Switch to the desktop
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selectedId}"`);
-            
-            // 2. Launch associated apps
-            launchAppsForDesktop(selectedId);
-            
-            console.log(`🚀 Summoned desktop: ${selectedId}`);
-            // Loop restarts menu on the new desktop
-            
+            const id = result.substring(7).split("___")[0];
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${id}"`);
+            launchAppsForDesktop(id);
+            execSync('sleep 0.3');
         } else if (result.startsWith('SUMMON_FOLDER:')) {
-            const folderName = result.substring(14);
-            try {
-                const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                const folderDesktops: string[] = data.folders?.[folderName] || [];
-                
-                if (folderDesktops.length === 0) {
-                   runCommand(`notify-send "Desktop Manager" "Folder '${folderName}' is empty."`);
-                   continue;
-                }
-                
-                runCommand(`notify-send "Desktop Manager" "🚀 Summoning folder '${folderName}'..."`);
-                
-                let lastUuid = "";
-                for (const fullId of folderDesktops) {
-                    const uuid = fullId.split("___")[0];
-                    if (uuid) {
-                        // Switch to the desktop
-                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
-                        // Launch its apps and wait for scripts to finish (esp. sleep commands)
-                        launchAppsForDesktop(uuid, true);
-                        lastUuid = uuid;
-                        // Small buffer sleep
-                        execSync('sleep 0.1');
-                    }
-                }
-                
-                // Final switch to ensure we focus the last desktop of the folder
-                if (lastUuid) {
-                    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${lastUuid}"`);
-                }
-            } catch (e) {
-                console.error(`❌ Error summoning folder: ${e}`);
-            }
-
-        } else if (result.startsWith('SUMMON_ALL:')) {
-            // Summon everything across all desktops
-            try {
-                const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                const startupApps = data.startup_apps || {};
-                const uuids = Object.keys(startupApps);
-                
-                let lastUuid = "";
-                for (const uuid of uuids) {
-                    if (startupApps[uuid] && startupApps[uuid].length > 0) {
-                        // Switch and launch
-                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
-                        launchAppsForDesktop(uuid, true);
-                        lastUuid = uuid;
-                        // Buffer sleep
-                        execSync('sleep 0.1');
-                    }
-                }
-                
-                // Finally, ensure we land on the last summoned desktop
-                if (lastUuid) {
-                   runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${lastUuid}"`);
-                }
-            } catch (e) {}
-
+            handleSummonFolder(result.substring(14), sessionPath);
         } else if (result.startsWith('UNDO')) {
-            const lastChange = undoStack.pop();
-            if (lastChange) {
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${lastChange.id}" "${lastChange.oldName}"`);
-                console.log(`✅ Success! Reversed rename. Restored to: "${lastChange.oldName}"`);
-            } else {
-                console.log(`❌ Nothing to undo!`);
-            }
+            const last = undoStack.pop();
+            if (last) runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${last.id}" "${last.oldName}"`);
         } else if (result.startsWith('LOAD_TEMPLATE:')) {
-            // ─── Template Application ───
-            const templateFilename = result.substring(14);
-            const templatePath = join(templatesDir, templateFilename);
-            
-            try {
-                const templateData = JSON.parse(readFileSync(templatePath, 'utf-8'));
-                const templateDesktops: string[] = templateData.desktops || [];
-                
-                // Rename each desktop by position
-                for (let idx = 0; idx < currentDesktops.length; idx++) {
-                    const desktop = currentDesktops[idx];
-                    const newName = idx < templateDesktops.length ? templateDesktops[idx] : 'Empty';
-                    
-                    if (desktop.name !== newName) {
-                        const safeName = newName.replace(/"/g, '\\"');
-                        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${desktop.uuid}" "${safeName}"`);
-                    }
-                }
-                
-                
-                let sessionData: any = {};
-                try {
-                    sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                } catch (e) {
-                    sessionData = { folders: {}, folder_order: [], default_folder: 'root', startup_apps: {}, live_folders: [] };
-                }
-
-                const templateFolders: Record<string, number[]> = templateData.folders || {};
-                const sessionFolders: Record<string, string[]> = {};
-                
-                for (const [folderName, indices] of Object.entries(templateFolders)) {
-                    sessionFolders[folderName] = (indices as number[]).map((posIdx: number) => {
-                        if (posIdx < currentDesktops.length) {
-                            return `${currentDesktops[posIdx].uuid}___${posIdx}`;
-                        }
-                        return '';
-                    }).filter((id: string) => id !== '');
-                }
-                
-                // Handle extra desktops not covered by template — put them in default folder
-                const coveredPositions = new Set<number>();
-                for (const indices of Object.values(templateFolders)) {
-                    for (const idx of (indices as number[])) {
-                        coveredPositions.add(idx);
-                    }
-                }
-                
-                const defaultFolder = templateData.default_folder || 'root';
-                const extraIds: string[] = [];
-                for (let idx = 0; idx < currentDesktops.length; idx++) {
-                    if (!coveredPositions.has(idx)) {
-                        extraIds.push(`${currentDesktops[idx].uuid}___${idx}`);
-                    }
-                }
-                if (extraIds.length > 0) {
-                    if (!sessionFolders[defaultFolder]) {
-                        sessionFolders[defaultFolder] = [];
-                    }
-                    sessionFolders[defaultFolder].push(...extraIds);
-                }
-                
-                // Merge template data while preserving existing fields like live_folders, sort_mode, etc.
-                sessionData.folders = sessionFolders;
-                sessionData.folder_order = templateData.folder_order || [];
-                sessionData.default_folder = defaultFolder;
-                sessionData.startup_apps = templateData.startup_apps || {};
-                
-                // Ensure default folder is in folder_order
-                if (!sessionData.folder_order.includes(defaultFolder) && sessionFolders[defaultFolder]) {
-                    sessionData.folder_order.push(defaultFolder);
-                }
-                
-                mkdirSync(sessionDir, { recursive: true });
-                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-                
-                console.log(`✅ Template "${templateData.name}" applied! Renamed ${currentDesktops.length} desktops.`);
-            } catch (err) {
-                console.log(`❌ Failed to load template: ${err}`);
-            }
-        } else if (result.startsWith('DEPLOY_ALL:') || result.startsWith('DEPLOY_SELECTED:')) {
-            const isSelected = result.startsWith('DEPLOY_SELECTED:');
-            const dataStr = result.substring(isSelected ? 16 : 11);
-            let folderName = "";
-            let selectedTasks: string[] = [];
-
-            if (isSelected) {
-                const parts = dataStr.split(':');
-                folderName = parts[0];
-                selectedTasks = parts[1].split('|');
-            } else {
-                folderName = dataStr;
-            }
-
-            const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
-            const libraryPath = join(libraryDir, 'library.json');
-            
-            try {
-                const libData = JSON.parse(readFileSync(libraryPath, 'utf-8'));
-                let tasks = libData.folders[folderName] || [];
-                
-                if (isSelected) {
-                    tasks = tasks.filter((t: any) => selectedTasks.includes(t.name));
-                }
-
-                if (tasks.length === 0) {
-                    runCommand(`kdialog --error "No tasks found to deploy."`);
-                    continue;
-                }
-                
-                const emptyDesktops = currentDesktops.filter(d => {
-                    const name = d.name.toLowerCase().trim();
-                    return name === "" || name === "empty" || /^desktop \d+$/.test(name);
-                });
-                
-                if (emptyDesktops.length < tasks.length) {
-                    runCommand(`kdialog --msgbox "Not enough empty desktops.\\n\\nYou need to empty ${tasks.length - emptyDesktops.length} more desktops to deploy '${folderName}'.\\n\\n(Total tasks: ${tasks.length})"`);
-                    continue;
-                }
-                
-                let sessionData: any = { folders: {}, folder_order: [], default_folder: 'root', startup_apps: {}, live_folders: [] };
-                try { sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8')); } catch (e) { }
-                if (!sessionData.startup_apps) sessionData.startup_apps = {};
-                if (!sessionData.folders) sessionData.folders = {};
-                if (!sessionData.folders[folderName]) sessionData.folders[folderName] = [];
-                if (!sessionData.folder_order.includes(folderName)) {
-                    sessionData.folder_order.push(folderName);
-                }
-                
-                runCommand(`notify-send "Desktop Manager" "Staging '${folderName}' in Live tab..."`);
-                
-                for (let i = 0; i < tasks.length; i++) {
-                    const task = tasks[i];
-                    const targetDesktop = emptyDesktops[i];
-                    
-                    const safeName = task.name.replace(/"/g, '\\"');
-                    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${targetDesktop.uuid}" "${safeName}"`);
-                    
-                    // Add to session folder grouping
-                    const kwinIdx = targetDesktop.position;
-                    const sessionEntry = `${targetDesktop.uuid}___${kwinIdx}`;
-                    
-                    // Remove from ANY other existing folder to prevent duplicates/ghosting in 'root'
-                    for (const fName of Object.keys(sessionData.folders)) {
-                        sessionData.folders[fName] = sessionData.folders[fName].filter((id: string) => id !== sessionEntry);
-                    }
-
-                    if (!sessionData.folders[folderName].includes(sessionEntry)) {
-                        sessionData.folders[folderName].push(sessionEntry);
-                    }
-                    
-                    if (task.script) {
-                        sessionData.startup_apps[targetDesktop.uuid] = [task.script];
-                    }
-                }
-                
-                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-                console.log(`✅ Staged ${tasks.length} tasks from '${folderName}' to Life.`);
-                
-            } catch (err) {
-                console.log(`❌ Failed deploy: ${err}`);
-            }
-        } else if (result.startsWith('DEPLOY_TASK:')) {
-            const parts = result.substring(12).split(':');
-            const folderName = parts[0];
-            const taskId = parts[1];
-            
-            try {
-                const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
-                const libraryPath = join(libraryDir, 'library.json');
-                const libData = JSON.parse(readFileSync(libraryPath, 'utf-8'));
-                
-                let sessionData: any = { folders: {}, folder_order: [], startup_apps: {} };
-                if (existsSync(sessionPath)) {
-                    sessionData = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-                }
-                if (!sessionData.startup_apps) sessionData.startup_apps = {};
-                if (!sessionData.folders) sessionData.folders = {};
-                if (!sessionData.folder_order) sessionData.folder_order = [];
-
-                // 1. Find the task in libData
-                const tasksList = libData.folders[folderName] || [];
-                const task = tasksList.find((t: any) => t.id === taskId);
-                
-                if (!task) {
-                    console.log(`❌ Task not found: ${taskId} in ${folderName}`);
-                    return;
-                }
-                
-                // 2. Find internal empty desktops
-                const emptyDesktops = currentDesktops.filter(d => {
-                    const name = d.name.toLowerCase().trim();
-                    return name === "" || name === "empty" || /^desktop \d+$/.test(name);
-                });
-                
-                if (emptyDesktops.length === 0) {
-                     runCommand(`kdialog --msgbox "No empty desktops available to deploy this task."`);
-                     continue;
-                }
-                
-                const targetDesktop = emptyDesktops[0];
-                const safeName = task.name.replace(/"/g, '\\"');
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${targetDesktop.uuid}" "${safeName}"`);
-                
-                const kwinIdx = targetDesktop.position;
-                const sessionEntry = `${targetDesktop.uuid}___${kwinIdx}`;
-                
-                // Ensure folder exists in sessionData
-                if (!sessionData.folders[folderName]) sessionData.folders[folderName] = [];
-                if (!sessionData.folder_order.includes(folderName)) sessionData.folder_order.push(folderName);
-                
-                // Remove from ANY other existing folder to prevent duplicates
-                for (const fName of Object.keys(sessionData.folders)) {
-                    sessionData.folders[fName] = sessionData.folders[fName].filter((id: string) => id !== sessionEntry);
-                }
-
-                if (!sessionData.folders[folderName].includes(sessionEntry)) {
-                    sessionData.folders[folderName].push(sessionEntry);
-                }
-                
-                if (task.script) {
-                    sessionData.startup_apps[targetDesktop.uuid] = [task.script];
-                }
-                
-                writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2));
-                console.log(`✅ Staged single task '${task.name}' to Live tab.`);
-                runCommand(`notify-send "Desktop Manager" "🚀 Deployed '${task.name}' to folder '${folderName}'"`);
-            } catch (err) {
-                console.log(`❌ Failed single task deploy: ${err}`);
-            }
-
+            applyTemplate(join(templatesDir, result.substring(14)), currentDesktops, sessionPath);
+        } else if (result.startsWith('DEPLOY_ALL:') || result.startsWith('DEPLOY_SELECTED:') || result.startsWith('DEPLOY_TASK:')) {
+            handleDeploy(result, sessionPath, currentDesktops, currentUuid);
         } else if (result.startsWith('DELETE_TEMPLATE:')) {
-
-        } else if (result.startsWith('DELETE_TEMPLATE:')) {
-            const templateFilename = result.substring(16);
-            const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
-            const templatePath = join(templatesDir, templateFilename);
-            try {
-                unlinkSync(templatePath);
-                console.log(`✅ Success! Deleted template: ${templateFilename}`);
-            } catch (err) {
-                console.log(`❌ Failed to delete template: ${err}`);
-            }
+            try { unlinkSync(join(templatesDir, result.substring(16))); } catch(e) {}
         }
     }
 }
 
-// Start up!
 main();
