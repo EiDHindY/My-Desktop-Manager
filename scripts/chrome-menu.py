@@ -184,6 +184,8 @@ class ChromeMenu(QWidget):
         self.populate_list()
         
     def eventFilter(self, obj, event):
+        if event.type() == QEvent.WindowActivate:
+            self.search_entry.setFocus()
         if event.type() == QEvent.KeyPress:
             key = event.key()
             modifiers = event.modifiers()

@@ -122,7 +122,7 @@ class SwitcherMenu(QWidget):
         try:
             # Special case for Chrome launcher
             if raw_uuid == "ACTION_CHROME":
-                subprocess.Popen(["/home/dod/.local/bin/chrome_launcher.sh"], detached=True)
+                subprocess.Popen(["/home/dod/.local/bin/chrome_launcher.sh"], start_new_session=True)
                 return
 
             subprocess.run(["qdbus-qt6", "org.kde.KWin", "/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager.current", raw_uuid])

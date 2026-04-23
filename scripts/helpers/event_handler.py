@@ -12,6 +12,7 @@ def handle_event(parent, obj, event):
         parent.container.setProperty("active", "true")
         parent.container.style().unpolish(parent.container)
         parent.container.style().polish(parent.container)
+        parent.search_entry.setFocus()
     elif event.type() == QEvent.WindowDeactivate:
         parent.container.setProperty("active", "false")
         parent.container.style().unpolish(parent.container)
