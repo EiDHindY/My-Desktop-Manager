@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-import { runCommand, launchAppsForDesktop } from './kwin_utils';
+import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
 import { Desktop } from './desktop_utils';
 
 export function handleClear(result: string, sessionPath: string, desktopMap: Map<string, string>, undoStack: any[]) {
@@ -14,7 +14,7 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
     
     if (kwinIdx) {
-        runCommand(`wmctrl -l | awk -v d="${kwinIdx}" '$2 == d {print $1}' | xargs -r -I{} wmctrl -i -c {}`);
+        closeWindowsOnDesktop(kwinIdx);
     }
     
     try {
@@ -63,10 +63,10 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
     let selectedIds: string[] = [];
 
     if (type === 'ALL') {
-        folderName = dataStr;
+        folderName = dataStr.trim();
     } else {
         const parts = dataStr.split(':');
-        folderName = parts[0];
+        folderName = parts[0].trim();
         // The rest of the string after the first colon is the task identifier(s)
         selectedIds = parts.slice(1).join(':').split('|');
     }
@@ -193,9 +193,8 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string) 
         if (uids.length === 0) return;
 
         const indices = uids.map(id => id.split("___")[1]).filter(idx => idx !== undefined);
-        if (indices.length > 0) {
-            const pattern = indices.join('|');
-            runCommand(`wmctrl -l | awk '$2 ~ /^(${pattern})$/ {print $1}' | xargs -r -I{} wmctrl -i -c {}`);
+        for (const idx of indices) {
+            closeWindowsOnDesktop(idx);
         }
 
         for (const fullId of uids) {
@@ -211,4 +210,48 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string) 
         writeFileSync(sessionPath, JSON.stringify(data, null, 2));
         runCommand(`notify-send "Desktop Manager" "🧹 Folder '${folderName}' cleared and removed."`);
     } catch (e) {}
+}
+
+export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string) {
+    // 1. Find indices of desktops that HAVE windows
+    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+    const activeStr = runCommand(cmd) || "";
+    const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
+    
+    let cleanedCount = 0;
+    try {
+        let session = existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, 'utf-8')) : {};
+        if (!session.folders) session.folders = {};
+        if (!session.desktop_notes) session.desktop_notes = {};
+
+        for (const d of currentDesktops) {
+            // Note: WindowFetcher and label-desktop use 1-based index (position + 1) for kwinIdx
+            const kwinIdx = d.position + 1;
+            
+            if (!activeIndices.includes(kwinIdx)) {
+                // If the desktop is empty and NOT already named "Empty"
+                if (d.name.toLowerCase() !== "empty") {
+                    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${d.uuid}" "Empty"`);
+                    cleanedCount++;
+                    
+                    // Remove from session folders to keep them clean
+                    const fullId = `${d.uuid}___${d.position}`;
+                    for (const f of Object.keys(session.folders)) {
+                        session.folders[f] = session.folders[f].filter((id: string) => id !== fullId);
+                    }
+                    delete session.desktop_notes[d.uuid];
+                    if (session.startup_apps) delete session.startup_apps[d.uuid];
+                }
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+            runCommand(`notify-send "Desktop Manager" "🧹 Cleaned ${cleanedCount} empty desktops."`);
+        } else {
+            runCommand(`notify-send "Desktop Manager" "✨ All empty desktops are already clean."`);
+        }
+    } catch (e) {
+        console.error("Clean Empty error:", e);
+    }
 }

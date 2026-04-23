@@ -51,3 +51,17 @@ export function setDesktopName(uuid: string, name: string) {
     const safeName = name.replace(/"/g, '\\"');
     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "${safeName}"`);
 }
+
+/**
+ * Closes all windows on a specific desktop index.
+ * Uses kdotool for Wayland compatibility.
+ */
+export function closeWindowsOnDesktop(kwinIdx: string) {
+    const cmd = `kdotool search "" | while read id; do ` +
+                `if [ "$(kdotool get_desktop_for_window $id 2>/dev/null)" = "${kwinIdx}" ]; then ` +
+                `name=$(kdotool getwindowname $id 2>/dev/null); ` +
+                `if [[ "$name" != "Desktop Manager" && "$name" != "Menu" && "$name" != "Rename Desktop" && "$name" != "Chrome Launcher" ]]; then ` +
+                `kdotool windowclose $id; ` +
+                `fi; fi; done`;
+    runCommand(cmd);
+}

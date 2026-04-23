@@ -29,7 +29,7 @@ def show_live_context_menu(parent, pos):
         menu.addAction("✏️ Rename").triggered.connect(lambda: sys.exit(print(f"RENAME:{uid}") or 0))
         if item.parent() and item.parent().data(0, Qt.UserRole) == "FOLDER":
             fn = item.parent().text(0).strip()
-            menu.addAction("🔓 Remove from Group").triggered.connect(lambda: sys.exit(print(f"UNGROUP_DESKTOP:{fn}:{uid}") or 0))
+            menu.addAction("🧹 Empty Desktop").triggered.connect(lambda: sys.exit(print(f"CLEAR:{uid}") or 0))
         
         menu.addAction("🚀 Summon Desktop").triggered.connect(lambda: sys.exit(print(f"SUMMON:{uid}", flush=True) or 0))
         menu.addAction("🧹 Close Windows").triggered.connect(lambda: sys.exit(print(f"CLOSE_WINDOWS:{uid}", flush=True) or 0))

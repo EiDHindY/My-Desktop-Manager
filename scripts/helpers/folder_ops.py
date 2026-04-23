@@ -36,7 +36,7 @@ def import_folder(parent):
     if not folder_path: return
     
     dir_path = Path(folder_path)
-    folder_name = dir_path.name
+    folder_name = dir_path.name.strip()
     
     folder_item = QTreeWidgetItem()
     folder_item.setText(0, folder_name)

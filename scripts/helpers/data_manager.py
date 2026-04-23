@@ -46,11 +46,11 @@ class DataManager:
                 with open(f, "r") as file:
                     content = json.load(file)
                     # Use filename or 'name' field inside
-                    name = content.get("name") or f.stem
+                    name = (content.get("name") or f.stem).strip()
                     folders[name] = content.get("tasks", [])
             except: pass
             
-        folder_order = state.get("folder_order", list(folders.keys()))
+        folder_order = [f.strip() for f in state.get("folder_order", list(folders.keys()))]
         # Filter to only existing folders on disk
         folder_order = [f for f in folder_order if f in folders]
         # Add any new folders that weren't in the saved order
@@ -70,7 +70,8 @@ class DataManager:
         # 1. Save individual folder files
         folders = data.get("folders", {})
         active_filenames = []
-        for name, tasks in folders.items():
+        for name_orig, tasks in folders.items():
+            name = name_orig.strip()
             if not tasks and name != "PM Tasks": # Safety: Don't wipe unless it's intentionally empty
                 continue
             filename = name.lower().replace(" ", "_") + ".json"
@@ -89,7 +90,7 @@ class DataManager:
 
         # 3. Save the metadata (order, expanded)
         meta = {
-            "folder_order": data.get("folder_order", []),
+            "folder_order": [f.strip() for f in data.get("folder_order", [])],
             "expanded": data.get("expanded", [])
         }
         try:

@@ -61,12 +61,28 @@ def build_main_ui(parent):
     parent.tabs.setCornerWidget(parent.search_entry, Qt.TopLeftCorner)
     
     container_layout.addWidget(parent.tabs)
-    layout.addWidget(parent.container)
+    
+    parent.status_row = QWidget()
+    status_layout = QHBoxLayout(parent.status_row)
+    status_layout.setContentsMargins(15, 0, 15, 8) # More padding at bottom
+    
+    parent.cleanup_btn = QPushButton("🧹 Clean All")
+    parent.cleanup_btn.setStyleSheet(BTN_REFRESH_STYLE)
+    parent.cleanup_btn.setToolTip("Rename all empty desktops to 'Empty'")
+    status_layout.addWidget(parent.cleanup_btn)
     
     parent.status_label = QLabel("Active: - • Empty: -")
     parent.status_label.setStyleSheet(STATUS_LABEL_STYLE)
     parent.status_label.setAlignment(Qt.AlignCenter)
-    layout.addWidget(parent.status_label)
+    status_layout.addWidget(parent.status_label, 1)
+    
+    # Add a spacer to the right to keep the label roughly centered
+    spacer = QWidget()
+    spacer.setFixedWidth(parent.cleanup_btn.sizeHint().width())
+    status_layout.addWidget(spacer)
+    
+    container_layout.addWidget(parent.status_row)
+    layout.addWidget(parent.container)
 
 def create_tree_widget(parent, click_fn, menu_fn):
     tw = FolderTreeWidget(parent)

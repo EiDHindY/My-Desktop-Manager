@@ -4,10 +4,10 @@ import { join } from 'path';
 import { spawn, execSync } from 'child_process';
 
 // Helpers
-import { runCommand, launchAppsForDesktop } from './helpers/kwin_utils';
+import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './helpers/kwin_utils';
 import { checkFreshSession, saveSnapshot, applyTemplate } from './helpers/session_manager';
 import { fetchDesktops, buildMenuCommand } from './helpers/desktop_utils';
-import { handleClear, handleSummonFolder, handleDeploy, handleRemoveLibraryFolder, handleRemoveLiveFolder, handleCreateLiveDesktop, handleUngroupDesktop } from './helpers/command_handlers';
+import { handleClear, handleSummonFolder, handleDeploy, handleRemoveLibraryFolder, handleRemoveLiveFolder, handleCreateLiveDesktop, handleUngroupDesktop, handleCleanEmpty } from './helpers/command_handlers';
 
 function main() {
     const lockPath = '/tmp/desktop-manager.lock';
@@ -70,6 +70,10 @@ function main() {
             }
         } else if (result.startsWith('CLEAR:')) {
             handleClear(result, sessionPath, desktopMap, undoStack);
+        } else if (result.startsWith('CLOSE_WINDOWS:')) {
+            const parts = result.substring(14).split("___");
+            const kwinIdx = parts.length > 1 ? parts[1] : null;
+            if (kwinIdx) closeWindowsOnDesktop(kwinIdx);
         } else if (result.startsWith('SUMMON:')) {
             const id = result.substring(7).split("___")[0];
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${id}"`);
@@ -84,6 +88,8 @@ function main() {
             applyTemplate(join(templatesDir, result.substring(14)), currentDesktops, sessionPath);
         } else if (result.startsWith('DEPLOY_ALL:') || result.startsWith('DEPLOY_SELECTED:') || result.startsWith('DEPLOY_TASK:')) {
             handleDeploy(result, sessionPath, currentDesktops, currentUuid);
+        } else if (result === 'CLEAN_EMPTY') {
+            handleCleanEmpty(currentDesktops, sessionPath);
         } else if (result.startsWith('DELETE_TEMPLATE:')) {
             try { unlinkSync(join(templatesDir, result.substring(16))); } catch(e) {}
         }

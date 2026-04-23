@@ -73,6 +73,7 @@ class SwitcherMenu(QWidget):
         
         build_main_ui(self)
         self.sync_btn.clicked.connect(self.refresh_library)
+        self.cleanup_btn.clicked.connect(self.cleanup_empty)
         
         self.watcher = QFileSystemWatcher(self)
         templates_path = str(CONFIG_DIR / "templates")
@@ -286,6 +287,8 @@ class SwitcherMenu(QWidget):
     def move_up(self): move_up(self)
     def move_down(self): move_down(self)
     def get_selected_uid(self): return get_selected_uid(self)
+    def cleanup_empty(self):
+        sys.exit(print("CLEAN_EMPTY") or 0)
     def on_back(self):
         try:
             if not os.path.exists(HISTORY_FILE): 
