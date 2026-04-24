@@ -57,11 +57,12 @@ export function setDesktopName(uuid: string, name: string) {
  * Uses kdotool for Wayland compatibility.
  */
 export function closeWindowsOnDesktop(kwinIdx: string) {
-    const cmd = `kdotool search "" | while read id; do ` +
-                `if [ "$(kdotool get_desktop_for_window $id 2>/dev/null)" = "${kwinIdx}" ]; then ` +
+    const cmd = `kdotool search --class "." 2>/dev/null | while read id; do ` +
+                `d=$(kdotool get_desktop_for_window $id 2>/dev/null); ` +
+                `if [ "$d" = "${kwinIdx}" ]; then ` +
                 `name=$(kdotool getwindowname $id 2>/dev/null); ` +
-                `if [[ "$name" != "Desktop Manager" && "$name" != "Menu" && "$name" != "Rename Desktop" && "$name" != "Chrome Launcher" ]]; then ` +
-                `kdotool windowclose $id; ` +
+                `if [[ -n "$name" && "$name" != "Desktop Manager" && "$name" != "Menu" && "$name" != "Rename Desktop" && "$name" != "Chrome Launcher" && "$name" != "plasma-desktop" && "$name" != "Plasma" ]]; then ` +
+                `kdotool windowclose $id 2>/dev/null; ` +
                 `fi; fi; done`;
     runCommand(cmd);
 }

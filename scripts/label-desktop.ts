@@ -72,7 +72,7 @@ function main() {
             handleClear(result, sessionPath, desktopMap, undoStack);
         } else if (result.startsWith('CLOSE_WINDOWS:')) {
             const parts = result.substring(14).split("___");
-            const kwinIdx = parts.length > 1 ? parts[1] : null;
+            const kwinIdx = parts.length > 1 ? (parseInt(parts[1]) + 1).toString() : null;
             if (kwinIdx) closeWindowsOnDesktop(kwinIdx);
         } else if (result.startsWith('SUMMON:')) {
             const id = result.substring(7).split("___")[0];

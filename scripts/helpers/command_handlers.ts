@@ -8,7 +8,7 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
     const rawOutput = result.substring(6);
     const parts = rawOutput.split("___");
     const id = parts[0];
-    const kwinIdx = parts.length > 1 ? parts[1] : null;
+    const kwinIdx = parts.length > 1 ? (parseInt(parts[1]) + 1).toString() : null;
     
     undoStack.push({ id, oldName: desktopMap.get(rawOutput) || "" });
     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);

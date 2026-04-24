@@ -147,15 +147,15 @@ def update_live_priorities(parent):
             all_active = True
             for j in range(item.childCount()):
                 cuid = item.child(j).data(0, Qt.UserRole)
-                if cuid and (int(cuid.split("___")[1]) + 1) not in parent.active_kwin_indices:
+                if cuid and "___" in cuid and (int(cuid.split("___")[1]) + 1) not in parent.active_kwin_indices:
                     all_active = False; break
             item.setText(1, calculate_sort_priority(name, parent.pinned_folders, all_active, item.childCount() > 0))
             for j in range(item.childCount()):
                 child = item.child(j)
                 cuid = child.data(0, Qt.UserRole)
-                group = "0" if cuid and (int(cuid.split("___")[1]) + 1) in parent.active_kwin_indices else "1"
+                group = "0" if cuid and "___" in cuid and (int(cuid.split("___")[1]) + 1) in parent.active_kwin_indices else "1"
                 child.setText(1, f"I_{group}_{child.text(0)}")
         elif uid == "ACTION_CHROME": item.setText(1, "09_chrome")
         else:
-            is_active = uid and (int(uid.split("___")[1]) + 1) in parent.active_kwin_indices
+            is_active = uid and "___" in uid and (int(uid.split("___")[1]) + 1) in parent.active_kwin_indices
             item.setText(1, f"{'06' if is_active else '07'}_{item.text(0)}")
