@@ -12,7 +12,15 @@ def handle_event(parent, obj, event):
         parent.container.setProperty("active", "true")
         parent.container.style().unpolish(parent.container)
         parent.container.style().polish(parent.container)
-        parent.search_entry.setFocus()
+        
+        # If the app is focused (e.g. via Ctrl+Space global shortcut), expand it
+        # But ONLY if the mouse isn't over the ball (prevents auto-expand on hover/focus-follows-mouse)
+        if getattr(parent, "is_collapsed", False):
+            if not parent.ball.underMouse():
+                parent.toggle_collapse()
+        else:
+            parent.search_entry.setFocus()
+        return True
     elif event.type() == QEvent.WindowDeactivate:
         parent.container.setProperty("active", "false")
         parent.container.style().unpolish(parent.container)
@@ -79,7 +87,11 @@ def handle_event(parent, obj, event):
                 parent.create_folder(); return True
                 
         if mod == Qt.ControlModifier:
-            if key == Qt.Key_R: parent.on_back(); return True
+            if key == Qt.Key_Space:
+                if getattr(parent, "is_collapsed", False):
+                    parent.toggle_collapse()
+                return True
+            elif key == Qt.Key_R: parent.on_back(); return True
             elif key == Qt.Key_J: parent.move_down(); return True
             elif key == Qt.Key_K: parent.move_up(); return True
             elif key == Qt.Key_Slash:
@@ -115,6 +127,10 @@ def handle_event(parent, obj, event):
             uid = parent.get_selected_uid()
             if uid and parent.tabs.currentIndex() == 0:
                 parent.switch_desktop(uid)
+            return True
+        elif key == Qt.Key_Alt:
+            if not getattr(parent, "is_collapsed", False):
+                parent.toggle_collapse()
             return True
         elif key == Qt.Key_Escape:
             if parent.search_entry.text(): parent.search_entry.clear()

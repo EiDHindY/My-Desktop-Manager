@@ -4,9 +4,10 @@ import threading
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTabWidget, QLabel, QAbstractItemView, QPushButton
 from PyQt5.QtGui import QIcon, QFont, QColor
 from PyQt5.QtCore import Qt, QTimer
-from helpers.ui_components import OutlineDelegate, FolderTreeWidget
+from helpers.ui_components import OutlineDelegate, FolderTreeWidget, DragAnchor, BallWidget
 from helpers.ui_styles import (MAIN_CONTAINER_STYLE, SEARCH_BOX_STYLE, TABS_STYLE, 
-                               TREE_WIDGET_STYLE, STATUS_LABEL_STYLE, BTN_REFRESH_STYLE)
+                               TREE_WIDGET_STYLE, STATUS_LABEL_STYLE, BTN_REFRESH_STYLE, 
+                               BTN_DRAG_STYLE, BTN_COLLAPSE_STYLE, BALL_STYLE)
 
 def build_main_ui(parent):
     layout = QVBoxLayout(parent)
@@ -66,7 +67,7 @@ def build_main_ui(parent):
     status_layout = QHBoxLayout(parent.status_row)
     status_layout.setContentsMargins(15, 0, 15, 8) # More padding at bottom
     
-    parent.cleanup_btn = QPushButton("🧹 Clean All")
+    parent.cleanup_btn = QPushButton("Clean All")
     parent.cleanup_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.cleanup_btn.setToolTip("Rename all empty desktops to 'Empty'")
     status_layout.addWidget(parent.cleanup_btn)
@@ -76,10 +77,27 @@ def build_main_ui(parent):
     parent.status_label.setAlignment(Qt.AlignCenter)
     status_layout.addWidget(parent.status_label, 1)
     
-    # Add a spacer to the right to keep the label roughly centered
-    spacer = QWidget()
-    spacer.setFixedWidth(parent.cleanup_btn.sizeHint().width())
-    status_layout.addWidget(spacer)
+    # Add a spacer to the right of the status label
+    status_layout.addStretch()
+    
+    # Drag Anchor Button
+    parent.drag_btn = DragAnchor()
+    parent.drag_btn.setText("⠿") # Six dots icon
+    parent.drag_btn.setStyleSheet(BTN_DRAG_STYLE)
+    parent.drag_btn.setToolTip("Drag window")
+    status_layout.addWidget(parent.drag_btn)
+    
+    # Collapse Button
+    parent.collapse_btn = QPushButton("−")
+    parent.collapse_btn.setFixedSize(30, 24)
+    parent.collapse_btn.setStyleSheet(BTN_COLLAPSE_STYLE)
+    parent.collapse_btn.setToolTip("Collapse to ball")
+    status_layout.addWidget(parent.collapse_btn)
+    
+    # Ball Widget (Hidden by default)
+    parent.ball = BallWidget(parent)
+    parent.ball.setStyleSheet(BALL_STYLE)
+    parent.ball.hide()
     
     container_layout.addWidget(parent.status_row)
     layout.addWidget(parent.container)
@@ -89,6 +107,7 @@ def create_tree_widget(parent, click_fn, menu_fn):
     tw.setHeaderHidden(True)
     tw.setColumnCount(2)
     tw.hideColumn(1)
+    tw.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
     tw.setFont(QFont("Inter", 10))
     tw.setDragDropMode(QAbstractItemView.InternalMove)
     tw.setStyleSheet(TREE_WIDGET_STYLE)

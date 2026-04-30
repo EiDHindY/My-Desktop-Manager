@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView, QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView, QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QPushButton, QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, QRect, QSize
 from PyQt5.QtGui import QPainter, QPen, QColor, QIcon, QFont, QBrush
 from helpers.ui_styles import SELECTION_DIALOG_STYLE, SELECTION_LABEL_STYLE, CHECKBOX_STYLE, SELECTION_LIST_STYLE, BTN_OK_STYLE, BTN_CANCEL_STYLE
@@ -174,3 +174,71 @@ class SelectionDialog(QDialog):
             if item.checkState() == Qt.Checked:
                 selected.append(item.text())
         return selected
+
+class DragAnchor(QPushButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._dragging = False
+        self._drag_pos = None
+        self.setCursor(Qt.SizeAllCursor)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.setFixedSize(30, 24)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging = True
+            window = self.window()
+            self._drag_pos = event.globalPos() - window.frameGeometry().topLeft()
+            
+            # Notify the main window that dragging started to avoid snapping/updates
+            if hasattr(window, "_is_dragging"):
+                window._is_dragging = True
+                
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging and event.buttons() & Qt.LeftButton:
+            window = self.window()
+            window.move(event.globalPos() - self._drag_pos)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging = False
+            window = self.window()
+            
+            if hasattr(window, "_is_dragging"):
+                window._is_dragging = False
+                
+            if hasattr(window, 'save_ui_state'):
+                window.save_ui_state()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
+class BallWidget(DragAnchor):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ball")
+        self.setFixedSize(40, 40)
+        self.setToolTip("Click to expand")
+
+    def mouseReleaseEvent(self, event):
+        # If it was a simple click (not a long drag), expand
+        if event.button() == Qt.LeftButton:
+            # We use a threshold to distinguish click from drag
+            if not hasattr(self, "_press_pos") or (event.globalPos() - self._press_pos).manhattanLength() < 5:
+                window = self.window()
+                if hasattr(window, 'toggle_collapse'):
+                    window.toggle_collapse()
+            
+        super().mouseReleaseEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._press_pos = event.globalPos()
+        super().mousePressEvent(event)

@@ -121,7 +121,6 @@ BTN_REFRESH_STYLE = """
         padding: 4px 8px; 
         font-family: 'Inter'; 
         font-size: 10px; 
-        margin-right: 8px;
     } 
     QPushButton:hover { 
         background-color: rgba(130, 170, 255, 0.1); 
@@ -129,5 +128,50 @@ BTN_REFRESH_STYLE = """
     }
     QPushButton:pressed {
         background-color: rgba(130, 170, 255, 0.2);
+    }
+"""
+
+BTN_DRAG_STYLE = """
+    QPushButton { 
+        background-color: transparent; 
+        color: #5c636a; 
+        border: 1px solid #3b4261; 
+        border-radius: 12px; 
+        padding: 0px; 
+        font-family: 'Inter'; 
+        font-size: 14px; 
+    } 
+    QPushButton:hover { 
+        background-color: rgba(130, 170, 255, 0.1); 
+        color: #82aaff;
+        border-color: #82aaff; 
+    }
+"""
+
+BALL_STYLE = """
+    #ball {
+        background-color: #82aaff;
+        border-radius: 20px;
+        border: 2px solid #1e2030;
+    }
+    #ball:hover {
+        background-color: #6593f5;
+    }
+"""
+
+BTN_COLLAPSE_STYLE = """
+    QPushButton { 
+        background-color: transparent; 
+        color: #82aaff; 
+        border: 1px solid #3b4261; 
+        border-radius: 12px; 
+        padding: 0px; 
+        font-family: 'Inter'; 
+        font-size: 16px; 
+        margin-right: 8px;
+    } 
+    QPushButton:hover { 
+        background-color: rgba(130, 170, 255, 0.1); 
+        border-color: #82aaff; 
     }
 """

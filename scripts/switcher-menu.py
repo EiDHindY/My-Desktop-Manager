@@ -74,6 +74,7 @@ class SwitcherMenu(QWidget):
         build_main_ui(self)
         self.sync_btn.clicked.connect(self.refresh_library)
         self.cleanup_btn.clicked.connect(self.cleanup_empty)
+        self.collapse_btn.clicked.connect(self.toggle_collapse)
         
         self.watcher = QFileSystemWatcher(self)
         templates_path = str(CONFIG_DIR / "templates")
@@ -148,7 +149,7 @@ class SwitcherMenu(QWidget):
         physical_desktops = [p for p in self.id_name_pairs if "___" in p[0]]
         active_count = sum(1 for uid, _ in physical_desktops if (int(uid.split("___")[1]) + 1) in self.active_kwin_indices)
         self.status_label.setText(f"Active: {active_count} • Empty: {len(physical_desktops) - active_count}")
-        self.tabs.setTabText(0, f"Live ({active_count})")
+        self.tabs.setTabText(0, "Live")
         QTimer.singleShot(1000, lambda: threading.Thread(target=self.fetcher.fetch_windows_bg, daemon=True).start())
 
     def save_library(self):
@@ -194,6 +195,34 @@ class SwitcherMenu(QWidget):
                 "x": self.x(),
                 "y": self.y()
             })
+
+    def toggle_collapse(self):
+        is_collapsed = getattr(self, "is_collapsed", False)
+        is_collapsed = not is_collapsed
+        self.is_collapsed = is_collapsed
+        
+        if is_collapsed:
+            self.saved_width = self.width()
+            self.saved_height = self.height()
+            self.container.hide()
+            self.ball.show()
+            self.layout().setContentsMargins(0, 0, 0, 0)
+            # Remove minimum size constraints to allow shrinking to a ball
+            self.setMinimumSize(40, 40)
+            self.setFixedSize(40, 40)
+        else:
+            self.ball.hide()
+            self.container.show()
+            # Restore margins from ui_factory
+            self.layout().setContentsMargins(20, 2, 20, 20)
+            self.setMinimumSize(320, 300)
+            self.setMaximumSize(16777215, 16777215)
+            self.resize(self.saved_width, self.saved_height)
+            # Ensure it's not "fixed" anymore
+            self.setFixedWidth(16777215)
+            self.setFixedHeight(16777215)
+            self.resize(self.saved_width, self.saved_height)
+            self.search_entry.setFocus()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
