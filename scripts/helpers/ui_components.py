@@ -1,8 +1,11 @@
-from PyQt5.QtWidgets import QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView, QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QPushButton, QSizePolicy
+from PyQt5.QtWidgets import (QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
+                             QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem,
+                             QHBoxLayout, QPushButton, QSizePolicy, QWidget, QTextEdit, QGraphicsDropShadowEffect)
 from PyQt5.QtCore import Qt, QTimer, QRect, QSize, QPoint, QPointF
 from PyQt5.QtGui import QPainter, QPen, QColor, QIcon, QFont, QBrush
 import time
-from helpers.ui_styles import SELECTION_DIALOG_STYLE, SELECTION_LABEL_STYLE, CHECKBOX_STYLE, SELECTION_LIST_STYLE, BTN_OK_STYLE, BTN_CANCEL_STYLE
+from helpers.ui_styles import (SELECTION_DIALOG_STYLE, SELECTION_LABEL_STYLE, CHECKBOX_STYLE,
+                               SELECTION_LIST_STYLE, BTN_OK_STYLE, BTN_CANCEL_STYLE, NOTE_POPUP_STYLE)
 
 class OutlineDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
@@ -391,3 +394,116 @@ class BallWidget(QPushButton):
             self._velocity = QPointF(0, 0)
             if hasattr(window, 'save_ui_state'):
                 window.save_ui_state()
+
+class NoteEditorPopup(QWidget):
+    """A floating, draggable popup for editing the desktop note."""
+    def __init__(self, main_win):
+        super().__init__(None, Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.main_win = main_win
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setObjectName("notePopup")
+        self.setStyleSheet(NOTE_POPUP_STYLE)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 8)
+        layout.setSpacing(6)
+
+        # Header
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        self.title_label = QLabel("📝 Desktop")
+        self.title_label.setObjectName("notePopupTitle")
+        
+        close_btn = QPushButton("×")
+        close_btn.setObjectName("notePopupClose")
+        close_btn.setFixedSize(22, 22)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.clicked.connect(self.hide)
+        
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch()
+        header_layout.addWidget(close_btn)
+        layout.addWidget(header)
+
+        # Text area
+        self.text_edit = QTextEdit()
+        self.text_edit.setObjectName("notePopupText")
+        self.text_edit.setPlaceholderText("Write a reminder for this desktop...")
+        layout.addWidget(self.text_edit)
+
+        # Button row
+        btn_row = QWidget()
+        btn_row_layout = QHBoxLayout(btn_row)
+        btn_row_layout.setContentsMargins(0, 0, 0, 0)
+        
+        save_btn = QPushButton("💾 Save")
+        save_btn.setObjectName("notePopupSave")
+        save_btn.setCursor(Qt.PointingHandCursor)
+        save_btn.clicked.connect(self.save_note)
+        
+        del_btn = QPushButton("🗑 Clear")
+        del_btn.setObjectName("notePopupDelete")
+        del_btn.setCursor(Qt.PointingHandCursor)
+        del_btn.clicked.connect(self.clear_note)
+        
+        btn_row_layout.addWidget(save_btn)
+        btn_row_layout.addStretch()
+        btn_row_layout.addWidget(del_btn)
+        layout.addWidget(btn_row)
+
+        # Add size grip to bottom right corner
+        from PyQt5.QtWidgets import QSizeGrip
+        grip_layout = QHBoxLayout()
+        grip_layout.setContentsMargins(0, 0, 0, 0)
+        grip_layout.addStretch()
+        grip = QSizeGrip(self)
+        grip.setFixedSize(12, 12)
+        grip_layout.addWidget(grip)
+        layout.addLayout(grip_layout)
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 120))
+        self.setGraphicsEffect(shadow)
+        
+        self.resize(250, 180)
+
+        # Custom dragging logic on header
+        self._dragging = False
+        self._drag_pos = QPoint()
+        header.mousePressEvent = self.header_mousePressEvent
+        header.mouseMoveEvent = self.header_mouseMoveEvent
+        header.mouseReleaseEvent = self.header_mouseReleaseEvent
+
+    def header_mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging = True
+            self._drag_pos = event.globalPos() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def header_mouseMoveEvent(self, event):
+        if self._dragging:
+            self.move(event.globalPos() - self._drag_pos)
+            event.accept()
+
+    def header_mouseReleaseEvent(self, event):
+        self._dragging = False
+        event.accept()
+
+    def show_note(self, title, text, pos):
+        self.title_label.setText(f"📝  {title}")
+        self.text_edit.setPlainText(text)
+        self.move(pos.x(), pos.y() - self.height() - 10)
+        self.show()
+        self.text_edit.setFocus()
+        
+    def save_note(self):
+        self.main_win.save_note_from_popup(self.text_edit.toPlainText().strip())
+        self.hide()
+        
+    def clear_note(self):
+        self.main_win.delete_note_from_popup()
+        self.hide()

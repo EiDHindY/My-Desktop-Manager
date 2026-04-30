@@ -1,13 +1,14 @@
 import os
 import subprocess
 import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTabWidget, QLabel, QAbstractItemView, QPushButton
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTabWidget, QLabel, QAbstractItemView, QPushButton, QTextEdit
 from PyQt5.QtGui import QIcon, QFont, QColor
 from PyQt5.QtCore import Qt, QTimer
-from helpers.ui_components import OutlineDelegate, FolderTreeWidget, DragAnchor, BallWidget
-from helpers.ui_styles import (MAIN_CONTAINER_STYLE, SEARCH_BOX_STYLE, TABS_STYLE, 
-                               TREE_WIDGET_STYLE, STATUS_LABEL_STYLE, BTN_REFRESH_STYLE, 
-                               BTN_DRAG_STYLE, BTN_COLLAPSE_STYLE, BALL_STYLE)
+from helpers.ui_components import OutlineDelegate, FolderTreeWidget, DragAnchor, BallWidget, NoteEditorPopup
+from helpers.ui_styles import (MAIN_CONTAINER_STYLE, SEARCH_BOX_STYLE, TABS_STYLE,
+                               TREE_WIDGET_STYLE, STATUS_LABEL_STYLE, BTN_REFRESH_STYLE,
+                               BTN_DRAG_STYLE, BTN_COLLAPSE_STYLE, BALL_STYLE,
+                               BTN_NOTE_STYLE, BTN_NOTE_ACTIVE_STYLE, NOTE_POPUP_STYLE)
 
 def build_main_ui(parent):
     layout = QVBoxLayout(parent)
@@ -62,7 +63,8 @@ def build_main_ui(parent):
     parent.tabs.setCornerWidget(parent.search_entry, Qt.TopLeftCorner)
     
     container_layout.addWidget(parent.tabs)
-    
+
+
     parent.status_row = QWidget()
     status_layout = QHBoxLayout(parent.status_row)
     status_layout.setContentsMargins(15, 0, 15, 8) # More padding at bottom
@@ -71,6 +73,13 @@ def build_main_ui(parent):
     parent.cleanup_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.cleanup_btn.setToolTip("Rename all empty desktops to 'Empty'")
     status_layout.addWidget(parent.cleanup_btn)
+
+    # Note button — lights up when current desktop has a note
+    parent.note_btn = QPushButton("📝")
+    parent.note_btn.setFixedSize(30, 24)
+    parent.note_btn.setStyleSheet(BTN_NOTE_STYLE)
+    parent.note_btn.setToolTip("No note for this desktop")
+    status_layout.addWidget(parent.note_btn)
     
     parent.status_label = QLabel("Active: - • Empty: -")
     parent.status_label.setStyleSheet(STATUS_LABEL_STYLE)

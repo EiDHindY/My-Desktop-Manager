@@ -178,3 +178,98 @@ BTN_COLLAPSE_STYLE = """
         border-color: #82aaff; 
     }
 """
+
+BTN_NOTE_STYLE = """
+    QPushButton { 
+        background-color: transparent; 
+        color: #3b4261; 
+        border: 1px solid #2f334d; 
+        border-radius: 12px; 
+        padding: 0px; 
+        font-size: 14px; 
+    } 
+    QPushButton:hover { 
+        background-color: rgba(255, 185, 100, 0.08); 
+        border-color: #3b4261; 
+    }
+"""
+
+BTN_NOTE_ACTIVE_STYLE = """
+    QPushButton { 
+        background-color: rgba(255, 185, 100, 0.12); 
+        color: #ffb964; 
+        border: 1px solid #ffb964; 
+        border-radius: 12px; 
+        padding: 0px; 
+        font-size: 14px; 
+    } 
+    QPushButton:hover { 
+        background-color: rgba(255, 185, 100, 0.22); 
+        border-color: #ffd080; 
+    }
+"""
+
+NOTE_POPUP_STYLE = """
+    #notePopup {
+        background-color: #1a1c2e;
+        border: 1px solid rgba(255, 185, 100, 0.4);
+        border-radius: 8px;
+    }
+    #notePopupHandle {
+        background-color: rgba(255, 185, 100, 0.25);
+        border-radius: 2px;
+    }
+    #notePopupHandle:hover {
+        background-color: rgba(255, 185, 100, 0.55);
+    }
+    #notePopupTitle {
+        color: #ffb964;
+        font-family: 'Inter';
+        font-size: 11px;
+        font-weight: bold;
+    }
+    #notePopupText {
+        background-color: #222436;
+        color: #c8d3f5;
+        border: 1px solid #3b4261;
+        border-radius: 6px;
+        padding: 8px;
+        font-family: 'Inter';
+        font-size: 11px;
+        selection-background-color: rgba(255, 185, 100, 0.3);
+    }
+    #notePopupText:focus {
+        border-color: #ffb964;
+        border-width: 1px;
+    }
+    #notePopupClose {
+        background: transparent;
+        color: #5c636a;
+        border: none;
+        font-size: 18px;
+        font-weight: bold;
+        padding: 0px;
+    }
+    #notePopupClose:hover { color: #ff757f; }
+    #notePopupSave {
+        background-color: rgba(255, 185, 100, 0.15);
+        color: #ffb964;
+        border: 1px solid #ffb964;
+        border-radius: 6px;
+        padding: 4px 18px;
+        font-family: 'Inter';
+        font-size: 10px;
+        font-weight: bold;
+    }
+    #notePopupSave:hover { background-color: rgba(255, 185, 100, 0.3); }
+    #notePopupDelete {
+        background-color: rgba(255, 117, 127, 0.1);
+        color: #ff757f;
+        border: 1px solid rgba(255, 117, 127, 0.4);
+        border-radius: 6px;
+        padding: 4px 12px;
+        font-family: 'Inter';
+        font-size: 10px;
+    }
+    #notePopupDelete:hover { background-color: rgba(255, 117, 127, 0.25); }
+"""

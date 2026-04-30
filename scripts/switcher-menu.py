@@ -76,6 +76,8 @@ class SwitcherMenu(QWidget):
         self.sync_btn.clicked.connect(self.refresh_library)
         self.cleanup_btn.clicked.connect(self.cleanup_empty)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
+        self.note_btn.clicked.connect(self.toggle_note_popup)
+        self.note_popup = None
         
         self.watcher = QFileSystemWatcher(self)
         templates_path = str(CONFIG_DIR / "templates")
@@ -92,6 +94,7 @@ class SwitcherMenu(QWidget):
         self.lib_data = self.data_manager.load_library()
         self.populate_live(initial=True)
         self.populate_library()
+        self.update_note_btn()  # Set initial button state
         
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
@@ -140,6 +143,7 @@ class SwitcherMenu(QWidget):
                 self.current_desktop_uuid = new_uuid
                 self.last_desktop_uuid = self._load_last_uuid()  # Refresh before redraw
                 self.populate_live(initial=False)
+                self.update_note_btn()
                 # Force the window to follow to the new desktop at its CURRENT position
                 force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height())
         except: pass
@@ -156,6 +160,7 @@ class SwitcherMenu(QWidget):
             self.current_desktop_uuid = raw_uuid
             self.last_desktop_uuid = self._load_last_uuid()  # Refresh before redraw
             self.populate_live(initial=False)
+            self.update_note_btn()
             # Re-apply stickiness to ensure the window follows the switch
             QTimer.singleShot(50, lambda: force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height()))
         except Exception as e:
@@ -211,6 +216,53 @@ class SwitcherMenu(QWidget):
             self.desktop_notes[raw_uuid] = note.strip()
             self.save_session()
             self.populate_live(initial=False)
+            self.update_note_btn()
+
+    def update_note_btn(self):
+        """Update the note button appearance based on whether current desktop has a note."""
+        from helpers.ui_styles import BTN_NOTE_STYLE, BTN_NOTE_ACTIVE_STYLE
+        note = self.desktop_notes.get(self.current_desktop_uuid, "")
+        if note:
+            self.note_btn.setStyleSheet(BTN_NOTE_ACTIVE_STYLE)
+            self.note_btn.setToolTip(f"Note: {note[:60]}{'...' if len(note) > 60 else ''}")
+        else:
+            self.note_btn.setStyleSheet(BTN_NOTE_STYLE)
+            self.note_btn.setToolTip("No note for this desktop — click to add one")
+
+    def toggle_note_popup(self):
+        """Show the standalone note editor popup."""
+        from helpers.ui_components import NoteEditorPopup
+        if not self.note_popup:
+            self.note_popup = NoteEditorPopup(self)
+            
+        if self.note_popup.isVisible():
+            self.note_popup.hide()
+            return
+            
+        note = self.desktop_notes.get(self.current_desktop_uuid, "")
+        desktop_name = next(
+            (name for uid, name in self.id_name_pairs if uid.split("___")[0] == self.current_desktop_uuid),
+            "Current Desktop"
+        )
+        
+        # Position popup near the note button
+        btn_pos = self.note_btn.mapToGlobal(self.note_btn.rect().topLeft())
+        self.note_popup.show_note(desktop_name, note, btn_pos)
+
+    def save_note_from_popup(self, note_text):
+        """Save the note from the popup."""
+        self.desktop_notes[self.current_desktop_uuid] = note_text
+        self.save_session()
+        self.populate_live(initial=False)
+        self.update_note_btn()
+
+    def delete_note_from_popup(self):
+        """Clear the note for the current desktop."""
+        self.desktop_notes[self.current_desktop_uuid] = ""
+        self.save_session()
+        self.populate_live(initial=False)
+        self.update_note_btn()
+
 
     def save_ui_state(self):
         if self.width() > 100: 
