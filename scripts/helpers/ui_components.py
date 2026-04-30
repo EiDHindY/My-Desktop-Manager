@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView, QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem, QHBoxLayout, QPushButton, QSizePolicy
-from PyQt5.QtCore import Qt, QTimer, QRect, QSize
+from PyQt5.QtCore import Qt, QTimer, QRect, QSize, QPoint, QPointF
 from PyQt5.QtGui import QPainter, QPen, QColor, QIcon, QFont, QBrush
+import time
 from helpers.ui_styles import SELECTION_DIALOG_STYLE, SELECTION_LABEL_STYLE, CHECKBOX_STYLE, SELECTION_LIST_STYLE, BTN_OK_STYLE, BTN_CANCEL_STYLE
 
 class OutlineDelegate(QStyledItemDelegate):
@@ -220,25 +221,145 @@ class DragAnchor(QPushButton):
         else:
             super().mouseReleaseEvent(event)
 
-class BallWidget(DragAnchor):
+class BallWidget(QPushButton):
+    """A draggable ball with momentum physics. Does NOT inherit DragAnchor to avoid
+    any inherited mouse behavior that could conflict with hover/focus events."""
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("ball")
         self.setFixedSize(40, 40)
         self.setToolTip("Click to expand")
+        self.setCursor(Qt.OpenHandCursor)
+        
+        # Drag state — strictly gated by _ball_dragging
+        self._ball_dragging = False
+        self._drag_offset = QPoint()
+        self._press_pos = QPoint()
+        
+        # Momentum physics
+        self._momentum_timer = QTimer(self)
+        self._momentum_timer.timeout.connect(self._tick_momentum)
+        self._velocity = QPointF(0, 0)
+        self._prev_time = 0.0
+        self._prev_pos = QPoint()
+        self._friction = 0.92
+        self._is_coasting = False  # True only while momentum is active
+
+    # ── Mouse handling ──────────────────────────────────────────────
+    def mousePressEvent(self, event):
+        if event.button() != Qt.LeftButton:
+            return
+        # Stop any ongoing momentum coast
+        self._momentum_timer.stop()
+        self._is_coasting = False
+        self._velocity = QPointF(0, 0)
+        
+        # Begin drag tracking
+        self._ball_dragging = True
+        self._press_pos = event.globalPos()
+        self._drag_offset = event.globalPos() - self.window().frameGeometry().topLeft()
+        self._prev_time = time.time()
+        self._prev_pos = event.globalPos()
+        self.setCursor(Qt.ClosedHandCursor)
+        
+        # Tell main window we're dragging (prevents heartbeat snapping)
+        window = self.window()
+        if hasattr(window, "_is_dragging"):
+            window._is_dragging = True
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if not self._ball_dragging:
+            return  # Completely ignore hover moves
+        
+        # Move the window
+        self.window().move(event.globalPos() - self._drag_offset)
+        
+        # Track velocity with smoothing
+        now = time.time()
+        dt = now - self._prev_time
+        if dt > 0.001:  # avoid division by near-zero
+            dp = event.globalPos() - self._prev_pos
+            instant_vel = QPointF(dp.x() / dt, dp.y() / dt)
+            self._velocity = self._velocity * 0.3 + instant_vel * 0.7
+        
+        self._prev_time = now
+        self._prev_pos = event.globalPos()
+        event.accept()
 
     def mouseReleaseEvent(self, event):
-        # If it was a simple click (not a long drag), expand
-        if event.button() == Qt.LeftButton:
-            # We use a threshold to distinguish click from drag
-            if not hasattr(self, "_press_pos") or (event.globalPos() - self._press_pos).manhattanLength() < 5:
-                window = self.window()
-                if hasattr(window, 'toggle_collapse'):
-                    window.toggle_collapse()
-            
-        super().mouseReleaseEvent(event)
+        if event.button() != Qt.LeftButton:
+            return
+        
+        was_dragging = self._ball_dragging
+        self._ball_dragging = False
+        self.setCursor(Qt.OpenHandCursor)
+        
+        window = self.window()
+        if hasattr(window, "_is_dragging"):
+            window._is_dragging = False
+        
+        if not was_dragging:
+            return
+        
+        # Click vs flick detection
+        dist = (event.globalPos() - self._press_pos).manhattanLength()
+        
+        if dist < 8:
+            # It was a click — expand
+            if hasattr(window, 'toggle_collapse'):
+                window.toggle_collapse()
+            event.accept()
+            return
+        
+        # Check if the release was recent enough to count as a flick
+        time_since_last_move = time.time() - self._prev_time
+        speed = (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5
+        
+        if speed > 150 and time_since_last_move < 0.1:
+            # Genuine flick — start coasting
+            self._is_coasting = True
+            self._momentum_timer.start(16)  # ~60fps
+        else:
+            # Slow release — just save position
+            if hasattr(window, 'save_ui_state'):
+                window.save_ui_state()
+        
+        event.accept()
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._press_pos = event.globalPos()
-        super().mousePressEvent(event)
+    # ── Momentum physics ────────────────────────────────────────────
+    def _tick_momentum(self):
+        if not self._is_coasting:
+            self._momentum_timer.stop()
+            return
+            
+        window = self.window()
+        step = self._velocity * 0.016  # 16ms per frame
+        new_pos = window.pos() + step.toPoint()
+        
+        # Screen boundaries
+        from PyQt5.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().geometry()
+        
+        # Bounce off edges
+        if new_pos.x() < 0 or new_pos.x() + window.width() > screen.width():
+            self._velocity.setX(-self._velocity.x() * 0.3)
+            new_pos.setX(max(0, min(new_pos.x(), screen.width() - window.width())))
+            
+        if new_pos.y() < 0 or new_pos.y() + window.height() > screen.height():
+            self._velocity.setY(-self._velocity.y() * 0.3)
+            new_pos.setY(max(0, min(new_pos.y(), screen.height() - window.height())))
+
+        window.move(new_pos)
+        
+        # Friction
+        self._velocity *= self._friction
+        
+        # Stop when slow
+        if (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5 < 15:
+            self._momentum_timer.stop()
+            self._is_coasting = False
+            self._velocity = QPointF(0, 0)
+            if hasattr(window, 'save_ui_state'):
+                window.save_ui_state()
