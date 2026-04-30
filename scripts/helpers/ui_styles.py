@@ -76,17 +76,20 @@ TREE_WIDGET_STYLE = """
     }
     QScrollBar:vertical { 
         background: transparent; 
-        width: 6px; 
-        border-radius: 3px; 
+        width: 16px;
+        border-radius: 8px; 
         margin: 4px 0; 
     }
     QScrollBar::handle:vertical { 
         background: #3b4261; 
         border-radius: 3px; 
-        min-height: 30px; 
+        min-height: 30px;
+        margin: 0 5px; /* appears ~6px wide by default */
     }
     QScrollBar::handle:vertical:hover { 
-        background: #5a4a78; 
+        background: #82aaff;
+        border-radius: 6px;
+        margin: 0 1px; /* fills most of the track on hover */
     }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { 
         height: 0; 
