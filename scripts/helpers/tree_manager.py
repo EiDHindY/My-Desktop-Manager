@@ -14,7 +14,7 @@ def apply_live_styling(item, name, is_current, is_active):
     elif "empty" in name.lower() and len(name.strip()) <= 15: item.setForeground(0, QColor("#5c636a"))
     else: item.setForeground(0, QColor("#c8d3f5"))
 
-def add_live_desktop_item(tree_widget, parent, uid, name, current_uuid, active_indices, notes, style_func):
+def add_live_desktop_item(tree_widget, parent, uid, name, current_uuid, active_indices, notes, style_func, last_uuid=""):
     is_active = (int(uid.split("___")[1]) + 1) in active_indices if "___" in uid else False
     is_current = (uid.split("___")[0] == current_uuid)
     
@@ -28,6 +28,9 @@ def add_live_desktop_item(tree_widget, parent, uid, name, current_uuid, active_i
     style_func(item, name, is_current, is_active)
     
     raw_uuid = uid.split("___")[0]
+    is_previous = (raw_uuid == last_uuid) and not is_current
+    item.setData(0, Qt.UserRole + 6, is_previous)
+    
     if raw_uuid in notes:
         item.setToolTip(0, f"📝 {notes[raw_uuid]}")
     

@@ -43,6 +43,7 @@ class SwitcherMenu(QWidget):
         self.desktop_notes = {}
         self.active_kwin_indices = []
         self.managed_uids = set()
+        self.last_desktop_uuid = self._load_last_uuid()
         
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -82,6 +83,12 @@ class SwitcherMenu(QWidget):
             self.watcher.addPath(templates_path)
         self.watcher.directoryChanged.connect(lambda: QTimer.singleShot(500, self.refresh_library))
         
+        # Watch history file for last_uuid changes
+        history_path = str(HISTORY_FILE)
+        if os.path.exists(history_path):
+            self.watcher.addPath(history_path)
+        self.watcher.fileChanged.connect(self._on_history_changed)
+        
         self.lib_data = self.data_manager.load_library()
         self.populate_live(initial=True)
         self.populate_library()
@@ -106,6 +113,23 @@ class SwitcherMenu(QWidget):
         self.heartbeat.timeout.connect(self.check_current_desktop)
         self.heartbeat.start(1000) # Reverted to 1s now that KWin Rules handle stickiness
 
+    def _load_last_uuid(self):
+        try:
+            if os.path.exists(HISTORY_FILE):
+                with open(HISTORY_FILE, 'r') as f:
+                    return json.load(f).get("last_uuid", "")
+        except: pass
+        return ""
+
+    def _on_history_changed(self, path):
+        # Re-add to watcher (some editors replace files atomically, which removes them from the watcher)
+        if path not in self.watcher.files():
+            self.watcher.addPath(path)
+        new_uuid = self._load_last_uuid()
+        if new_uuid != self.last_desktop_uuid:
+            self.last_desktop_uuid = new_uuid
+            QTimer.singleShot(0, lambda: self.populate_live(initial=False))
+
     def check_current_desktop(self):
         if self._is_dragging: return # Don't snap while user is moving it
         try:
@@ -114,6 +138,7 @@ class SwitcherMenu(QWidget):
             new_uuid = res.stdout.strip()
             if new_uuid and new_uuid != self.current_desktop_uuid:
                 self.current_desktop_uuid = new_uuid
+                self.last_desktop_uuid = self._load_last_uuid()  # Refresh before redraw
                 self.populate_live(initial=False)
                 # Force the window to follow to the new desktop at its CURRENT position
                 force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height())
@@ -129,6 +154,7 @@ class SwitcherMenu(QWidget):
 
             subprocess.run(["qdbus-qt6", "org.kde.KWin", "/VirtualDesktopManager", "org.kde.KWin.VirtualDesktopManager.current", raw_uuid])
             self.current_desktop_uuid = raw_uuid
+            self.last_desktop_uuid = self._load_last_uuid()  # Refresh before redraw
             self.populate_live(initial=False)
             # Re-apply stickiness to ensure the window follows the switch
             QTimer.singleShot(50, lambda: force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height()))
@@ -266,7 +292,7 @@ class SwitcherMenu(QWidget):
         QTimer.singleShot(2000, lambda: self.apply_active_windows(self.active_kwin_indices))
 
     def add_live_desktop_item(self, parent, uid, name):
-        return add_live_desktop_item(self.live_list, parent, uid, name, self.current_desktop_uuid, self.active_kwin_indices, self.desktop_notes, apply_live_styling)
+        return add_live_desktop_item(self.live_list, parent, uid, name, self.current_desktop_uuid, self.active_kwin_indices, self.desktop_notes, apply_live_styling, self.last_desktop_uuid)
 
     def update_tree_items_recursive(self, parent):
         for i in range(parent.childCount()):
@@ -276,7 +302,9 @@ class SwitcherMenu(QWidget):
                 name = item.text(0).replace("◉ ", "").replace("○ ", "")
                 is_active = (int(uid.split("___")[1]) + 1) in self.active_kwin_indices if "___" in uid else False
                 is_current = (uid.split("___")[0] == self.current_desktop_uuid)
+                is_previous = (uid.split("___")[0] == self.last_desktop_uuid) and not is_current
                 item.setText(0, ("◉ " if is_active else "○ ") + name)
+                item.setData(0, Qt.UserRole + 6, is_previous)
                 apply_live_styling(item, name, is_current, is_active)
             elif uid == "FOLDER": self.update_tree_items_recursive(item)
 

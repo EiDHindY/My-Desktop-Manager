@@ -60,6 +60,34 @@ class OutlineDelegate(QStyledItemDelegate):
             painter.restore()
             icon.paint(painter, icon_rect)
 
+        # Draw "← back" indicator for the previous desktop (where Ctrl+R goes)
+        is_previous = index.data(Qt.UserRole + 6)
+        if is_previous:
+            painter.save()
+            painter.setRenderHint(QPainter.Antialiasing)
+            
+            rect = option.rect
+            # Draw a small pill badge on the right edge showing "←"
+            font = painter.font()
+            font.setPointSize(7)
+            font.setBold(True)
+            painter.setFont(font)
+            
+            badge_w, badge_h = 20, 14
+            badge_x = rect.right() - badge_w - 4
+            badge_y = rect.top() + (rect.height() - badge_h) // 2
+            badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
+            
+            # Subtle amber/gold pill to distinguish from the blue current-desktop outline
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(255, 185, 100, 40))
+            painter.drawRoundedRect(badge_rect, 7, 7)
+            
+            painter.setPen(QColor(255, 185, 100, 200))
+            painter.drawText(badge_rect, Qt.AlignCenter, "←")
+            
+            painter.restore()
+
 class FolderTreeWidget(QTreeWidget):
     def dropEvent(self, event):
         dragged = self.currentItem()
