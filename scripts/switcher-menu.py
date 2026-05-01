@@ -58,6 +58,11 @@ class SwitcherMenu(QWidget):
         self.hud_y = state.get("y", 0)
         self.setWindowOpacity(state.get("opacity", 0.95))
         
+        # We need to set the ball friction and slingshot state after the UI is built
+        self._initial_friction = state.get("ball_friction", 0.92)
+        self._initial_slingshot = state.get("slingshot_enabled", False)
+        self._initial_goal = state.get("goal_enabled", False)
+        
         self.setMinimumSize(320, 300)
         self.resize(self.hud_width, self.height_current)
         
@@ -73,6 +78,14 @@ class SwitcherMenu(QWidget):
         self.anim.start()
         
         build_main_ui(self)
+        
+        if hasattr(self, '_initial_friction'):
+            self.ball._friction = self._initial_friction
+        if hasattr(self, '_initial_slingshot'):
+            self.ball._slingshot_enabled = self._initial_slingshot
+        if hasattr(self, '_initial_goal'):
+            self.ball.set_goal_enabled(self._initial_goal)
+
         self.sync_btn.clicked.connect(self.refresh_library)
         self.cleanup_btn.clicked.connect(self.cleanup_empty)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
@@ -271,7 +284,10 @@ class SwitcherMenu(QWidget):
                 "height": self.height(), 
                 "opacity": self.windowOpacity(),
                 "x": self.x(),
-                "y": self.y()
+                "y": self.y(),
+                "ball_friction": getattr(self.ball, "_friction", 0.92),
+                "slingshot_enabled": getattr(self.ball, "_slingshot_enabled", False),
+                "goal_enabled": getattr(self.ball, "_goal_enabled", False)
             })
 
     def toggle_collapse(self):

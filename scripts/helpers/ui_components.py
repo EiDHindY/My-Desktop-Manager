@@ -276,9 +276,21 @@ class BallWidget(QPushButton):
         self._prev_pos = QPoint()
         self._friction = 0.92
         self._is_coasting = False  # True only while momentum is active
+        self._slingshot_enabled = False  # Toggled via right-click menu
+        self._is_slingshotting = False   # True while currently pulling
+        self._slingshot_anchor = QPoint()
+        self._overlay = None
+        
+        self._goal_enabled = False
+        self._goal_window = None
 
     # ── Mouse handling ──────────────────────────────────────────────
     def mousePressEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self.show_speed_menu(event.globalPos())
+            event.accept()
+            return
+            
         if event.button() != Qt.LeftButton:
             return
         # Stop any ongoing momentum coast
@@ -292,7 +304,18 @@ class BallWidget(QPushButton):
         self._drag_offset = event.globalPos() - self.window().frameGeometry().topLeft()
         self._prev_time = time.time()
         self._prev_pos = event.globalPos()
-        self.setCursor(Qt.ClosedHandCursor)
+        
+        self._is_slingshotting = self._slingshot_enabled or bool(event.modifiers() & Qt.ShiftModifier)
+        if self._is_slingshotting:
+            self._slingshot_anchor = self.window().pos()
+            self.setCursor(Qt.CrossCursor)
+            
+            if not self._overlay:
+                self._overlay = SlingshotOverlay()
+            self._overlay.show()
+            self._overlay.update_slingshot(self._slingshot_anchor, self.window().pos())
+        else:
+            self.setCursor(Qt.ClosedHandCursor)
         
         # Tell main window we're dragging (prevents heartbeat snapping)
         window = self.window()
@@ -303,8 +326,49 @@ class BallWidget(QPushButton):
     def mouseMoveEvent(self, event):
         if not self._ball_dragging:
             return  # Completely ignore hover moves
+            
+        # Dynamically check shift key state during drag
+        is_shift_held = bool(event.modifiers() & Qt.ShiftModifier)
+        should_be_slingshotting = self._slingshot_enabled or is_shift_held
         
-        # Move the window
+        # Transition into slingshot mode mid-drag
+        if should_be_slingshotting and not self._is_slingshotting:
+            self._is_slingshotting = True
+            self._slingshot_anchor = self.window().pos()
+            self._press_pos = event.globalPos() # Reset pull origin
+            self.setCursor(Qt.CrossCursor)
+            if not self._overlay:
+                self._overlay = SlingshotOverlay()
+            self._overlay.show()
+            self._overlay.update_slingshot(self._slingshot_anchor, self.window().pos())
+            
+        # Transition out of slingshot mode mid-drag
+        elif not should_be_slingshotting and self._is_slingshotting:
+            self._is_slingshotting = False
+            self.setCursor(Qt.ClosedHandCursor)
+            if self._overlay:
+                self._overlay.hide_slingshot()
+            # Restore window to cursor position smoothly
+            self.window().move(self._slingshot_anchor)
+            # Re-calculate drag offset so dragging feels seamless from here
+            self._drag_offset = event.globalPos() - self.window().frameGeometry().topLeft()
+            
+        if self._is_slingshotting:
+            # Slingshot rubber-band effect
+            dp = event.globalPos() - self._press_pos
+            dist = (dp.x()**2 + dp.y()**2)**0.5
+            max_pull = 120.0
+            if dist > 0:
+                visual_dist = min(dist, max_pull) * 0.4 # Resistance feeling
+                vx = (dp.x() / dist) * visual_dist
+                vy = (dp.y() / dist) * visual_dist
+                new_pos = self._slingshot_anchor + QPoint(int(vx), int(vy))
+                self.window().move(new_pos)
+                if self._overlay:
+                    self._overlay.update_slingshot(self._slingshot_anchor, new_pos)
+            return
+        
+        # Normal drag: Move the window
         self.window().move(event.globalPos() - self._drag_offset)
         
         # Track velocity with smoothing
@@ -334,17 +398,43 @@ class BallWidget(QPushButton):
         if not was_dragging:
             return
         
-        # Click vs flick detection
+        # Click vs flick/shoot detection
         dist = (event.globalPos() - self._press_pos).manhattanLength()
         
         if dist < 8:
-            # It was a click — expand
+            # It was a click — expand (if slingshot mode, snap back first)
+            if self._is_slingshotting:
+                self.window().move(self._slingshot_anchor)
             if hasattr(window, 'toggle_collapse'):
                 window.toggle_collapse()
             event.accept()
             return
+            
+        if self._is_slingshotting:
+            self._is_slingshotting = False
+            if self._overlay:
+                self._overlay.hide_slingshot()
+                
+            # Snap back to original position
+            self.window().move(self._slingshot_anchor)
+            
+            # Shoot in the opposite direction!
+            dp = event.globalPos() - self._press_pos
+            pull_dist = (dp.x()**2 + dp.y()**2)**0.5
+            
+            if pull_dist > 15:
+                # Multiply the vector heavily
+                multiplier = 18.0
+                self._velocity = QPointF(-dp.x() * multiplier, -dp.y() * multiplier)
+                self._is_coasting = True
+                self._momentum_timer.start(16)
+            else:
+                if hasattr(window, 'save_ui_state'):
+                    window.save_ui_state()
+            event.accept()
+            return
         
-        # Check if the release was recent enough to count as a flick
+        # Check if the release was recent enough to count as a flick (Normal mode)
         time_since_last_move = time.time() - self._prev_time
         speed = (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5
         
@@ -384,6 +474,20 @@ class BallWidget(QPushButton):
 
         window.move(new_pos)
         
+        # Goal check
+        if getattr(self, '_goal_enabled', False) and getattr(self, '_goal_window', None):
+            if window.frameGeometry().intersects(self._goal_window.geometry()):
+                if not getattr(self._goal_window, '_is_celebrating', False):
+                    # We scored!
+                    self._goal_window.on_goal()
+                    # Stop the ball inside the goal
+                    self._velocity = QPointF(0, 0)
+                    self._momentum_timer.stop()
+                    self._is_coasting = False
+                    if hasattr(window, 'save_ui_state'):
+                        window.save_ui_state()
+                    return
+        
         # Friction
         self._velocity *= self._friction
         
@@ -394,6 +498,239 @@ class BallWidget(QPushButton):
             self._velocity = QPointF(0, 0)
             if hasattr(window, 'save_ui_state'):
                 window.save_ui_state()
+
+    # ── Speed Settings Menu ─────────────────────────────────────────
+    def show_speed_menu(self, pos):
+        from PyQt5.QtWidgets import QMenu, QActionGroup
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background: #1e2030; 
+                color: #c8d3f5; 
+                border: 1px solid #3b4261; 
+                border-radius: 8px; 
+                padding: 4px;
+                font-family: 'Inter';
+            }
+            QMenu::item:selected {
+                background: #1e2a4a;
+                border-radius: 4px;
+            }
+        """)
+        
+        group = QActionGroup(menu)
+        
+        speeds = {
+            "Slow (Stops quickly)": 0.85,
+            "Normal (Default)": 0.92,
+            "Fast (Slides longer)": 0.97,
+            "Ice (Very fast)": 0.99
+        }
+        
+        for name, value in speeds.items():
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            if abs(self._friction - value) < 0.01:
+                action.setChecked(True)
+            group.addAction(action)
+            action.triggered.connect(lambda checked, v=value: self.set_friction(v))
+            
+        menu.addSeparator()
+        
+        slingshot_action = menu.addAction("🎯 Slingshot Mode (Angry Birds)")
+        slingshot_action.setCheckable(True)
+        slingshot_action.setChecked(self._slingshot_enabled)
+        slingshot_action.triggered.connect(self.toggle_slingshot)
+        
+        goal_action = menu.addAction("🥅 Goal Target Mode")
+        goal_action.setCheckable(True)
+        goal_action.setChecked(self._goal_enabled)
+        goal_action.triggered.connect(self.toggle_goal)
+        
+        menu.addSeparator()
+        menu.addAction("Hint: Hold Shift to slingshot temporarily").setEnabled(False)
+            
+        menu.exec_(pos)
+
+    def set_friction(self, value):
+        self._friction = value
+        self._save_state()
+        
+    def toggle_slingshot(self, checked):
+        self._slingshot_enabled = checked
+        self._save_state()
+        
+    def toggle_goal(self, checked):
+        self.set_goal_enabled(checked)
+        self._save_state()
+        
+    def set_goal_enabled(self, enabled):
+        self._goal_enabled = enabled
+        if enabled:
+            if not getattr(self, '_goal_window', None):
+                self._goal_window = GoalWidget()
+            self._goal_window.spawn_randomly()
+        else:
+            if getattr(self, '_goal_window', None):
+                self._goal_window.hide()
+        
+    def _save_state(self):
+        window = self.window()
+        if hasattr(window, 'save_ui_state'):
+            window.save_ui_state()
+
+# ── Goal Mini-Game ────────────────────────────────────────────────────────
+import random
+from PyQt5.QtWidgets import QLabel, QVBoxLayout
+
+class GoalWidget(QWidget):
+    def __init__(self):
+        super().__init__(None)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(30, 120)
+        
+        self.label = QLabel("G\nO\nA\nL", self)
+        self.label.setStyleSheet("color: #bb9af7; font-weight: bold; font-family: 'Inter'; background: rgba(26, 32, 53, 200); border: 2px solid #3b4261; border-radius: 8px;")
+        self.label.setAlignment(Qt.AlignCenter)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.label)
+        
+        self.score = 0
+        self._is_celebrating = False
+        
+    def spawn_randomly(self):
+        from PyQt5.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().geometry()
+        
+        edge = random.choice(["left", "right", "top"])
+        
+        if edge == "top":
+            self.setFixedSize(120, 30)
+            self.label.setText("GOAL")
+            x = random.randint(50, screen.width() - 150)
+            self.move(x, 0)
+        else:
+            self.setFixedSize(30, 120)
+            self.label.setText("G\nO\nA\nL")
+            y = random.randint(50, screen.height() - 150)
+            if edge == "left":
+                self.move(0, y)
+            else:
+                self.move(screen.width() - self.width(), y)
+            
+        self.show()
+        
+    def on_goal(self):
+        self._is_celebrating = True
+        self.score += 1
+        
+        if self.width() > self.height():
+            self.label.setText(f"★ {self.score} ★")
+        else:
+            self.label.setText(f"★\n{self.score}\n★")
+            
+        self.label.setStyleSheet("color: #1a2035; font-weight: bold; background: rgba(195, 232, 141, 230); border: 2px solid #9ece6a; border-radius: 8px;")
+        
+        # Respawn after 1.5 seconds
+        QTimer.singleShot(1500, self._reset_and_respawn)
+        
+    def _reset_and_respawn(self):
+        self._is_celebrating = False
+        self.label.setStyleSheet("color: #bb9af7; font-weight: bold; font-family: 'Inter'; background: rgba(26, 32, 53, 200); border: 2px solid #3b4261; border-radius: 8px;")
+        self.spawn_randomly()
+
+# ── Slingshot Overlay ─────────────────────────────────────────────────────
+from PyQt5.QtGui import QPainter, QPen, QColor
+
+class SlingshotOverlay(QWidget):
+    def __init__(self):
+        super().__init__(None)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        from PyQt5.QtWidgets import QApplication
+        self.setGeometry(QApplication.primaryScreen().geometry())
+        
+        self.anchor_pos = QPoint()
+        self.current_pos = QPoint()
+        self.is_active = False
+
+    def update_slingshot(self, anchor, current):
+        self.anchor_pos = anchor
+        self.current_pos = current
+        self.is_active = True
+        self.update()
+
+    def hide_slingshot(self):
+        self.is_active = False
+        self.update()
+        self.hide()
+
+    def paintEvent(self, event):
+        if not self.is_active:
+            return
+            
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Center of the anchor (the slingshot base)
+        ax = self.anchor_pos.x() + 20
+        ay = self.anchor_pos.y() + 20
+        # Center of the pulled ball
+        cx = self.current_pos.x() + 20
+        cy = self.current_pos.y() + 20
+        
+        # Calculate pull vector
+        dp_x = cx - ax
+        dp_y = cy - ay
+        pull_dist = (dp_x**2 + dp_y**2)**0.5
+        
+        # 1. Draw the "Slingshot" base (Wooden Y-shape)
+        base_pen = QPen(QColor(139, 69, 19, 255), 8, Qt.SolidLine, Qt.RoundCap) # Brown wood
+        painter.setPen(base_pen)
+        painter.drawLine(ax, ay + 15, ax, ay + 45) # Stand (sticking down)
+        painter.drawLine(ax, ay + 15, ax - 18, ay - 10) # Left fork
+        painter.drawLine(ax, ay + 15, ax + 18, ay - 10) # Right fork
+        
+        left_fork = QPoint(ax - 18, ay - 10)
+        right_fork = QPoint(ax + 18, ay - 10)
+        
+        # 2. Draw rubber bands
+        # If pulled far, bands get thinner. Default thickness = 5
+        thickness = max(2, 5 - int(pull_dist / 40))
+        band_pen = QPen(QColor(80, 20, 10, 255), thickness, Qt.SolidLine, Qt.RoundCap) # Dark rubber
+        painter.setPen(band_pen)
+        
+        # Band from left fork to ball
+        painter.drawLine(left_fork, QPoint(cx, cy))
+        # Band from right fork to ball
+        painter.drawLine(right_fork, QPoint(cx, cy))
+        
+        # 3. Draw Angry Birds style trajectory dots
+        if pull_dist > 5:
+            from PyQt5.QtGui import QBrush
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 200)))
+            
+            # The more you pull, the more dots appear
+            num_dots = int(pull_dist / 6)
+            num_dots = min(num_dots, 15)  # Cap at 15 dots
+            
+            for i in range(1, num_dots + 1):
+                # distance from anchor
+                dist = i * 25
+                dot_x = ax - (dp_x / pull_dist) * dist
+                dot_y = ay - (dp_y / pull_dist) * dist
+                
+                # Dots get smaller as they get further away
+                radius = max(1.5, 5 - (i * 0.25))
+                painter.drawEllipse(QPoint(int(dot_x), int(dot_y)), int(radius), int(radius))
+                
+        painter.end()
+
 
 class NoteEditorPopup(QWidget):
     """A floating, draggable popup for editing the desktop note."""
