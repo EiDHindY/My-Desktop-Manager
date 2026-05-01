@@ -7,6 +7,7 @@ import threading
 import json
 import uuid
 import time
+import signal
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QGraphicsDropShadowEffect, 
                              QInputDialog, QTreeWidgetItem, QMenu)
@@ -62,6 +63,14 @@ class SwitcherMenu(QWidget):
         self._initial_friction = state.get("ball_friction", 0.92)
         self._initial_slingshot = state.get("slingshot_enabled", False)
         self._initial_goal = state.get("goal_enabled", False)
+        
+        # Summon feature (SIGUSR1)
+        self.summon_flag = False
+        self.is_summoning = False
+        signal.signal(signal.SIGUSR1, self._on_sigusr1)
+        self.summon_timer = QTimer(self)
+        self.summon_timer.timeout.connect(self._check_summon)
+        self.summon_timer.start(16)
         
         self.setMinimumSize(320, 300)
         self.resize(self.hud_width, self.height_current)
@@ -427,6 +436,44 @@ class SwitcherMenu(QWidget):
                 subprocess.run(["notify-send", "Back Failed", "No previous desktop in history"])
         except Exception as e:
             subprocess.run(["notify-send", "Back Error", str(e)])
+
+    def _on_sigusr1(self, signum, frame):
+        self.summon_flag = True
+
+    def _check_summon(self):
+        from PyQt5.QtGui import QCursor
+        from PyQt5.QtCore import QPointF
+        
+        if getattr(self, 'summon_flag', False):
+            self.summon_flag = False
+            self.is_summoning = True
+            
+            # If in ball mode, stop its momentum physics
+            if getattr(self, "is_collapsed", False) and hasattr(self, 'ball'):
+                self.ball._momentum_timer.stop()
+                self.ball._is_coasting = False
+                self.ball._velocity = QPointF(0, 0)
+                
+        if getattr(self, 'is_summoning', False):
+            mouse_pos = QCursor.pos()
+            target_x = mouse_pos.x() - self.width() // 2
+            target_y = mouse_pos.y() - self.height() // 2
+            
+            current_x = self.x()
+            current_y = self.y()
+            
+            dx = target_x - current_x
+            dy = target_y - current_y
+            
+            dist = (dx**2 + dy**2)**0.5
+            if dist < 5:
+                self.move(target_x, target_y)
+                self.is_summoning = False
+            else:
+                # Move 20% of the distance each frame (approx 16ms)
+                new_x = int(current_x + dx * 0.2)
+                new_y = int(current_y + dy * 0.2)
+                self.move(new_x, new_y)
 
     def eventFilter(self, obj, event):
         res = handle_event(self, obj, event)
