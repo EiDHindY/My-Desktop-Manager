@@ -11,7 +11,7 @@ import signal
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QGraphicsDropShadowEffect, 
                              QInputDialog, QTreeWidgetItem, QMenu)
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QCursor
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent, QFileSystemWatcher
 
 # Helpers
@@ -55,11 +55,19 @@ class SwitcherMenu(QWidget):
         state = self.data_manager.load_ui_state()
         self.hud_width = state.get("width", 400)
         self.height_current = state.get("height", 420)
-        self.hud_x = state.get("x", self.screen_geom.width() - self.hud_width + 20)
-        self.hud_y = state.get("y", 0)
+        
+        # Center the app exactly at the mouse cursor
+        cursor_pos = QCursor.pos()
+        self.hud_x = cursor_pos.x() - (self.hud_width // 2)
+        self.hud_y = cursor_pos.y() - (self.height_current // 2)
+        
+        # Keep it within screen bounds
+        self.hud_x = max(0, min(self.hud_x, self.screen_geom.width() - self.hud_width))
+        self.hud_y = max(0, min(self.hud_y, self.screen_geom.height() - self.height_current))
+        
         self.setWindowOpacity(state.get("opacity", 0.95))
         
-        # We need to set the ball friction and slingshot state after the UI is built
+        # Minigame states
         self._initial_friction = state.get("ball_friction", 0.92)
         self._initial_slingshot = state.get("slingshot_enabled", False)
         self._initial_goal = state.get("goal_enabled", False)
@@ -72,22 +80,30 @@ class SwitcherMenu(QWidget):
         self.summon_timer.timeout.connect(self._check_summon)
         self.summon_timer.start(16)
         
-        self.setMinimumSize(320, 300)
-        self.resize(self.hud_width, self.height_current)
+        # Start in collapsed state (as a ball) to trigger the expand animation on launch
+        self.is_collapsed = True
+        self.saved_width = self.hud_width
+        self.saved_height = self.height_current
         
-        # Animate from off-screen to saved position
-        x_start = self.screen_geom.width() + 10 
-        self.move(x_start, self.hud_y)
-        
-        self.anim = QPropertyAnimation(self, b"pos")
-        self.anim.setDuration(250)
-        self.anim.setStartValue(QPoint(x_start, self.hud_y))
-        self.anim.setEndValue(QPoint(self.hud_x, self.hud_y))
-        self.anim.setEasingCurve(QEasingCurve.OutCubic)
-        self.anim.start()
+        # Initial position as a ball at the cursor
+        cx = cursor_pos.x()
+        cy = cursor_pos.y()
+        self.setGeometry(cx - 20, cy - 20, 40, 40)
+        self.setFixedSize(40, 40)
         
         build_main_ui(self)
         
+        # Hide container, show ball initially
+        self.container.hide()
+        self.ball.show()
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        
+        from PyQt5.QtWidgets import QLabel
+        self.fake_label = QLabel(self)
+        self.fake_label.setScaledContents(True)
+        self.fake_label.hide()
+        
+        # Apply minigame states to the newly built ball
         if hasattr(self, '_initial_friction'):
             self.ball._friction = self._initial_friction
         if hasattr(self, '_initial_slingshot'):
@@ -132,6 +148,9 @@ class SwitcherMenu(QWidget):
         QTimer.singleShot(50, lambda: force_window_focus(self.force_focus_title))
         QTimer.singleShot(500, lambda: force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height()))
         self.search_entry.setFocus()
+        
+        # Trigger the expand animation after a tiny delay to ensure window is ready
+        QTimer.singleShot(50, self.toggle_collapse)
 
         # Heartbeat to update icons when desktop changes
         self.heartbeat = QTimer(self)
@@ -300,31 +319,101 @@ class SwitcherMenu(QWidget):
             })
 
     def toggle_collapse(self):
+        from PyQt5.QtCore import QRect, QPropertyAnimation, QEasingCurve
+        from PyQt5.QtWidgets import QApplication
+        
         is_collapsed = getattr(self, "is_collapsed", False)
         is_collapsed = not is_collapsed
         self.is_collapsed = is_collapsed
         
+        if hasattr(self, 'collapse_anim') and self.collapse_anim.state() == QPropertyAnimation.Running:
+            self.collapse_anim.stop()
+            
         if is_collapsed:
             self.saved_width = self.width()
             self.saved_height = self.height()
+            
+            pixmap = self.container.grab()
+            self.fake_label.setPixmap(pixmap)
+            
+            start_rect = self.container.geometry()
+            self.fake_label.setGeometry(start_rect)
+            self.fake_label.show()
+            
             self.container.hide()
-            self.ball.show()
-            self.layout().setContentsMargins(0, 0, 0, 0)
-            # Remove minimum size constraints to allow shrinking to a ball
-            self.setMinimumSize(40, 40)
-            self.setFixedSize(40, 40)
+            self.ball.hide()
+            
+            cx = self.width() // 2
+            cy = self.height() // 2
+            end_rect = QRect(cx - 20, cy - 20, 40, 40)
+            
+            self.collapse_anim = QPropertyAnimation(self.fake_label, b"geometry")
+            self.collapse_anim.setDuration(350)
+            self.collapse_anim.setEasingCurve(QEasingCurve.InBack)
+            self.collapse_anim.setStartValue(start_rect)
+            self.collapse_anim.setEndValue(end_rect)
+            
+            try: self.collapse_anim.finished.disconnect()
+            except TypeError: pass
+            self.collapse_anim.finished.connect(self._on_collapse_finished)
+            self.collapse_anim.start()
         else:
+            self.collapse_anim = QPropertyAnimation(self, b"geometry")
+            self.collapse_anim.setDuration(350)
+            self.collapse_anim.setEasingCurve(QEasingCurve.OutBack)
+            
+            self.fake_label.hide()
             self.ball.hide()
             self.container.show()
             # Restore margins from ui_factory
             self.layout().setContentsMargins(20, 2, 20, 20)
-            self.setMinimumSize(320, 300)
+            
+            # Remove constraints to allow animation
+            self.setMinimumSize(0, 0)
             self.setMaximumSize(16777215, 16777215)
-            self.resize(self.saved_width, self.saved_height)
-            # Ensure it's not "fixed" anymore
-            self.setFixedWidth(16777215)
-            self.setFixedHeight(16777215)
-            self.resize(self.saved_width, self.saved_height)
+            
+            start_geom = self.geometry()
+            cx = start_geom.x() + start_geom.width() // 2
+            cy = start_geom.y() + start_geom.height() // 2
+            screen_geom = QApplication.primaryScreen().geometry()
+            
+            end_x = cx - self.saved_width // 2
+            end_y = cy - self.saved_height // 2
+            
+            # Keep within screen bounds
+            end_x = max(0, min(end_x, screen_geom.width() - self.saved_width))
+            end_y = max(0, min(end_y, screen_geom.height() - self.saved_height))
+            
+            end_geom = QRect(end_x, end_y, self.saved_width, self.saved_height)
+            
+            self.collapse_anim.setStartValue(start_geom)
+            self.collapse_anim.setEndValue(end_geom)
+            
+            try: self.collapse_anim.finished.disconnect()
+            except TypeError: pass
+            self.collapse_anim.finished.connect(self._on_expand_finished)
+            self.collapse_anim.start()
+
+    def _on_collapse_finished(self):
+        if getattr(self, "is_collapsed", False):
+            self.fake_label.hide()
+            self.ball.show()
+            self.ball.move(0, 0)
+            self.layout().setContentsMargins(0, 0, 0, 0)
+            
+            cx = self.saved_width // 2
+            cy = self.saved_height // 2
+            new_x = self.x() + cx - 20
+            new_y = self.y() + cy - 20
+            
+            self.setMinimumSize(0, 0)
+            self.setMaximumSize(16777215, 16777215)
+            self.setGeometry(new_x, new_y, 40, 40)
+            self.setFixedSize(40, 40)
+
+    def _on_expand_finished(self):
+        if not getattr(self, "is_collapsed", False):
+            self.setMinimumSize(320, 300)
             self.search_entry.setFocus()
 
     def mousePressEvent(self, event):

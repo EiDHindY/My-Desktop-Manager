@@ -305,7 +305,7 @@ class BallWidget(QPushButton):
         self._prev_time = time.time()
         self._prev_pos = event.globalPos()
         
-        self._is_slingshotting = self._slingshot_enabled or bool(event.modifiers() & Qt.ShiftModifier)
+        self._is_slingshotting = self._slingshot_enabled or bool(event.modifiers() & Qt.AltModifier)
         if self._is_slingshotting:
             self._slingshot_anchor = self.window().pos()
             self.setCursor(Qt.CrossCursor)
@@ -327,9 +327,9 @@ class BallWidget(QPushButton):
         if not self._ball_dragging:
             return  # Completely ignore hover moves
             
-        # Dynamically check shift key state during drag
-        is_shift_held = bool(event.modifiers() & Qt.ShiftModifier)
-        should_be_slingshotting = self._slingshot_enabled or is_shift_held
+        # Dynamically check Alt key state during drag
+        is_alt_held = bool(event.modifiers() & Qt.AltModifier)
+        should_be_slingshotting = self._slingshot_enabled or is_alt_held
         
         # Transition into slingshot mode mid-drag
         if should_be_slingshotting and not self._is_slingshotting:
@@ -548,7 +548,7 @@ class BallWidget(QPushButton):
         goal_action.triggered.connect(self.toggle_goal)
         
         menu.addSeparator()
-        menu.addAction("Hint: Hold Shift to slingshot temporarily").setEnabled(False)
+        menu.addAction("Hint: Hold Alt to slingshot temporarily").setEnabled(False)
             
         menu.exec_(pos)
 
