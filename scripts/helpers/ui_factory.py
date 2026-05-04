@@ -1,7 +1,7 @@
 import os
 import subprocess
 import threading
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTabWidget, QLabel, QAbstractItemView, QPushButton, QTextEdit
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QTabWidget, QLabel, QAbstractItemView, QPushButton, QTextEdit, QSizeGrip
 from PyQt5.QtGui import QIcon, QFont, QColor
 from PyQt5.QtCore import Qt, QTimer
 from helpers.ui_components import OutlineDelegate, FolderTreeWidget, DragAnchor, BallWidget, NoteEditorPopup
@@ -35,7 +35,7 @@ def build_main_ui(parent):
     parent.live_list.itemExpanded.connect(lambda item: on_exp(parent, item, True))
     parent.live_list.itemCollapsed.connect(lambda item: on_col(parent, item, True))
     
-    parent.tree = create_tree_widget(parent, None, parent.on_lib_context_menu)
+    parent.tree = create_tree_widget(parent, parent.on_lib_item_clicked, parent.on_lib_context_menu)
     parent.tree.itemExpanded.connect(lambda item: on_exp(parent, item, False))
     parent.tree.itemCollapsed.connect(lambda item: on_col(parent, item, False))
     
@@ -102,6 +102,11 @@ def build_main_ui(parent):
     parent.collapse_btn.setStyleSheet(BTN_COLLAPSE_STYLE)
     parent.collapse_btn.setToolTip("Collapse to ball")
     status_layout.addWidget(parent.collapse_btn)
+    
+    # Size Grip (Resize handle)
+    parent.size_grip = QSizeGrip(parent)
+    parent.size_grip.setFixedSize(16, 16)
+    status_layout.addWidget(parent.size_grip, 0, Qt.AlignBottom | Qt.AlignRight)
     
     # Ball Widget (Hidden by default)
     parent.ball = BallWidget(parent)

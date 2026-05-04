@@ -71,6 +71,7 @@ class SwitcherMenu(QWidget):
         self._initial_friction = state.get("ball_friction", 0.92)
         self._initial_slingshot = state.get("slingshot_enabled", False)
         self._initial_goal = state.get("goal_enabled", False)
+        self._initial_moving_goal = state.get("moving_goal_enabled", False)
         
         # Summon feature (SIGUSR1)
         self.summon_flag = False
@@ -80,23 +81,23 @@ class SwitcherMenu(QWidget):
         self.summon_timer.timeout.connect(self._check_summon)
         self.summon_timer.start(16)
         
-        # Start in collapsed state (as a ball) to trigger the expand animation on launch
-        self.is_collapsed = True
+        # Start in expanded state by default
+        self.is_collapsed = False
         self.saved_width = self.hud_width
         self.saved_height = self.height_current
         
-        # Initial position as a ball at the cursor
+        # Initial position at the cursor
         cx = cursor_pos.x()
         cy = cursor_pos.y()
-        self.setGeometry(cx - 20, cy - 20, 40, 40)
-        self.setFixedSize(40, 40)
+        self.setGeometry(cx - self.hud_width // 2, cy - self.height_current // 2, self.hud_width, self.height_current)
+        self.setMinimumSize(320, 300)
         
         build_main_ui(self)
         
-        # Hide container, show ball initially
-        self.container.hide()
-        self.ball.show()
-        self.layout().setContentsMargins(0, 0, 0, 0)
+        # Show container by default
+        self.container.show()
+        self.ball.hide()
+        self.layout().setContentsMargins(20, 2, 20, 20)
         
         from PyQt5.QtWidgets import QLabel
         self.fake_label = QLabel(self)
@@ -109,6 +110,7 @@ class SwitcherMenu(QWidget):
         if hasattr(self, '_initial_slingshot'):
             self.ball._slingshot_enabled = self._initial_slingshot
         if hasattr(self, '_initial_goal'):
+            self.ball._moving_goal_enabled = self._initial_moving_goal
             self.ball.set_goal_enabled(self._initial_goal)
 
         self.sync_btn.clicked.connect(self.refresh_library)
@@ -149,9 +151,6 @@ class SwitcherMenu(QWidget):
         QTimer.singleShot(500, lambda: force_window_position(self.force_focus_title, self.x(), self.y(), self.width(), self.height()))
         self.search_entry.setFocus()
         
-        # Trigger the expand animation after a tiny delay to ensure window is ready
-        QTimer.singleShot(50, self.toggle_collapse)
-
         # Heartbeat to update icons when desktop changes
         self.heartbeat = QTimer(self)
         self.heartbeat.timeout.connect(self.check_current_desktop)
@@ -319,102 +318,46 @@ class SwitcherMenu(QWidget):
             })
 
     def toggle_collapse(self):
-        from PyQt5.QtCore import QRect, QPropertyAnimation, QEasingCurve
         from PyQt5.QtWidgets import QApplication
         
-        is_collapsed = getattr(self, "is_collapsed", False)
-        is_collapsed = not is_collapsed
+        is_collapsed = not getattr(self, "is_collapsed", False)
         self.is_collapsed = is_collapsed
         
-        if hasattr(self, 'collapse_anim') and self.collapse_anim.state() == QPropertyAnimation.Running:
-            self.collapse_anim.stop()
-            
         if is_collapsed:
             self.saved_width = self.width()
             self.saved_height = self.height()
             
-            pixmap = self.container.grab()
-            self.fake_label.setPixmap(pixmap)
-            
-            start_rect = self.container.geometry()
-            self.fake_label.setGeometry(start_rect)
-            self.fake_label.show()
-            
             self.container.hide()
-            self.ball.hide()
-            
-            cx = self.width() // 2
-            cy = self.height() // 2
-            end_rect = QRect(cx - 20, cy - 20, 40, 40)
-            
-            self.collapse_anim = QPropertyAnimation(self.fake_label, b"geometry")
-            self.collapse_anim.setDuration(350)
-            self.collapse_anim.setEasingCurve(QEasingCurve.InBack)
-            self.collapse_anim.setStartValue(start_rect)
-            self.collapse_anim.setEndValue(end_rect)
-            
-            try: self.collapse_anim.finished.disconnect()
-            except TypeError: pass
-            self.collapse_anim.finished.connect(self._on_collapse_finished)
-            self.collapse_anim.start()
-        else:
-            self.collapse_anim = QPropertyAnimation(self, b"geometry")
-            self.collapse_anim.setDuration(350)
-            self.collapse_anim.setEasingCurve(QEasingCurve.OutBack)
-            
-            self.fake_label.hide()
-            self.ball.hide()
-            self.container.show()
-            # Restore margins from ui_factory
-            self.layout().setContentsMargins(20, 2, 20, 20)
-            
-            # Remove constraints to allow animation
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)
-            
-            start_geom = self.geometry()
-            cx = start_geom.x() + start_geom.width() // 2
-            cy = start_geom.y() + start_geom.height() // 2
-            screen_geom = QApplication.primaryScreen().geometry()
-            
-            end_x = cx - self.saved_width // 2
-            end_y = cy - self.saved_height // 2
-            
-            # Keep within screen bounds
-            end_x = max(0, min(end_x, screen_geom.width() - self.saved_width))
-            end_y = max(0, min(end_y, screen_geom.height() - self.saved_height))
-            
-            end_geom = QRect(end_x, end_y, self.saved_width, self.saved_height)
-            
-            self.collapse_anim.setStartValue(start_geom)
-            self.collapse_anim.setEndValue(end_geom)
-            
-            try: self.collapse_anim.finished.disconnect()
-            except TypeError: pass
-            self.collapse_anim.finished.connect(self._on_expand_finished)
-            self.collapse_anim.start()
-
-    def _on_collapse_finished(self):
-        if getattr(self, "is_collapsed", False):
-            self.fake_label.hide()
             self.ball.show()
-            self.ball.move(0, 0)
+            self.size_grip.hide()
             self.layout().setContentsMargins(0, 0, 0, 0)
             
-            cx = self.saved_width // 2
-            cy = self.saved_height // 2
-            new_x = self.x() + cx - 20
-            new_y = self.y() + cy - 20
-            
-            self.setMinimumSize(0, 0)
-            self.setMaximumSize(16777215, 16777215)
-            self.setGeometry(new_x, new_y, 40, 40)
+            # Snap to ball size
+            geom = self.geometry()
+            cx = geom.x() + geom.width() // 2
+            cy = geom.y() + geom.height() // 2
+            self.setGeometry(cx - 20, cy - 20, 40, 40)
             self.setFixedSize(40, 40)
-
-    def _on_expand_finished(self):
-        if not getattr(self, "is_collapsed", False):
-            self.setMinimumSize(320, 300)
+        else:
+            self.ball.hide()
+            self.container.show()
+            self.size_grip.show()
+            self.layout().setContentsMargins(20, 2, 20, 20)
+            
+            # Snap to full size
+            geom = self.geometry()
+            cx = geom.x() + geom.width() // 2
+            cy = geom.y() + geom.height() // 2
+            
+            screen_geom = QApplication.primaryScreen().geometry()
+            end_x = max(0, min(cx - self.saved_width // 2, screen_geom.width() - self.saved_width))
+            end_y = max(0, min(cy - self.saved_height // 2, screen_geom.height() - self.saved_height))
+            
+            self.setMaximumSize(16777215, 16777215) # Unblock resizing
+            self.setGeometry(end_x, end_y, self.saved_width, self.saved_height)
+            self.setMinimumSize(320, 300) # Restore constraints
             self.search_entry.setFocus()
+
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -435,7 +378,10 @@ class SwitcherMenu(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if not self._is_populating: QTimer.singleShot(500, self.save_ui_state)
+        if not self._is_populating and not getattr(self, "is_collapsed", False):
+            self.hud_width = self.width()
+            self.height_current = self.height()
+            QTimer.singleShot(500, self.save_ui_state)
 
     def populate_live(self, initial=False):
         self._is_populating = True
@@ -489,9 +435,15 @@ class SwitcherMenu(QWidget):
 
     def on_live_item_clicked(self, item, col):
         uid = item.data(0, Qt.UserRole)
-        if uid == "FOLDER": item.setExpanded(not item.isExpanded())
+        if uid == "FOLDER": 
+            item.setExpanded(not item.isExpanded())
         elif uid: 
             self.switch_desktop(uid)
+
+    def on_lib_item_clicked(self, item, col):
+        uid = item.data(0, Qt.UserRole)
+        if uid == "FOLDER":
+            item.setExpanded(not item.isExpanded())
 
     def on_live_context_menu(self, pos): show_live_context_menu(self, pos)
     def on_lib_context_menu(self, pos): show_lib_context_menu(self, pos)
@@ -535,13 +487,20 @@ class SwitcherMenu(QWidget):
         
         if getattr(self, 'summon_flag', False):
             self.summon_flag = False
-            self.is_summoning = True
+            if self.is_summoning: return
             
-            # If in ball mode, stop its momentum physics
+            from PyQt5.QtWidgets import QApplication
+            cursor_pos = QCursor.pos()
+            
             if getattr(self, "is_collapsed", False) and hasattr(self, 'ball'):
-                self.ball._momentum_timer.stop()
-                self.ball._is_coasting = False
-                self.ball._velocity = QPointF(0, 0)
+                orig_friction = self.ball._friction
+                self.ball._friction = 0.5 
+                if self.is_collapsed: self.toggle_collapse()
+                self.is_summoning = True
+                self.ball.summon_to(cursor_pos)
+                QTimer.singleShot(1000, lambda: setattr(self.ball, '_friction', orig_friction))
+            else:
+                self.is_summoning = True
                 
         if getattr(self, 'is_summoning', False):
             mouse_pos = QCursor.pos()

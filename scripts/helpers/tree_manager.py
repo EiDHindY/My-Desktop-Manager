@@ -63,7 +63,7 @@ def populate_library_tree(tree_widget, lib_data):
             titem.setFlags(titem.flags() | Qt.ItemIsDragEnabled)
             titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
             folder_item.addChild(titem)
-        if folder_name in lib_data.get("expanded", []): folder_item.setExpanded(True)
+        # if folder_name in lib_data.get("expanded", []): folder_item.setExpanded(True)
 
 def populate_live_tree(parent):
     parent.live_list.clear()
@@ -128,6 +128,9 @@ def populate_live_tree(parent):
             root_folder_item.setText(0, "root")
             root_folder_item.setData(0, Qt.UserRole, "FOLDER")
             root_folder_item.setData(0, Qt.UserRole + 1, "root")
+            root_folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+            root_folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
+            root_folder_item.setExpanded(True)
             parent.live_list.addTopLevelItem(root_folder_item)
         parent.add_live_desktop_item(root_folder_item, uid, name)
 

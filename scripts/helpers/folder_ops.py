@@ -27,7 +27,7 @@ def create_folder(parent):
         folder_item.setData(0, Qt.UserRole + 1, name.strip())
         folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
         parent.tree.addTopLevelItem(folder_item)
-        folder_item.setExpanded(True)
+        folder_item.setExpanded(False)
         parent.save_library()
 
 def import_folder(parent):
@@ -47,7 +47,7 @@ def import_folder(parent):
     folder_item.setData(0, Qt.UserRole + 1, folder_name)
     folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
     parent.tree.addTopLevelItem(folder_item)
-    folder_item.setExpanded(True)
+    folder_item.setExpanded(False)
     
     files = sorted(list(dir_path.iterdir()))
     for file in files:
@@ -121,7 +121,7 @@ def add_app_desktop(parent, folder_item):
         titem.setFlags(titem.flags() | Qt.ItemIsDragEnabled)
         titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
         folder_item.addChild(titem)
-        folder_item.setExpanded(True)
+        folder_item.setExpanded(False)
         parent.save_library()
 
 def deploy_selected(parent, folder_item):
