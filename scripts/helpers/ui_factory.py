@@ -18,7 +18,7 @@ def build_main_ui(parent):
     parent.container.setObjectName("container")
     parent.container.setStyleSheet(MAIN_CONTAINER_STYLE)
     container_layout = QVBoxLayout(parent.container)
-    container_layout.setContentsMargins(2, 2, 2, 2)
+    container_layout.setContentsMargins(4, 4, 4, 4)
     
     parent.search_entry = QLineEdit()
     parent.search_entry.setPlaceholderText("Search or Command...")
