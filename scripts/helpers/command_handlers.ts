@@ -36,11 +36,25 @@ export function handleSummonFolder(folderName: string, sessionPath: string) {
         if (uids.length === 0) return runCommand(`notify-send "Desktop Manager" "Folder is empty."`);
         
         runCommand(`notify-send "Desktop Manager" "🚀 Summoning '${folderName}'..."`);
+        
+        const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+        const activeStr = runCommand(cmd) || "";
+        const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
+
         for (const fullId of uids) {
-            const uuid = fullId.split("___")[0];
+            const parts = fullId.split("___");
+            const uuid = parts[0];
+            const position = parts.length > 1 ? parseInt(parts[1]) : -1;
+            
             if (uuid) {
                 runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
-                launchAppsForDesktop(uuid, true);
+                
+                // If desktop already has windows, skip launching apps to avoid duplicates
+                if (position >= 0 && activeIndices.includes(position + 1)) {
+                    console.log(`Desktop ${uuid} (pos ${position}) already has windows, skipping app launch.`);
+                } else {
+                    launchAppsForDesktop(uuid, true);
+                }
                 execSync('sleep 0.1');
             }
         }
