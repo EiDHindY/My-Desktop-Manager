@@ -241,23 +241,48 @@ class SwitcherMenu(QWidget):
     def save_session(self):
         if self._is_populating: return
         
-        # Safety: check if tree is empty but we have known folders
         root = self.live_list.invisibleRootItem()
-        session_data = self.data_manager.load_session()
-        if root.childCount() == 0 and session_data.get("folders"):
+        old_session = self.data_manager.load_session()
+        old_folders = old_session.get("folders", {})
+
+        # Safety: if tree is totally empty but we had data, abort
+        if root.childCount() == 0 and old_folders:
             return
 
-        data = session_data
-        data.update({"folders": {}, "folder_order": [], "expanded": [], "pinned": self.pinned_folders, "desktop_notes": self.desktop_notes})
-        
+        new_folders = {}
+        folder_order = []
+        expanded = []
+
         for i in range(root.childCount()):
             item = root.child(i)
             if item.data(0, Qt.UserRole) == "FOLDER":
                 name = item.data(0, Qt.UserRole + 1)
-                data["folder_order"].append(name)
-                data["folders"][name] = [item.child(j).data(0, Qt.UserRole) for j in range(item.childCount())]
-                if item.isExpanded(): data["expanded"].append(name)
+                folder_order.append(name)
+                new_folders[name] = [item.child(j).data(0, Qt.UserRole) for j in range(item.childCount())]
+                if item.isExpanded(): expanded.append(name)
+
+        # Safety: if a folder had items before but now shows empty,
+        # and those items aren't in root either, restore old assignments
+        root_uids = set(new_folders.get("root", []))
+        for fname, old_uids in old_folders.items():
+            if fname in new_folders and len(new_folders[fname]) == 0 and len(old_uids) > 0:
+                # Check if old items have migrated to root (user moved them) or just vanished (glitch)
+                old_bases = {u.split("___")[0] for u in old_uids}
+                root_bases = {u.split("___")[0] for u in root_uids}
+                if not old_bases.intersection(root_bases):
+                    # Items not in root — restore old folder assignment to avoid data loss
+                    new_folders[fname] = old_uids
+
+        data = old_session
+        data.update({
+            "folders": new_folders,
+            "folder_order": folder_order,
+            "expanded": expanded,
+            "pinned": self.pinned_folders,
+            "desktop_notes": self.desktop_notes
+        })
         self.data_manager.save_session(data)
+
 
     def edit_desktop_note(self, uid):
         raw_uuid = uid.split("___")[0]

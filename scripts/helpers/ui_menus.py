@@ -24,12 +24,12 @@ def show_live_context_menu(parent, pos):
         menu.addAction("➕ Create Desktop").triggered.connect(lambda: sys.exit(print(f"CREATE_LIVE_DESKTOP:{fn}", flush=True) or 0))
         menu.addAction("🗑 Remove Folder Grouping").triggered.connect(lambda: sys.exit(print(f"REMOVE_LIVE_FOLDER:{fn}", flush=True) or 0))
     elif uid == "ACTION_CHROME":
-        menu.addAction("🚀 Go").triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}") or 0))
+        menu.addAction("🚀 Go").triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}", flush=True) or 0))
     else:
-        menu.addAction("✏️ Rename").triggered.connect(lambda: sys.exit(print(f"RENAME:{uid}") or 0))
+        menu.addAction("✏️ Rename").triggered.connect(lambda: sys.exit(print(f"RENAME:{uid}", flush=True) or 0))
         if item.parent() and item.parent().data(0, Qt.UserRole) == "FOLDER":
             fn = item.parent().text(0).strip()
-            menu.addAction("🧹 Empty Desktop").triggered.connect(lambda: sys.exit(print(f"CLEAR:{uid}") or 0))
+            menu.addAction("🧹 Empty Desktop").triggered.connect(lambda: sys.exit(print(f"CLEAR:{uid}", flush=True) or 0))
         
         menu.addAction("🚀 Summon Desktop").triggered.connect(lambda: sys.exit(print(f"SUMMON:{uid}", flush=True) or 0))
         menu.addAction("🧹 Close Windows").triggered.connect(lambda: sys.exit(print(f"CLOSE_WINDOWS:{uid}", flush=True) or 0))
@@ -54,7 +54,7 @@ def show_lib_context_menu(parent, pos):
         fn = item.data(0, Qt.UserRole + 1)
         deploy_menu = menu.addMenu("🚀 Deploy to Live")
         deploy_menu.setStyleSheet(CONTEXT_MENU_STYLE)
-        deploy_menu.addAction("🚀 Deploy All tasks").triggered.connect(lambda: sys.exit(print(f"DEPLOY_ALL:{fn}") or 0))
+        deploy_menu.addAction("🚀 Deploy All tasks").triggered.connect(lambda: sys.exit(print(f"DEPLOY_ALL:{fn}", flush=True) or 0))
         deploy_menu.addAction("✅ Select Tasks to Deploy...").triggered.connect(lambda: parent.deploy_selected(item))
         
         menu.addSeparator()

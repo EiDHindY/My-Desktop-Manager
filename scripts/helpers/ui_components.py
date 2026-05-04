@@ -476,6 +476,17 @@ class BallWidget(QPushButton):
         dt = min(dt, 0.05)
         
         window = self.window()
+        
+        # Ctrl key to stop
+        from PyQt5.QtWidgets import QApplication
+        if QApplication.keyboardModifiers() & Qt.ControlModifier:
+            self._momentum_timer.stop()
+            self._is_coasting = False
+            self._velocity = QPointF(0, 0)
+            if hasattr(window, 'save_ui_state'):
+                window.save_ui_state()
+            return
+
         step = self._velocity * dt
         new_pos = window.pos() + step.toPoint()
         
@@ -517,18 +528,38 @@ class BallWidget(QPushButton):
                     return
                     
 
-        
-        # Friction (normalized to 60fps)
-        friction_factor = self._friction ** (dt * 60)
-        self._velocity *= friction_factor
-        
-        # Stop when slow
-        if (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5 < 15:
-            self._momentum_timer.stop()
-            self._is_coasting = False
-            self._velocity = QPointF(0, 0)
-            if hasattr(window, 'save_ui_state'):
-                window.save_ui_state()
+        # Friction or Constant Speed
+        if getattr(self, '_never_stop', False):
+            # Constant speed mode
+            speed = (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5
+            target_speeds = {0.85: 200, 0.92: 500, 0.97: 1000, 0.99: 1500}
+            # Find closest friction key
+            closest_f = min(target_speeds.keys(), key=lambda k: abs(k - self._friction))
+            target = target_speeds[closest_f]
+            
+            if speed > 0:
+                # Smoothly adjust speed towards target
+                new_speed = speed + (target - speed) * 0.1
+                self._velocity = self._velocity * (new_speed / speed)
+            elif target > 0:
+                # Give it a nudge if it's completely dead
+                self._velocity = QPointF(target, 0)
+                
+            # Full bounce on edges to maintain energy
+            # (Already handled above with 0.3 dampening, we should probably restore energy here)
+            # Actually, the smooth adjustment will fix the speed automatically on the next ticks.
+        else:
+            # Normal Friction (normalized to 60fps)
+            friction_factor = self._friction ** (dt * 60)
+            self._velocity *= friction_factor
+            
+            # Stop when slow
+            if (self._velocity.x()**2 + self._velocity.y()**2) ** 0.5 < 15:
+                self._momentum_timer.stop()
+                self._is_coasting = False
+                self._velocity = QPointF(0, 0)
+                if hasattr(window, 'save_ui_state'):
+                    window.save_ui_state()
 
     # ── Speed Settings Menu ─────────────────────────────────────────
     def show_speed_menu(self, pos):
@@ -555,8 +586,7 @@ class BallWidget(QPushButton):
             "Slow (Stops quickly)": 0.85,
             "Normal (Default)": 0.92,
             "Fast (Slides longer)": 0.97,
-            "Ice (Very fast)": 0.99,
-            "Perpetual (Never stops)": 1.0
+            "Ice (Very fast)": 0.99
         }
         
         for name, value in speeds.items():
@@ -567,6 +597,13 @@ class BallWidget(QPushButton):
             group.addAction(action)
             action.triggered.connect(lambda checked, v=value: self.set_friction(v))
             
+        menu.addSeparator()
+        
+        never_stop_action = menu.addAction("♾️ Never Stop (Constant Speed)")
+        never_stop_action.setCheckable(True)
+        never_stop_action.setChecked(getattr(self, '_never_stop', False))
+        never_stop_action.triggered.connect(self.toggle_never_stop)
+        
         menu.addSeparator()
         
         slingshot_action = menu.addAction("🎯 Slingshot Mode (Angry Birds)")
@@ -587,12 +624,23 @@ class BallWidget(QPushButton):
         moving_goal_action.triggered.connect(self.toggle_moving_goal)
         
         menu.addSeparator()
-        menu.addAction("Hint: Hold Alt to slingshot temporarily").setEnabled(False)
+        menu.addAction("Hint: Hold Ctrl to stop • Hold Alt to slingshot").setEnabled(False)
             
         menu.exec_(pos)
 
     def set_friction(self, value):
         self._friction = value
+        self._save_state()
+        
+    def toggle_never_stop(self, checked):
+        self._never_stop = checked
+        if checked and not self._is_coasting:
+            # Kickstart if it's currently stopped
+            self._velocity = QPointF(500, 0)
+            self._is_coasting = True
+            import time
+            self._last_tick_time = time.time()
+            self._momentum_timer.start(10)
         self._save_state()
         
     def toggle_slingshot(self, checked):

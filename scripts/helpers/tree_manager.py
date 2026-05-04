@@ -75,10 +75,9 @@ def populate_live_tree(parent):
     parent.pinned_folders = session_data.get("pinned", [])
     expanded_folders = session_data.get("expanded", [])
     
-    # Use saved manual order, but ensure 'root' is included
-    reordered = list(folder_order)
-    if "root" not in (f.lower() for f in reordered):
-        reordered.append("root")
+    # Use saved manual order, but ensure 'root' is always at the bottom
+    reordered = [f for f in folder_order if f.lower() != "root"]
+    reordered.append("root")
     
     assigned_uids = set()
     root_folder_item = None
@@ -102,15 +101,14 @@ def populate_live_tree(parent):
         
         for uid in uids:
             if uid == "ACTION_CHROME" or uid in assigned_uids: continue
-            name = next((p[1] for p in parent.id_name_pairs if p[0] == uid), None)
-            if name:
-                is_empty = "empty" in name.lower() and len(name.strip()) <= 15
-                is_current = (uid.split("___")[0] == parent.current_desktop_uuid)
-                is_active = (int(uid.split("___")[1]) + 1) in parent.active_kwin_indices if "___" in uid else False
-                # if is_empty and not is_current and not is_active and folder_name.lower() == "root": continue
-                
-                parent.add_live_desktop_item(fitem, uid, name)
-                assigned_uids.add(uid)
+            uid_base = uid.split("___")[0]
+            # Match by UUID prefix — position suffix can change when desktops are added/removed
+            match = next(((p[0], p[1]) for p in parent.id_name_pairs if p[0].split("___")[0] == uid_base), None)
+            if match:
+                current_uid, name = match
+                parent.add_live_desktop_item(fitem, current_uid, name)
+                assigned_uids.add(current_uid)
+                assigned_uids.add(uid)  # also mark old uid to prevent double-add
 
     # Root items that weren't assigned
     for uid, name in parent.id_name_pairs:

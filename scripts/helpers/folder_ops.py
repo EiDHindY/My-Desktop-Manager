@@ -190,4 +190,4 @@ def deploy_selected(parent, folder_item):
         selected = dialog.get_selected()
         if selected:
             task_list = "|".join(selected)
-            sys.exit(print(f"DEPLOY_SELECTED:{folder_name}:{task_list}") or 0)
+            sys.exit(print(f"DEPLOY_SELECTED:{folder_name}:{task_list}", flush=True) or 0)
