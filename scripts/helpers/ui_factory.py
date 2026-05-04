@@ -43,6 +43,10 @@ def build_main_ui(parent):
     parent.sync_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.sync_btn.setToolTip("Sync app state with Dolphin templates")
     
+    parent.open_scripts_btn = QPushButton("📂 Scripts")
+    parent.open_scripts_btn.setStyleSheet(BTN_REFRESH_STYLE)
+    parent.open_scripts_btn.setToolTip("Open Scripts Directory")
+    
     parent.tabs.addTab(create_tab_page(parent.live_list), "Live")
     
     # Templates page with Sync button at bottom right
@@ -56,6 +60,7 @@ def build_main_ui(parent):
     btn_row_layout = QHBoxLayout(btn_row)
     btn_row_layout.setContentsMargins(0, 2, 8, 4)
     btn_row_layout.addStretch()
+    btn_row_layout.addWidget(parent.open_scripts_btn)
     btn_row_layout.addWidget(parent.sync_btn)
     templates_layout.addWidget(btn_row)
     

@@ -114,6 +114,7 @@ class SwitcherMenu(QWidget):
             self.ball.set_goal_enabled(self._initial_goal)
 
         self.sync_btn.clicked.connect(self.refresh_library)
+        self.open_scripts_btn.clicked.connect(self.open_scripts_dir)
         self.cleanup_btn.clicked.connect(self.cleanup_empty)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
         self.note_btn.clicked.connect(self.toggle_note_popup)
@@ -402,6 +403,11 @@ class SwitcherMenu(QWidget):
         self.populate_library()
         self.status_label.setText("Library Synced ✨")
         QTimer.singleShot(2000, lambda: self.apply_active_windows(self.active_kwin_indices))
+
+    def open_scripts_dir(self):
+        scripts_dir = os.path.expanduser("~/.local/bin/Scripts/")
+        os.makedirs(scripts_dir, exist_ok=True)
+        subprocess.Popen(["xdg-open", scripts_dir])
 
     def add_live_desktop_item(self, parent, uid, name):
         return add_live_desktop_item(self.live_list, parent, uid, name, self.current_desktop_uuid, self.active_kwin_indices, self.desktop_notes, apply_live_styling, self.last_desktop_uuid)
