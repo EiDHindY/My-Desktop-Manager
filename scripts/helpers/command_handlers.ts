@@ -206,9 +206,12 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string) 
         const uids: string[] = data.folders?.[folderName] || [];
         if (uids.length === 0) return;
 
-        const indices = uids.map(id => id.split("___")[1]).filter(idx => idx !== undefined);
-        for (const idx of indices) {
-            closeWindowsOnDesktop(idx);
+        for (const fullId of uids) {
+            const parts = fullId.split("___");
+            if (parts.length > 1) {
+                const kwinIdx = (parseInt(parts[1]) + 1).toString();
+                closeWindowsOnDesktop(kwinIdx);
+            }
         }
 
         for (const fullId of uids) {

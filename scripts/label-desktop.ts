@@ -49,6 +49,8 @@ function main() {
             handleRemoveLibraryFolder(result.substring(22), templatesDir);
         } else if (result.startsWith('REMOVE_LIVE_FOLDER:')) {
             handleRemoveLiveFolder(result.substring(19), sessionPath);
+        } else if (result.startsWith('WIPE_FOLDER:')) {
+            handleRemoveLiveFolder(result.substring(12), sessionPath);
         } else if (result.startsWith('CREATE_LIVE_DESKTOP:')) {
             handleCreateLiveDesktop(result.substring(20), sessionPath, currentDesktops, currentUuid);
         } else if (result.startsWith('UNGROUP_DESKTOP:')) {

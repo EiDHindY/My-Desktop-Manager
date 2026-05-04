@@ -22,7 +22,7 @@ def show_live_context_menu(parent, pos):
         menu.addSeparator()
         menu.addAction("🚀 Summon Folder").triggered.connect(lambda: sys.exit(print(f"SUMMON_FOLDER:{fn}", flush=True) or 0))
         menu.addAction("➕ Create Desktop").triggered.connect(lambda: sys.exit(print(f"CREATE_LIVE_DESKTOP:{fn}", flush=True) or 0))
-        menu.addAction("🗑 Remove Folder Grouping").triggered.connect(lambda: sys.exit(print(f"REMOVE_LIVE_FOLDER:{fn}", flush=True) or 0))
+        menu.addAction("🧹 Wipe Folder").triggered.connect(lambda: sys.exit(print(f"WIPE_FOLDER:{fn}", flush=True) or 0))
     elif uid == "ACTION_CHROME":
         menu.addAction("🚀 Go").triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}", flush=True) or 0))
     else:
