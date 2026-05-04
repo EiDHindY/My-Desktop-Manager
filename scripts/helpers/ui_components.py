@@ -143,11 +143,11 @@ class FolderTreeWidget(QTreeWidget):
     def _save_after_drop(self):
         parent = self.parent()
         while parent:
-            if hasattr(parent, 'save_session'):
-                parent.save_session()
-                return
-            if hasattr(parent, 'save_library'):
-                parent.save_library()
+            if hasattr(parent, 'save_session') and hasattr(parent, 'tabs'):
+                if parent.tabs.currentIndex() == 0:
+                    parent.save_session()
+                else:
+                    parent.save_library()
                 return
             parent = parent.parent()
 

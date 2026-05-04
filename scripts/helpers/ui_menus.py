@@ -37,6 +37,8 @@ def show_live_context_menu(parent, pos):
         menu.addSeparator()
         menu.addAction("🚀 Go").triggered.connect(lambda: sys.exit(print(f"SWITCH:{uid}", flush=True) or 0))
 
+    menu.addSeparator()
+    menu.addAction("➕ New Folder Group").triggered.connect(parent.create_folder_action)
     menu.exec_(parent.live_list.viewport().mapToGlobal(pos))
 
 def show_lib_context_menu(parent, pos):

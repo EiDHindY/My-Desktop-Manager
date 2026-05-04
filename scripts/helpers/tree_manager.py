@@ -75,12 +75,10 @@ def populate_live_tree(parent):
     parent.pinned_folders = session_data.get("pinned", [])
     expanded_folders = session_data.get("expanded", [])
     
-    # Sorting logic
-    others = [f for f in folder_order if f not in parent.pinned_folders and f.lower() != "root"]
-    top = [f for f in folder_order if f in parent.pinned_folders and f.lower() != "root"]
-    reordered = top + others
-    root_orig = next((f for f in folder_order if f.lower() == "root"), None)
-    if root_orig: reordered.append(root_orig)
+    # Use saved manual order, but ensure 'root' is included
+    reordered = list(folder_order)
+    if "root" not in (f.lower() for f in reordered):
+        reordered.append("root")
     
     assigned_uids = set()
     root_folder_item = None
@@ -88,7 +86,6 @@ def populate_live_tree(parent):
     for folder_name in reordered:
         if folder_name not in live_folders: continue
         uids = live_folders[folder_name]
-        if not uids: continue
         
         fitem = QTreeWidgetItem()
         fitem.setText(0, folder_name + (" 📌" if folder_name in parent.pinned_folders else ""))

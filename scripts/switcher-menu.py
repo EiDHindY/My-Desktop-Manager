@@ -11,7 +11,7 @@ import signal
 from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QGraphicsDropShadowEffect, 
                              QInputDialog, QTreeWidgetItem, QMenu)
-from PyQt5.QtGui import QColor, QCursor
+from PyQt5.QtGui import QColor, QCursor, QFont, QBrush
 from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent, QFileSystemWatcher
 
 # Helpers
@@ -118,6 +118,7 @@ class SwitcherMenu(QWidget):
         self.cleanup_btn.clicked.connect(self.cleanup_empty)
         self.collapse_btn.clicked.connect(self.toggle_collapse)
         self.note_btn.clicked.connect(self.toggle_note_popup)
+        self.add_folder_btn.clicked.connect(self.create_folder_action)
         self.note_popup = None
         
         self.watcher = QFileSystemWatcher(self)
@@ -215,12 +216,9 @@ class SwitcherMenu(QWidget):
             self.populate_live(initial=True)
         else:
             self.populate_live(initial=False)
-            update_live_priorities(self)
-            self.live_list.sortItems(1, Qt.AscendingOrder)
-            
         physical_desktops = [p for p in self.id_name_pairs if "___" in p[0]]
         active_count = sum(1 for uid, _ in physical_desktops if (int(uid.split("___")[1]) + 1) in self.active_kwin_indices)
-        self.status_label.setText(f"Active: {active_count} • Empty: {len(physical_desktops) - active_count}")
+        self.status_label.setText(f"A: {active_count} • E: {len(physical_desktops) - active_count}")
         self.tabs.setTabText(0, "Live")
         QTimer.singleShot(1000, lambda: threading.Thread(target=self.fetcher.fetch_windows_bg, daemon=True).start())
 
@@ -228,6 +226,10 @@ class SwitcherMenu(QWidget):
         if self._is_populating: return
         data = {"folders": {}, "folder_order": [], "expanded": []}
         root = self.tree.invisibleRootItem()
+        if root.childCount() == 0 and self.lib_data.get("folders"):
+            print("DEBUG: Blocking save_library because tree is empty but library has data.")
+            return # Safety check
+
         for i in range(root.childCount()):
             f = root.child(i)
             name = f.data(0, Qt.UserRole + 1)
@@ -238,9 +240,16 @@ class SwitcherMenu(QWidget):
 
     def save_session(self):
         if self._is_populating: return
-        data = self.data_manager.load_session()
-        data.update({"folders": {}, "folder_order": [], "expanded": [], "pinned": self.pinned_folders, "desktop_notes": self.desktop_notes})
+        
+        # Safety: check if tree is empty but we have known folders
         root = self.live_list.invisibleRootItem()
+        session_data = self.data_manager.load_session()
+        if root.childCount() == 0 and session_data.get("folders"):
+            return
+
+        data = session_data
+        data.update({"folders": {}, "folder_order": [], "expanded": [], "pinned": self.pinned_folders, "desktop_notes": self.desktop_notes})
+        
         for i in range(root.childCount()):
             item = root.child(i)
             if item.data(0, Qt.UserRole) == "FOLDER":
@@ -387,7 +396,7 @@ class SwitcherMenu(QWidget):
     def populate_live(self, initial=False):
         self._is_populating = True
         try:
-            if initial: populate_live_tree(self); update_live_priorities(self); self.live_list.sortItems(1, Qt.AscendingOrder)
+            if initial: populate_live_tree(self)
             else: self.update_tree_items_recursive(self.live_list.invisibleRootItem())
         finally: self._is_populating = False
 
@@ -442,6 +451,26 @@ class SwitcherMenu(QWidget):
             self.sync_btn.hide()
         self.search_entry.setFocus()
 
+    def create_folder_action(self):
+        """Unified folder creation for both Live and Library tabs."""
+        from helpers.folder_ops import create_folder
+        if self.tabs.currentIndex() == 1: # Templates tab
+            create_folder(self)
+        else: # Live tab
+            name, ok = QInputDialog.getText(self, "New Live Group", "Folder name:", text="")
+            if ok and name.strip():
+                folder_name = name.strip()
+                # Use a temporary item to trigger the structure update
+                fitem = QTreeWidgetItem()
+                fitem.setText(0, folder_name)
+                fitem.setData(0, Qt.UserRole, "FOLDER")
+                fitem.setData(0, Qt.UserRole + 1, folder_name)
+                fitem.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                fitem.setForeground(0, QBrush(QColor("#bb9af7")))
+                self.live_list.addTopLevelItem(fitem)
+                self.save_session() # This will save the new folder structure
+                self.populate_live(initial=True) # Refresh to ensure clean state
+    
     def on_search(self, text):
         widget = self.live_list if self.tabs.currentIndex() == 0 else self.tree
         item = filter_tree(widget, text.lower(), self.tabs.currentIndex())

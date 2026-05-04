@@ -28,6 +28,7 @@ def build_main_ui(parent):
     
     parent.tabs = QTabWidget()
     parent.tabs.setDocumentMode(True)
+    parent.tabs.tabBar().setUsesScrollButtons(False)
     parent.tabs.setStyleSheet(TABS_STYLE)
     
     parent.live_list = create_tree_widget(parent, parent.on_live_item_clicked, parent.on_live_context_menu)
@@ -58,7 +59,7 @@ def build_main_ui(parent):
     templates_layout.setSpacing(0)
     templates_layout.addWidget(parent.tree)
     
-    parent.tabs.addTab(templates_page, "Templates")
+    parent.tabs.addTab(templates_page, "Temps")
     parent.tabs.setCornerWidget(parent.search_entry, Qt.TopLeftCorner)
     
     container_layout.addWidget(parent.tabs)
@@ -66,7 +67,8 @@ def build_main_ui(parent):
 
     parent.status_row = QWidget()
     status_layout = QHBoxLayout(parent.status_row)
-    status_layout.setContentsMargins(15, 0, 15, 8) # More padding at bottom
+    status_layout.setContentsMargins(8, 0, 8, 8) 
+    status_layout.setSpacing(4)
     
     parent.cleanup_btn = QPushButton("Clean All")
     parent.cleanup_btn.setStyleSheet(BTN_REFRESH_STYLE)
@@ -95,6 +97,14 @@ def build_main_ui(parent):
     
     # Add a spacer to the right of the status label
     status_layout.addStretch()
+    
+    # Add Folder Button
+    parent.add_folder_btn = QPushButton("+")
+    parent.add_folder_btn.setFixedSize(30, 24)
+    parent.add_folder_btn.setStyleSheet(BTN_COLLAPSE_STYLE) # Reuse similar styling
+    parent.add_folder_btn.setToolTip("Create New Folder")
+    parent.add_folder_btn.setCursor(Qt.PointingHandCursor)
+    status_layout.addWidget(parent.add_folder_btn)
     
     # Drag Anchor Button
     parent.drag_btn = DragAnchor()
