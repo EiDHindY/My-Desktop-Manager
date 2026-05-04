@@ -114,6 +114,38 @@ def edit_script(parent, item):
     else:
         subprocess.run(["notify-send", "Desktop Manager", "Could not parse script path."])
 
+def go_to_folder_dir(parent, item):
+    import os
+    import subprocess
+    dir_path = ""
+    # Try to find directory from the first child that has a script
+    for i in range(item.childCount()):
+        child = item.child(i)
+        cmd = child.data(0, Qt.UserRole + 2)
+        if cmd:
+            start_idx = cmd.find("'")
+            end_idx = cmd.rfind("'")
+            if start_idx != -1 and end_idx != -1 and start_idx != end_idx:
+                file_path = cmd[start_idx+1:end_idx]
+                possible_dir = os.path.dirname(file_path)
+                if os.path.exists(possible_dir):
+                    dir_path = possible_dir
+                    break
+                    
+    # Fallback to guessing based on folder name
+    if not dir_path or not os.path.exists(dir_path):
+        folder_name = item.data(0, Qt.UserRole + 1)
+        guess_path = os.path.expanduser(f"~/.local/bin/Scripts/{folder_name}")
+        if os.path.exists(guess_path):
+            dir_path = guess_path
+        else:
+            dir_path = os.path.expanduser("~/.local/bin/Scripts/")
+            
+    if os.path.exists(dir_path):
+        subprocess.Popen(["xdg-open", dir_path], start_new_session=True)
+    else:
+        subprocess.run(["notify-send", "Desktop Manager", "Could not determine directory."])
+
 def delete_lib_item(parent, item):
     is_folder = item.data(0, Qt.UserRole) == "FOLDER"
     folder_name = item.data(0, Qt.UserRole + 1) if is_folder else None

@@ -56,6 +56,7 @@ def show_lib_context_menu(parent, pos):
         deploy_menu.addAction("✅ Select Tasks to Deploy...").triggered.connect(lambda: parent.deploy_selected(item))
         
         menu.addSeparator()
+        menu.addAction("📂 Go to Dir").triggered.connect(lambda: parent.go_to_folder_dir(item))
         menu.addAction("➕ Add App Desktop").triggered.connect(lambda: parent.add_app_desktop(item))
         menu.addAction("✏️ Rename Folder").triggered.connect(lambda: parent.rename_lib_item(item))
         menu.addAction("🗑 Delete Folder").triggered.connect(lambda: parent.delete_lib_item(item))
