@@ -22,7 +22,7 @@ from helpers.data_manager import DataManager
 from helpers.ui_logic import filter_tree
 from helpers.ui_menus import show_live_context_menu, show_lib_context_menu
 from helpers.folder_ops import (create_folder, import_folder, rename_lib_item, 
-                                link_script, delete_lib_item, add_app_desktop, deploy_selected)
+                                link_script, edit_script, delete_lib_item, add_app_desktop, deploy_selected)
 from helpers.navigation_logic import move_up, move_down, get_selected_uid
 from helpers.tree_manager import (apply_live_styling, add_live_desktop_item, 
                                  populate_library_tree, populate_live_tree, update_live_priorities)
@@ -459,6 +459,7 @@ class SwitcherMenu(QWidget):
     def add_app_desktop(self, item): add_app_desktop(self, item)
     def deploy_selected(self, item): deploy_selected(self, item)
     def link_script(self, item): link_script(self, item)
+    def edit_script(self, item): edit_script(self, item)
     def move_up(self): move_up(self)
     def move_down(self): move_down(self)
     def get_selected_uid(self): return get_selected_uid(self)

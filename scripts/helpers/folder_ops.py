@@ -1,5 +1,7 @@
 import os
+import sys
 import uuid
+import subprocess
 from pathlib import Path
 from PyQt5.QtWidgets import QInputDialog, QTreeWidgetItem, QFileDialog
 from PyQt5.QtGui import QIcon, QFont, QColor, QBrush
@@ -92,6 +94,26 @@ def link_script(parent, item):
         file_path = dialog.selectedFiles()[0]
         cmd = f"bash '{file_path}'" if file_path.endswith('.sh') else f"'{file_path}'"
         item.setData(0, Qt.UserRole + 2, cmd)
+        parent.save_library()
+
+def edit_script(parent, item):
+    cmd = item.data(0, Qt.UserRole + 2)
+    if not cmd:
+        subprocess.run(["notify-send", "Desktop Manager", "No script linked to this desktop."])
+        return
+        
+    start_idx = cmd.find("'")
+    end_idx = cmd.rfind("'")
+    if start_idx != -1 and end_idx != -1 and start_idx != end_idx:
+        file_path = cmd[start_idx+1:end_idx]
+        if os.path.exists(file_path):
+            subprocess.Popen(["kwrite", file_path], start_new_session=True)
+            sys.exit(0)
+        else:
+            subprocess.run(["notify-send", "Desktop Manager", f"Script file not found: {file_path}"])
+    else:
+        subprocess.run(["notify-send", "Desktop Manager", "Could not parse script path."])
+
 def delete_lib_item(parent, item):
     is_folder = item.data(0, Qt.UserRole) == "FOLDER"
     folder_name = item.data(0, Qt.UserRole + 1) if is_folder else None

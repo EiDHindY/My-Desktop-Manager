@@ -66,6 +66,7 @@ def show_lib_context_menu(parent, pos):
         menu.addAction("🚀 Deploy Single Desktop").triggered.connect(lambda: sys.exit(print(f"DEPLOY_TASK:{fn}:{tid}", flush=True) or 0))
         menu.addSeparator()
         menu.addAction("🔗 Link Startup Script").triggered.connect(lambda: parent.link_script(item))
+        menu.addAction("📝 Edit Script").triggered.connect(lambda: parent.edit_script(item))
         menu.addAction("✏️ Rename App Desktop").triggered.connect(lambda: parent.rename_lib_item(item))
         menu.addAction("🗑 Delete App Desktop").triggered.connect(lambda: parent.delete_lib_item(item))
             
