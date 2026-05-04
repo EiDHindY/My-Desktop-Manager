@@ -432,8 +432,10 @@ class SwitcherMenu(QWidget):
             self.lib_data = self.data_manager.load_library()
             populate_library_tree(self.tree, self.lib_data)
             self.cleanup_btn.hide()
+            self.note_btn.hide()
         else:
             self.cleanup_btn.show()
+            self.note_btn.show()
         self.search_entry.setFocus()
 
     def on_search(self, text):
