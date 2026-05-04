@@ -42,10 +42,12 @@ def build_main_ui(parent):
     parent.sync_btn = QPushButton("Sync")
     parent.sync_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.sync_btn.setToolTip("Sync app state with Dolphin templates")
+    parent.sync_btn.setCursor(Qt.PointingHandCursor)
     
     parent.open_scripts_btn = QPushButton("Scripts")
     parent.open_scripts_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.open_scripts_btn.setToolTip("Open Scripts Directory")
+    parent.open_scripts_btn.setCursor(Qt.PointingHandCursor)
     
     parent.tabs.addTab(create_tab_page(parent.live_list), "Live")
     
@@ -69,6 +71,7 @@ def build_main_ui(parent):
     parent.cleanup_btn = QPushButton("Clean All")
     parent.cleanup_btn.setStyleSheet(BTN_REFRESH_STYLE)
     parent.cleanup_btn.setToolTip("Rename all empty desktops to 'Empty'")
+    parent.cleanup_btn.setCursor(Qt.PointingHandCursor)
     status_layout.addWidget(parent.cleanup_btn)
 
     # Note button — lights up when current desktop has a note
@@ -76,6 +79,7 @@ def build_main_ui(parent):
     parent.note_btn.setFixedSize(30, 24)
     parent.note_btn.setStyleSheet(BTN_NOTE_STYLE)
     parent.note_btn.setToolTip("No note for this desktop")
+    parent.note_btn.setCursor(Qt.PointingHandCursor)
     status_layout.addWidget(parent.note_btn)
     
     status_layout.addWidget(parent.open_scripts_btn)
@@ -104,6 +108,7 @@ def build_main_ui(parent):
     parent.collapse_btn.setFixedSize(30, 24)
     parent.collapse_btn.setStyleSheet(BTN_COLLAPSE_STYLE)
     parent.collapse_btn.setToolTip("Collapse to ball")
+    parent.collapse_btn.setCursor(Qt.PointingHandCursor)
     status_layout.addWidget(parent.collapse_btn)
     
     # Size Grip (Resize handle)

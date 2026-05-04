@@ -184,10 +184,12 @@ class SelectionDialog(QDialog):
         btn_layout = QHBoxLayout()
         self.btn_ok = QPushButton("Deploy Selected")
         self.btn_ok.setStyleSheet(BTN_OK_STYLE)
+        self.btn_ok.setCursor(Qt.PointingHandCursor)
         self.btn_ok.clicked.connect(self.accept)
         
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setStyleSheet(BTN_CANCEL_STYLE)
+        self.btn_cancel.setCursor(Qt.PointingHandCursor)
         self.btn_cancel.clicked.connect(self.reject)
         
         btn_layout.addWidget(self.btn_ok)
