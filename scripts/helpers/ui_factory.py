@@ -49,21 +49,12 @@ def build_main_ui(parent):
     
     parent.tabs.addTab(create_tab_page(parent.live_list), "Live")
     
-    # Templates page with Sync button at bottom right
+    # Templates page
     templates_page = QWidget()
     templates_layout = QVBoxLayout(templates_page)
     templates_layout.setContentsMargins(0, 0, 0, 0)
     templates_layout.setSpacing(0)
     templates_layout.addWidget(parent.tree)
-    
-    btn_row = QWidget()
-    btn_row_layout = QHBoxLayout(btn_row)
-    btn_row_layout.setContentsMargins(0, 2, 8, 4)
-    btn_row_layout.setAlignment(Qt.AlignVCenter)
-    btn_row_layout.addStretch()
-    btn_row_layout.addWidget(parent.open_scripts_btn)
-    btn_row_layout.addWidget(parent.sync_btn)
-    templates_layout.addWidget(btn_row)
     
     parent.tabs.addTab(templates_page, "Templates")
     parent.tabs.setCornerWidget(parent.search_entry, Qt.TopLeftCorner)
@@ -86,6 +77,12 @@ def build_main_ui(parent):
     parent.note_btn.setStyleSheet(BTN_NOTE_STYLE)
     parent.note_btn.setToolTip("No note for this desktop")
     status_layout.addWidget(parent.note_btn)
+    
+    status_layout.addWidget(parent.open_scripts_btn)
+    status_layout.addWidget(parent.sync_btn)
+    
+    parent.open_scripts_btn.hide()
+    parent.sync_btn.hide()
     
     parent.status_label = QLabel("Active: - • Empty: -")
     parent.status_label.setStyleSheet(STATUS_LABEL_STYLE)
