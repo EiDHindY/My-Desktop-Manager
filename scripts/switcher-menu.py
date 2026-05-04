@@ -431,6 +431,9 @@ class SwitcherMenu(QWidget):
         if index == 1: # Templates tab
             self.lib_data = self.data_manager.load_library()
             populate_library_tree(self.tree, self.lib_data)
+            self.cleanup_btn.hide()
+        else:
+            self.cleanup_btn.show()
         self.search_entry.setFocus()
 
     def on_search(self, text):
