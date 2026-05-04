@@ -28,14 +28,8 @@ SEARCH_BOX_STYLE = """
 """
 
 TABS_STYLE = """
-    QTabWidget {
-        background: transparent;
-    }
     QTabWidget::pane { 
         border-top: 1px solid #3b4261; 
-        background: transparent;
-    }
-    QTabBar {
         background: transparent;
     }
     QTabBar::tab { 
@@ -66,9 +60,6 @@ TREE_WIDGET_STYLE = """
         outline: none; 
         show-decoration-selected: 1; 
     } 
-    QTreeWidget::viewport {
-        background-color: transparent;
-    }
     QTreeWidget::branch { 
         background-color: #1e2030; 
     }
