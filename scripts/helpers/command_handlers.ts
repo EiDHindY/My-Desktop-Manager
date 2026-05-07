@@ -135,7 +135,10 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
 
 export function handleCreateLiveDesktop(folderName: string, sessionPath: string, currentDesktops: Desktop[], currentUuid: string) {
     try {
-        const name = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "New Desktop"`);
+        // BUG-05 FIX: Use __dirname instead of a hardcoded absolute path so the
+        // app keeps working if the project directory is ever moved.
+        const renamePy = join(__dirname, '..', 'rename-box.py');
+        const name = runCommand(`'${renamePy}' "New Desktop"`);
         if (!name) return;
 
         const empties = currentDesktops.filter(d => {

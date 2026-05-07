@@ -48,7 +48,9 @@ export function saveSnapshot(snapshotName: string, templatesDir: string, session
         
         let isInFolder = false;
         for (const fName in sessionData.folders) {
-            if (sessionData.folders[fName].some((id: string) => id.split("___")[1] === idx.toString())) {
+            // BUG-09 FIX: Was matching by positional index (changes when desktops
+            // are added/removed). Match by UUID instead — it's stable forever.
+            if (sessionData.folders[fName].some((id: string) => id.split("___")[0] === d.uuid)) {
                 isInFolder = true;
                 break;
             }

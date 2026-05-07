@@ -12,7 +12,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QGraphicsDropShadowEffect, 
                              QInputDialog, QTreeWidgetItem, QMenu)
 from PyQt5.QtGui import QColor, QCursor, QFont, QBrush
-from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent, QFileSystemWatcher
+from PyQt5.QtCore import Qt, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QPointF, QEvent, QFileSystemWatcher
 
 # Helpers
 from helpers.window_fetcher import WindowFetcher
@@ -25,16 +25,24 @@ from helpers.folder_ops import (create_folder, import_folder, rename_lib_item,
                                 link_script, edit_script, go_to_folder_dir, delete_lib_item, add_app_desktop, deploy_selected)
 from helpers.navigation_logic import move_up, move_down, get_selected_uid
 from helpers.tree_manager import (apply_live_styling, add_live_desktop_item, 
-                                 populate_library_tree, populate_live_tree, update_live_priorities)
+                                 populate_library_tree, populate_live_tree, populate_notes_tree, update_live_priorities)
 from helpers.event_handler import handle_event
 from helpers.ui_factory import build_main_ui, force_window_focus, force_window_position
 
 CONFIG_DIR = Path.home() / ".config" / "desktop-manager"
 HISTORY_FILE = CONFIG_DIR / "history.json"
+UI_PID_FILE = Path("/tmp/desktop-manager-ui.pid")
 
 class SwitcherMenu(QWidget):
     def __init__(self, title_win, title_label, current_desktop_uuid, id_name_pairs):
         super().__init__()
+        # Write our PID so the launcher can signal us directly
+        import atexit
+        UI_PID_FILE.write_text(str(os.getpid()))
+        # BUG-01 FIX: Bind path value at registration time — Python 3.14 GC can
+        # null out module-level names before atexit fires if we close over the name.
+        _pid_path = str(UI_PID_FILE)
+        atexit.register(lambda p=_pid_path: Path(p).unlink(missing_ok=True))
         self.setWindowTitle(title_win)
         self.id_name_pairs = id_name_pairs
         self.current_desktop_uuid = current_desktop_uuid
@@ -58,6 +66,9 @@ class SwitcherMenu(QWidget):
         
         # Center the app exactly at the mouse cursor
         cursor_pos = QCursor.pos()
+        if cursor_pos.x() == 0 and cursor_pos.y() == 0:
+            cursor_pos = QPoint(self.screen_geom.width() // 2, self.screen_geom.height() // 2)
+            
         self.hud_x = cursor_pos.x() - (self.hud_width // 2)
         self.hud_y = cursor_pos.y() - (self.height_current // 2)
         
@@ -86,7 +97,7 @@ class SwitcherMenu(QWidget):
         self.saved_width = self.hud_width
         self.saved_height = self.height_current
         
-        # Initial position at the cursor
+        # Initial position
         cx = cursor_pos.x()
         cy = cursor_pos.y()
         self.setGeometry(cx - self.hud_width // 2, cy - self.height_current // 2, self.hud_width, self.height_current)
@@ -128,21 +139,28 @@ class SwitcherMenu(QWidget):
         self.watcher.directoryChanged.connect(lambda: QTimer.singleShot(500, self.refresh_library))
         
         # Watch history file for last_uuid changes
+        # BUG-02 FIX: If history.json doesn't exist yet, watch the config dir
+        # itself so we catch the moment it gets created for the first time.
         history_path = str(HISTORY_FILE)
         if os.path.exists(history_path):
             self.watcher.addPath(history_path)
+        else:
+            self.watcher.addPath(str(CONFIG_DIR))
         self.watcher.fileChanged.connect(self._on_history_changed)
+        self.watcher.directoryChanged.connect(self._on_config_dir_changed)
         
         self.lib_data = self.data_manager.load_library()
+        self.notes_data = self.data_manager.load_notes()
         self.populate_live(initial=True)
         self.populate_library()
+        self.populate_notes()
         self.update_note_btn()  # Set initial button state
         
         self.tabs.currentChanged.connect(self.on_tab_changed)
         
         self.fetcher = WindowFetcher()
         self.fetcher.finished.connect(self.apply_active_windows)
-        threading.Thread(target=self.fetcher.fetch_windows_bg, daemon=True).start()
+        self.fetcher.fetch_windows_bg()  # QThread-safe, no threading.Thread needed
         
         self.installEventFilter(self)
         self.search_entry.installEventFilter(self)
@@ -166,7 +184,8 @@ class SwitcherMenu(QWidget):
             if os.path.exists(HISTORY_FILE):
                 with open(HISTORY_FILE, 'r') as f:
                     return json.load(f).get("last_uuid", "")
-        except: pass
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass  # BUG-13 FIX: catch specific exceptions so real crashes surface
         return ""
 
     def _on_history_changed(self, path):
@@ -177,6 +196,12 @@ class SwitcherMenu(QWidget):
         if new_uuid != self.last_desktop_uuid:
             self.last_desktop_uuid = new_uuid
             QTimer.singleShot(0, lambda: self.populate_live(initial=False))
+
+    def _on_config_dir_changed(self, path):
+        """BUG-02 FIX: Pick up history.json the moment it's created."""
+        history_path = str(HISTORY_FILE)
+        if os.path.exists(history_path) and history_path not in self.watcher.files():
+            self.watcher.addPath(history_path)
 
     def check_current_desktop(self):
         if self._is_dragging: return # Don't snap while user is moving it
@@ -223,7 +248,7 @@ class SwitcherMenu(QWidget):
         active_count = sum(1 for uid, _ in physical_desktops if (int(uid.split("___")[1]) + 1) in self.active_kwin_indices)
         self.status_label.setText(f"A: {active_count} • E: {len(physical_desktops) - active_count}")
         self.tabs.setTabText(0, "Live")
-        QTimer.singleShot(1000, lambda: threading.Thread(target=self.fetcher.fetch_windows_bg, daemon=True).start())
+        QTimer.singleShot(1000, self.fetcher.fetch_windows_bg)  # QThread-safe
 
     def save_library(self):
         if self._is_populating: return
@@ -248,8 +273,15 @@ class SwitcherMenu(QWidget):
         old_session = self.data_manager.load_session()
         old_folders = old_session.get("folders", {})
 
-        # Safety: if tree is totally empty but we had data, abort
-        if root.childCount() == 0 and old_folders:
+        # BUG-03 FIX: Count actual desktop leaf items, not just top-level folder nodes.
+        # A tree can have folder headers (childCount > 0) but zero actual desktops inside.
+        total_tree_desktops = sum(
+            root.child(i).childCount()
+            for i in range(root.childCount())
+            if root.child(i).data(0, Qt.UserRole) == "FOLDER"
+        )
+        total_old_desktops = sum(len(v) for v in old_folders.values())
+        if total_tree_desktops == 0 and total_old_desktops > 0:
             return
 
         new_folders = {}
@@ -343,21 +375,20 @@ class SwitcherMenu(QWidget):
 
 
     def save_ui_state(self):
-        if self.width() > 100: 
-            self.data_manager.save_ui_state({
-                "width": self.width(), 
-                "height": self.height(), 
-                "opacity": self.windowOpacity(),
-                "x": self.x(),
-                "y": self.y(),
-                "ball_friction": getattr(self.ball, "_friction", 0.92),
-                "slingshot_enabled": getattr(self.ball, "_slingshot_enabled", False),
-                "goal_enabled": getattr(self.ball, "_goal_enabled", False)
-            })
+        is_collapsed = getattr(self, "is_collapsed", False)
+        state = {
+            "width": self.width() if not is_collapsed else getattr(self, "saved_width", 400), 
+            "height": self.height() if not is_collapsed else getattr(self, "saved_height", 420), 
+            "opacity": self.windowOpacity(),
+            "x": self.x(),
+            "y": self.y(),
+            "ball_friction": getattr(self.ball, "_friction", 0.92) if hasattr(self, "ball") else 0.92,
+            "slingshot_enabled": getattr(self.ball, "_slingshot_enabled", False) if hasattr(self, "ball") else False,
+            "goal_enabled": getattr(self.ball, "_goal_enabled", False) if hasattr(self, "ball") else False
+        }
+        self.data_manager.save_ui_state(state)
 
     def toggle_collapse(self):
-        from PyQt5.QtWidgets import QApplication
-        
         is_collapsed = not getattr(self, "is_collapsed", False)
         self.is_collapsed = is_collapsed
         
@@ -433,6 +464,35 @@ class SwitcherMenu(QWidget):
         try: populate_library_tree(self.tree, self.lib_data)
         finally: self._is_populating = False
 
+    def populate_notes(self):
+        self._is_populating = True
+        try: populate_notes_tree(self)
+        finally: self._is_populating = False
+
+    def save_notes(self):
+        if self._is_populating: return
+        data = {"folders": {}, "folder_order": [], "expanded": []}
+        root = self.notes_tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            f = root.child(i)
+            name = f.data(0, Qt.UserRole + 1)
+            data["folder_order"].append(name)
+            task_list = []
+            for j in range(f.childCount()):
+                task_item = f.child(j)
+                task_list.append({
+                    "id": task_item.data(0, Qt.UserRole),
+                    "text": task_item.data(0, Qt.UserRole + 1),
+                    "checked": task_item.checkState(0) == Qt.Checked,
+                    "details": task_item.data(0, Qt.UserRole + 2) or ""
+                })
+                if task_item.isExpanded():
+                    data["expanded"].append(task_item.data(0, Qt.UserRole))
+            data["folders"][name] = task_list
+            if f.isExpanded(): data["expanded"].append(name)
+        self.data_manager.save_notes(data)
+        self.notes_data = data
+
     def refresh_library(self):
         """Reload library from disk and update UI."""
         if self._is_populating: return
@@ -472,7 +532,14 @@ class SwitcherMenu(QWidget):
             self.note_btn.hide()
             self.open_scripts_btn.show()
             self.sync_btn.show()
-        else:
+        elif index == 2: # Notes tab
+            self.notes_data = self.data_manager.load_notes()
+            self.populate_notes()
+            self.cleanup_btn.hide()
+            self.note_btn.hide()
+            self.open_scripts_btn.hide()
+            self.sync_btn.hide()
+        else: # Live
             self.cleanup_btn.show()
             self.note_btn.show()
             self.open_scripts_btn.hide()
@@ -484,6 +551,16 @@ class SwitcherMenu(QWidget):
         from helpers.folder_ops import create_folder
         if self.tabs.currentIndex() == 1: # Templates tab
             create_folder(self)
+        elif self.tabs.currentIndex() == 2: # Notes tab
+            name, ok = QInputDialog.getText(self, "New Notes Folder", "Folder name:", text="")
+            if ok and name.strip():
+                self.notes_data.setdefault("folders", {})
+                self.notes_data.setdefault("folder_order", [])
+                if name.strip() not in self.notes_data["folders"]:
+                    self.notes_data["folders"][name.strip()] = []
+                    self.notes_data["folder_order"].append(name.strip())
+                    self.data_manager.save_notes(self.notes_data)
+                    self.populate_notes()
         else: # Live tab
             name, ok = QInputDialog.getText(self, "New Live Group", "Folder name:", text="")
             if ok and name.strip():
@@ -519,6 +596,93 @@ class SwitcherMenu(QWidget):
 
     def on_live_context_menu(self, pos): show_live_context_menu(self, pos)
     def on_lib_context_menu(self, pos): show_lib_context_menu(self, pos)
+    
+    def add_note_task(self):
+        text = self.note_input.text().strip()
+        if not text: return
+        self.note_input.clear()
+        
+        selected = self.notes_tree.currentItem()
+        target_folder = "root"
+        if selected:
+            target_folder = selected.data(0, Qt.UserRole + 1) if selected.data(0, Qt.UserRole) == "FOLDER" else selected.parent().data(0, Qt.UserRole + 1)
+        
+        self.notes_data.setdefault("folders", {})
+        self.notes_data.setdefault("folder_order", [])
+        
+        if target_folder not in self.notes_data["folders"]:
+            self.notes_data["folders"][target_folder] = []
+            
+        self.notes_data["folders"][target_folder].append({
+            "id": str(uuid.uuid4()),
+            "text": text,
+            "checked": False
+        })
+        self.data_manager.save_notes(self.notes_data)
+        self.populate_notes()
+        
+    def on_note_item_clicked(self, item, col):
+        uid = item.data(0, Qt.UserRole)
+        if uid == "FOLDER":
+            item.setExpanded(not item.isExpanded())
+            self.save_notes()
+            return
+            
+        # Detect if checkbox was clicked by comparing with saved state
+        was_checked = False
+        found = False
+        for tasks in self.notes_data.get("folders", {}).values():
+            for t in tasks:
+                if t.get("id") == uid:
+                    was_checked = t.get("checked", False)
+                    found = True; break
+            if found: break
+            
+        is_checked = (item.checkState(0) == Qt.Checked)
+        
+        if is_checked != was_checked:
+            # Checkbox clicked — just save and update strike-through
+            self.save_notes()
+            self.populate_notes()
+        else:
+            # Text clicked — toggle expansion
+            item.setExpanded(not item.isExpanded())
+            self.save_notes()
+
+    def on_note_context_menu(self, pos):
+        item = self.notes_tree.itemAt(pos)
+        if not item: return
+        menu = QMenu(self)
+        menu.setStyleSheet("QMenu { background: #2f334d; color: #c8d3f5; border: 1px solid #3b4261; border-radius: 6px; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #82aaff; color: #1e2030; }")
+        
+        if item.data(0, Qt.UserRole) == "FOLDER":
+            rename_action = menu.addAction("Rename Folder")
+            delete_action = menu.addAction("Delete Folder")
+            action = menu.exec_(self.notes_tree.viewport().mapToGlobal(pos))
+            if action == rename_action:
+                new_name, ok = QInputDialog.getText(self, "Rename", "New name:", text=item.text(0))
+                if ok and new_name.strip():
+                    item.setText(0, new_name.strip())
+                    item.setData(0, Qt.UserRole + 1, new_name.strip())
+                    self.save_notes()
+            elif action == delete_action:
+                parent = item.parent() or self.notes_tree.invisibleRootItem()
+                parent.removeChild(item)
+                self.save_notes()
+        else:
+            edit_action = menu.addAction("Edit Task")
+            delete_action = menu.addAction("Delete Task")
+            action = menu.exec_(self.notes_tree.viewport().mapToGlobal(pos))
+            if action == edit_action:
+                new_text, ok = QInputDialog.getText(self, "Edit Task", "Task text:", text=item.data(0, Qt.UserRole + 1))
+                if ok and new_text.strip():
+                    item.setText(0, new_text.strip())
+                    item.setData(0, Qt.UserRole + 1, new_text.strip())
+                    self.save_notes()
+            elif action == delete_action:
+                parent = item.parent() or self.notes_tree.invisibleRootItem()
+                parent.removeChild(item)
+                self.save_notes()
     def toggle_pin(self, name):
         if name in self.pinned_folders: self.pinned_folders.remove(name)
         else: self.pinned_folders.append(name)
@@ -556,28 +720,45 @@ class SwitcherMenu(QWidget):
         self.summon_flag = True
 
     def _check_summon(self):
-        from PyQt5.QtGui import QCursor
-        from PyQt5.QtCore import QPointF
-        
         if getattr(self, 'summon_flag', False):
             self.summon_flag = False
             if self.is_summoning: return
             
-            from PyQt5.QtWidgets import QApplication
             cursor_pos = QCursor.pos()
+            if cursor_pos.x() == 0 and cursor_pos.y() == 0:
+                screen = QApplication.primaryScreen().geometry()
+                cursor_pos = QPoint(screen.width() // 2, screen.height() // 2)
             
             if getattr(self, "is_collapsed", False) and hasattr(self, 'ball'):
-                orig_friction = self.ball._friction
-                self.ball._friction = 0.5 
+                self._summoning_via_signal = True
+                
+                # Move to cursor first (centered on ball size)
+                self.move(cursor_pos.x() - 20, cursor_pos.y() - 20)
+                
+                # Expand and Focus
                 if self.is_collapsed: self.toggle_collapse()
-                self.is_summoning = True
-                self.ball.summon_to(cursor_pos)
-                QTimer.singleShot(1000, lambda: setattr(self.ball, '_friction', orig_friction))
+                
+                self.show()
+                self.raise_()
+                self.activateWindow()
+                self.search_entry.setFocus()
             else:
-                self.is_summoning = True
+                # Already visible and expanded — just focus it, don't move it
+                # BUG-07 FIX: Set flag BEFORE activateWindow() so the WindowActivate
+                # handler knows this was triggered by SIGUSR1 (not by mouse hover).
+                self._summoning_via_signal = True
+                self.show()
+                self.raise_()
+                self.activateWindow()
+                self.search_entry.setFocus()
+                # is_summoning stays False — no animation needed
                 
         if getattr(self, 'is_summoning', False):
             mouse_pos = QCursor.pos()
+            if mouse_pos.x() == 0 and mouse_pos.y() == 0:
+                screen = QApplication.primaryScreen().geometry()
+                mouse_pos = QPoint(screen.width() // 2, screen.height() // 2)
+                
             target_x = mouse_pos.x() - self.width() // 2
             target_y = mouse_pos.y() - self.height() // 2
             

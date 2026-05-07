@@ -28,13 +28,15 @@ export function launchAppsForDesktop(uuid: string, waitUntilFinished: boolean = 
             apps.forEach((cmd: string) => {
                 if (waitUntilFinished) {
                     try {
-                        execSync(cmd, { stdio: 'ignore', env: { ...process.env, DISPLAY: ':0' } });
+                        // BUG-16 FIX: Was overriding DISPLAY=':0' which breaks on Wayland
+                        // or non-default displays. Inherit env as-is instead.
+                        execSync(cmd, { stdio: 'ignore' });
                     } catch (e) {}
                 } else {
                     spawn('bash', ['-c', cmd], {
                         detached: true,
-                        stdio: 'ignore',
-                        env: { ...process.env, DISPLAY: ':0' }
+                        stdio: 'ignore'
+                        // BUG-16 FIX: env intentionally omitted — inherits from process
                     }).unref();
                 }
             });

@@ -27,6 +27,7 @@ class DataManager:
         self.session_file = self.config_dir / "session.json"
         self.ui_state_file = self.config_dir / "ui_state.json"
         self.history_file = self.config_dir / "history.json"
+        self.notes_file = self.config_dir / "notes.json"
 
     def load_library(self):
         templates_dir = self.config_dir / "templates"
@@ -72,8 +73,9 @@ class DataManager:
         active_filenames = []
         for name_orig, tasks in folders.items():
             name = name_orig.strip()
-            if not tasks and name != "PM Tasks": # Safety: Don't wipe unless it's intentionally empty
-                continue
+            # BUG-04 FIX: Previously skipped empty folders except "PM Tasks", causing
+            # any intentionally empty folder to be silently deleted on next save.
+            # An empty task list is a perfectly valid state — always write it.
             filename = name.lower().replace(" ", "_") + ".json"
             active_filenames.append(filename)
             filepath = templates_dir / filename
@@ -105,10 +107,25 @@ class DataManager:
         return save_json(self.session_file, data)
 
     def load_ui_state(self):
-        return load_json(self.ui_state_file, {"width": 400, "height": 420, "opacity": 0.95})
+        return load_json(self.ui_state_file, {
+            "width": 400, 
+            "height": 420, 
+            "opacity": 0.95,
+            "ball_friction": 0.92,
+            "slingshot_enabled": False,
+            "goal_enabled": False
+        })
 
     def save_ui_state(self, data):
         return save_json(self.ui_state_file, data)
 
     def load_history(self):
-        return load_json(self.history_file, [])
+        # BUG-15 FIX: Was returning a list [] as default, but all callers treat
+        # history.json as a dict with a "last_uuid" key. Now consistent.
+        return load_json(self.history_file, {"last_uuid": ""})
+
+    def load_notes(self):
+        return load_json(self.notes_file, {"folders": {"root": []}, "folder_order": ["root"], "expanded": ["root"]})
+
+    def save_notes(self, data):
+        return save_json(self.notes_file, data)

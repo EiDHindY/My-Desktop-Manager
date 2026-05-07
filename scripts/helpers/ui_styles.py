@@ -72,8 +72,7 @@ TREE_WIDGET_STYLE = """
         background-color: rgba(47, 51, 77, 0.7); 
     } 
     QTreeWidget::item:selected { 
-        background-color: rgba(130, 170, 255, 0.85); 
-        color: #1e2030; 
+        background-color: rgba(130, 170, 255, 0.15); 
     }
     QScrollBar:vertical { 
         background: transparent; 
@@ -94,6 +93,20 @@ TREE_WIDGET_STYLE = """
     }
     QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { 
         height: 0; 
+    }
+    QTreeWidget::indicator {
+        width: 14px;
+        height: 14px;
+        border: 1.5px solid #565f89;
+        border-radius: 3px;
+        background: #1a1b26;
+    }
+    QTreeWidget::indicator:hover {
+        border: 1.5px solid #82aaff;
+    }
+    QTreeWidget::indicator:checked {
+        background: #82aaff;
+        border: 1.5px solid #82aaff;
     }
 """
 

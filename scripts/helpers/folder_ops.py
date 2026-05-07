@@ -26,7 +26,9 @@ def create_folder(parent):
         folder_item.setFont(0, QFont("Inter", 10, QFont.DemiBold))
         folder_item.setForeground(0, QBrush(QColor("#bb9af7")))
         folder_item.setData(0, Qt.UserRole, "FOLDER")
-        folder_item.setData(0, Qt.UserRole + 1, name.strip())
+        # BUG-12 FIX: was storing name.strip() (original) instead of folder_name
+        # (the deduplicated variable), causing duplicate folder keys in save logic.
+        folder_item.setData(0, Qt.UserRole + 1, folder_name)
         folder_item.setFlags(folder_item.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
         parent.tree.addTopLevelItem(folder_item)
         folder_item.setExpanded(False)

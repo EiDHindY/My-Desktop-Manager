@@ -29,16 +29,17 @@ def build_main_ui(parent):
     parent.tabs = QTabWidget()
     parent.tabs.setDocumentMode(True)
     parent.tabs.tabBar().setUsesScrollButtons(False)
+    parent.tabs.tabBar().setCursor(Qt.PointingHandCursor)
     parent.tabs.setStyleSheet(TABS_STYLE)
     
     parent.live_list = create_tree_widget(parent, parent.on_live_item_clicked, parent.on_live_context_menu)
     parent.live_list.setItemDelegate(OutlineDelegate(parent.live_list))
-    parent.live_list.itemExpanded.connect(lambda item: on_exp(parent, item, True))
-    parent.live_list.itemCollapsed.connect(lambda item: on_col(parent, item, True))
+    parent.live_list.itemExpanded.connect(lambda item: on_exp(parent, item, 0))
+    parent.live_list.itemCollapsed.connect(lambda item: on_col(parent, item, 0))
     
     parent.tree = create_tree_widget(parent, parent.on_lib_item_clicked, parent.on_lib_context_menu)
-    parent.tree.itemExpanded.connect(lambda item: on_exp(parent, item, False))
-    parent.tree.itemCollapsed.connect(lambda item: on_col(parent, item, False))
+    parent.tree.itemExpanded.connect(lambda item: on_exp(parent, item, 1))
+    parent.tree.itemCollapsed.connect(lambda item: on_col(parent, item, 1))
     
     parent.sync_btn = QPushButton("Sync")
     parent.sync_btn.setStyleSheet(BTN_REFRESH_STYLE)
@@ -60,6 +61,26 @@ def build_main_ui(parent):
     templates_layout.addWidget(parent.tree)
     
     parent.tabs.addTab(templates_page, "Temps")
+
+    # Notes page
+    notes_page = QWidget()
+    notes_layout = QVBoxLayout(notes_page)
+    notes_layout.setContentsMargins(0, 0, 0, 0)
+    notes_layout.setSpacing(4)
+    
+    parent.notes_tree = create_tree_widget(parent, parent.on_note_item_clicked, parent.on_note_context_menu)
+    parent.notes_tree.setRootIsDecorated(True)  # Show expand arrows for tasks
+    parent.notes_tree.itemExpanded.connect(lambda item: on_exp(parent, item, 2))
+    parent.notes_tree.itemCollapsed.connect(lambda item: on_col(parent, item, 2))
+    notes_layout.addWidget(parent.notes_tree)
+    
+    parent.note_input = QLineEdit()
+    parent.note_input.setPlaceholderText("Add a new task (Enter to save)...")
+    parent.note_input.setStyleSheet(SEARCH_BOX_STYLE)
+    parent.note_input.returnPressed.connect(parent.add_note_task)
+    notes_layout.addWidget(parent.note_input)
+    
+    parent.tabs.addTab(notes_page, "Notes")
     parent.tabs.setCornerWidget(parent.search_entry, Qt.TopLeftCorner)
     
     container_layout.addWidget(parent.tabs)
@@ -157,17 +178,19 @@ def create_tab_page(widget):
     l.addWidget(widget)
     return page
 
-def on_exp(parent, item, is_live):
+def on_exp(parent, item, tab_index):
     if getattr(parent, "_is_populating", False): return
     if item.data(0, Qt.UserRole) == "FOLDER": item.setIcon(0, QIcon.fromTheme("folder-open"))
-    if is_live: parent.save_session()
-    else: parent.save_library()
+    if tab_index == 0: parent.save_session()
+    elif tab_index == 1: parent.save_library()
+    else: parent.save_notes()
 
-def on_col(parent, item, is_live):
+def on_col(parent, item, tab_index):
     if getattr(parent, "_is_populating", False): return
     if item.data(0, Qt.UserRole) == "FOLDER": item.setIcon(0, QIcon.fromTheme("folder"))
-    if is_live: parent.save_session()
-    else: parent.save_library()
+    if tab_index == 0: parent.save_session()
+    elif tab_index == 1: parent.save_library()
+    else: parent.save_notes()
 
 def force_window_focus(title):
     try:

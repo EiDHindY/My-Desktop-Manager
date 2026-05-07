@@ -40,7 +40,9 @@ export function buildMenuCommand(currentDesktops: Desktop[], currentDesktopUuid:
     
     for (const d of sorted) {
         const label = d.name || `Desktop ${d.position}`;
-        cmd += ` "${d.uuid}___${d.position}" "${label}"`;
+        // BUG-11 FIX: A desktop name with a " in it breaks the shell command string.
+        const safeLabel = label.replace(/"/g, '\\"');
+        cmd += ` "${d.uuid}___${d.position}" "${safeLabel}"`;
     }
     
     cmd += ` "ACTION_CHROME" "  🌐 Launch Chrome Profile..."`;

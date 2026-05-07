@@ -13,12 +13,14 @@ def handle_event(parent, obj, event):
         parent.container.style().unpolish(parent.container)
         parent.container.style().polish(parent.container)
         
-        # If the app is focused (e.g. via Ctrl+Space global shortcut), expand it
-        # But ONLY if the mouse isn't over the ball (prevents auto-expand on hover/focus-follows-mouse)
+        # BUG-07 FIX: ball.underMouse() is unreliable on XWayland when WindowActivate
+        # is fired by a SIGUSR1 signal. Use an explicit flag set by _check_summon instead.
         if getattr(parent, "is_collapsed", False):
-            if not parent.ball.underMouse():
+            if getattr(parent, "_summoning_via_signal", False) or not parent.ball.underMouse():
+                parent._summoning_via_signal = False
                 parent.toggle_collapse()
         else:
+            parent._summoning_via_signal = False
             parent.search_entry.setFocus()
         return True
     elif event.type() == QEvent.WindowDeactivate:
@@ -26,35 +28,45 @@ def handle_event(parent, obj, event):
         parent.container.style().unpolish(parent.container)
         parent.container.style().polish(parent.container)
 
-    if obj == parent.live_list.viewport():
+    if obj in (getattr(parent, "live_list", None) and parent.live_list.viewport(),
+               getattr(parent, "tree", None) and parent.tree.viewport(),
+               getattr(parent, "notes_tree", None) and parent.notes_tree.viewport()):
+        
+        tree = obj.parent()
         if event.type() == QEvent.MouseMove:
-            item = parent.live_list.itemAt(event.pos())
-            tree = parent.live_list
+            item = tree.itemAt(event.pos())
             old_hover = getattr(tree, "_hovered_notes_uid", None)
             new_hover = None
+            
             if item:
-                rect = tree.visualItemRect(item)
-                if event.pos().x() >= rect.right() - 40:
-                    uid = item.data(0, Qt.UserRole)
-                    if uid and item.data(0, Qt.UserRole + 5):
-                        new_hover = uid
+                # Normal item hover cursor
+                parent.setCursor(Qt.PointingHandCursor)
+                
+                # Special Notes Icon hover logic for live_list
+                if tree == getattr(parent, "live_list", None):
+                    rect = tree.visualItemRect(item)
+                    if event.pos().x() >= rect.right() - 40:
+                        uid = item.data(0, Qt.UserRole)
+                        if uid and item.data(0, Qt.UserRole + 5):
+                            new_hover = uid
+            else:
+                parent.setCursor(Qt.ArrowCursor)
+                
             if old_hover != new_hover:
                 tree._hovered_notes_uid = new_hover
                 tree.viewport().update()
-                parent.setCursor(Qt.PointingHandCursor if new_hover else Qt.ArrowCursor)
                     
         elif event.type() == QEvent.Leave:
-            tree = parent.live_list
             if getattr(tree, "_hovered_notes_uid", None) is not None:
                 tree._hovered_notes_uid = None
                 tree.viewport().update()
-                parent.setCursor(Qt.ArrowCursor)
+            parent.setCursor(Qt.ArrowCursor)
                 
         elif event.type() == QEvent.MouseButtonRelease:
             if event.button() == Qt.LeftButton:
-                item = parent.live_list.itemAt(event.pos())
-                if item:
-                    rect = parent.live_list.visualItemRect(item)
+                item = tree.itemAt(event.pos())
+                if item and tree == getattr(parent, "live_list", None):
+                    rect = tree.visualItemRect(item)
                     if event.pos().x() >= rect.right() - 40:
                         uid = item.data(0, Qt.UserRole)
                         if uid and uid != "FOLDER":
@@ -77,7 +89,8 @@ def handle_event(parent, obj, event):
         
         # Alphanumeric keys: Redirect to search if not already focused
         if text and text.isprintable() and not (mod & (Qt.ControlModifier | Qt.AltModifier)):
-            if obj != parent.search_entry:
+            from PyQt5.QtWidgets import QTextEdit
+            if obj != parent.search_entry and obj != getattr(parent, "note_input", None) and not isinstance(obj, QTextEdit):
                 parent.search_entry.setFocus()
                 parent.search_entry.insert(text)
                 return True

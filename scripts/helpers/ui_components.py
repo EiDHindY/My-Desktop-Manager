@@ -1,9 +1,11 @@
 from PyQt5.QtWidgets import (QStyledItemDelegate, QTreeWidget, QTreeWidgetItem, QAbstractItemView,
                              QDialog, QVBoxLayout, QLabel, QCheckBox, QListWidget, QListWidgetItem,
-                             QHBoxLayout, QPushButton, QSizePolicy, QWidget, QTextEdit, QGraphicsDropShadowEffect)
+                             QHBoxLayout, QPushButton, QSizePolicy, QWidget, QTextEdit, QGraphicsDropShadowEffect,
+                             QApplication, QMenu, QActionGroup, QInputDialog, QSizeGrip)
 from PyQt5.QtCore import Qt, QTimer, QRect, QSize, QPoint, QPointF
 from PyQt5.QtGui import QPainter, QPen, QColor, QIcon, QFont, QBrush, QPainterPath, QLinearGradient
 import time
+import random
 from helpers.ui_styles import (SELECTION_DIALOG_STYLE, SELECTION_LABEL_STYLE, CHECKBOX_STYLE,
                                SELECTION_LIST_STYLE, BTN_OK_STYLE, BTN_CANCEL_STYLE, NOTE_POPUP_STYLE)
 
@@ -12,21 +14,26 @@ class OutlineDelegate(QStyledItemDelegate):
         # Draw the standard item first
         super().paint(painter, option, index)
         
-        # Check if this item is the "Current" desktop
+        # Full highlight for the current desktop
         is_current = index.data(Qt.UserRole + 4)
         if is_current:
             painter.save()
             painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(Qt.NoPen)
             
-            # Use a clean 1px pen for the "outline"
-            pen = QPen(QColor("#82aaff"), 1.0)
-            painter.setPen(pen)
-            
-            # Adjust the rectangle to be perfectly inside the item bounds
+            # Eye-catchy saturated gradient highlight
             rect = option.rect.adjusted(2, 2, -2, -2)
+            gradient = QLinearGradient(rect.topLeft(), rect.topRight())
+            gradient.setColorAt(0.0, QColor(60, 130, 255, 100)) # Vibrant blue on the left
+            gradient.setColorAt(1.0, QColor(60, 130, 255, 30))  # Fades out to the right
             
-            # Draw a rounded rectangle for a premium look
+            painter.setBrush(gradient)
             painter.drawRoundedRect(rect, 4, 4)
+            
+            # Add a striking accent line on the left edge
+            painter.setPen(QPen(QColor(100, 180, 255, 255), 3.0))
+            painter.drawLine(rect.topLeft() + QPoint(0, 2), rect.bottomLeft() - QPoint(0, 2))
+            
             painter.restore()
             
         # Draw Notes Icon if present
@@ -63,35 +70,48 @@ class OutlineDelegate(QStyledItemDelegate):
             painter.restore()
             icon.paint(painter, icon_rect)
 
-        # Draw "← back" indicator for the previous desktop (where Ctrl+R goes)
+        # Draw indicator for the previous desktop (where Ctrl+R goes)
         is_previous = index.data(Qt.UserRole + 6)
         if is_previous:
             painter.save()
             painter.setRenderHint(QPainter.Antialiasing)
             
+            # Draw the outline around the previous desktop item (subtle amber)
+            pen = QPen(QColor(255, 185, 100, 100), 0.3) # Very thin and semi-transparent
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            outline_rect = option.rect.adjusted(2, 2, -2, -2)
+            painter.drawRoundedRect(outline_rect, 4, 4)
+            
+            painter.restore()
+            
+        # Draw Quick Plus Icon for Folders on Hover
+        if index.data(Qt.UserRole) == "FOLDER" and option.state & 128: # 128 is QStyle.State_MouseOver
+            painter.save()
+            painter.setRenderHint(QPainter.Antialiasing)
+            
+            # Draw on the far right
             rect = option.rect
-            # Draw a small pill badge on the right edge showing "←"
-            font = painter.font()
-            font.setPointSize(7)
-            font.setBold(True)
-            painter.setFont(font)
+            btn_size = 20
+            btn_rect = QRect(rect.right() - btn_size - 10, rect.top() + (rect.height() - btn_size) // 2, btn_size, btn_size)
             
-            badge_w, badge_h = 20, 14
-            badge_x = rect.right() - badge_w - 4
-            badge_y = rect.top() + (rect.height() - badge_h) // 2
-            badge_rect = QRect(badge_x, badge_y, badge_w, badge_h)
-            
-            # Subtle amber/gold pill to distinguish from the blue current-desktop outline
+            painter.setBrush(QColor(130, 170, 255, 80))
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(255, 185, 100, 40))
-            painter.drawRoundedRect(badge_rect, 7, 7)
+            painter.drawRoundedRect(btn_rect, 4, 4)
             
-            painter.setPen(QColor(255, 185, 100, 200))
-            painter.drawText(badge_rect, Qt.AlignCenter, "←")
+            painter.setPen(QPen(QColor(255, 255, 255, 220), 1.5))
+            c = btn_rect.center()
+            painter.drawLine(c.x() - 5, c.y(), c.x() + 5, c.y())
+            painter.drawLine(c.x(), c.y() - 5, c.x(), c.y() + 5)
             
             painter.restore()
 
+
 class FolderTreeWidget(QTreeWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+
     def dropEvent(self, event):
         dragged = self.currentItem()
         if dragged is None: return event.ignore()
@@ -140,14 +160,66 @@ class FolderTreeWidget(QTreeWidget):
             event.ignore()
         QTimer.singleShot(50, self._save_after_drop)
     
+    def mouseMoveEvent(self, event):
+        item = self.itemAt(event.pos())
+        if item:
+            is_folder = item.data(0, Qt.UserRole) == "FOLDER"
+            is_checkable = bool(item.flags() & Qt.ItemIsUserCheckable)
+            
+            if is_folder:
+                self.viewport().setCursor(Qt.PointingHandCursor)
+            elif is_checkable:
+                # Heuristic to find checkbox: indentation + fixed width
+                depth = 0
+                temp = item
+                while temp.parent():
+                    depth += 1
+                    temp = temp.parent()
+                
+                # viewport indentation * depth + small offset for the icon/checkbox
+                indent = self.indentation() * depth
+                x = event.pos().x()
+                
+                # Checkbox is typically in the first 25-30 pixels after indentation
+                if indent <= x <= indent + 30:
+                    self.viewport().setCursor(Qt.PointingHandCursor)
+                else:
+                    self.viewport().setCursor(Qt.ArrowCursor)
+            else:
+                self.viewport().setCursor(Qt.ArrowCursor)
+        else:
+            self.viewport().setCursor(Qt.ArrowCursor)
+        super().mouseMoveEvent(event)
+        # Force repaint to show/hide the hover icon
+        self.viewport().update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            item = self.itemAt(event.pos())
+            if item and item.data(0, Qt.UserRole) == "FOLDER":
+                # Check if click is in the '+' icon area (far right)
+                if event.pos().x() > self.viewport().width() - 40:
+                    import sys
+                    fn = item.data(0, Qt.UserRole + 1) or item.text(0).strip()
+                    # Trigger the orchestrator command
+                    sys.exit(print(f"CREATE_LIVE_DESKTOP:{fn}", flush=True) or 0)
+        super().mousePressEvent(event)
+
+
+    
     def _save_after_drop(self):
         parent = self.parent()
         while parent:
             if hasattr(parent, 'save_session') and hasattr(parent, 'tabs'):
-                if parent.tabs.currentIndex() == 0:
+                idx = parent.tabs.currentIndex()
+                if idx == 0:
                     parent.save_session()
-                else:
+                elif idx == 1:
                     parent.save_library()
+                else:
+                    parent.save_notes()
+                    # QTreeWidget destroys embedded widgets on drop, so rebuild
+                    parent.populate_notes()
                 return
             parent = parent.parent()
 
@@ -478,7 +550,6 @@ class BallWidget(QPushButton):
         window = self.window()
         
         # Ctrl key to stop
-        from PyQt5.QtWidgets import QApplication
         if QApplication.keyboardModifiers() & Qt.ControlModifier:
             self._momentum_timer.stop()
             self._is_coasting = False
@@ -491,7 +562,6 @@ class BallWidget(QPushButton):
         new_pos = window.pos() + step.toPoint()
         
         # Screen boundaries
-        from PyQt5.QtWidgets import QApplication
         screen = QApplication.primaryScreen().geometry()
         
         # Bounce off edges
@@ -561,9 +631,34 @@ class BallWidget(QPushButton):
                 if hasattr(window, 'save_ui_state'):
                     window.save_ui_state()
 
+    # ── Summon Feature ──────────────────────────────────────────────
+    def summon_to(self, target_pos):
+        """BUG FIX: Re-implemented missing method. Gives the ball a strong kick towards target."""
+        # Stop existing momentum
+        self._momentum_timer.stop()
+        self._is_coasting = False
+        
+        # Calculate vector to target (target_pos is the cursor position)
+        window = self.window()
+        cur_pos = window.pos()
+        # Target the center of where the 40x40 ball is
+        diff = target_pos - (cur_pos + QPoint(20, 20))
+        
+        # Give it a strong velocity towards cursor
+        # If distance is small, don't move too fast
+        dist = (diff.x()**2 + diff.y()**2)**0.5
+        if dist > 5:
+            # Normalize and multiply
+            self._velocity = QPointF(diff.x() * 15.0, diff.y() * 15.0)
+            self._is_coasting = True
+            self._last_tick_time = time.time()
+            self._momentum_timer.start(10)
+        else:
+            # Already close enough
+            self._velocity = QPointF(0, 0)
+
     # ── Speed Settings Menu ─────────────────────────────────────────
     def show_speed_menu(self, pos):
-        from PyQt5.QtWidgets import QMenu, QActionGroup
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
@@ -620,8 +715,7 @@ class BallWidget(QPushButton):
         moving_goal_action.setCheckable(True)
         moving_goal_action.setChecked(self._moving_goal_enabled)
         moving_goal_action.triggered.connect(self.toggle_moving_goal)
-        
-        moving_goal_action.triggered.connect(self.toggle_moving_goal)
+        # BUG-06 FIX: duplicate connection removed (was connected twice — toggle reversed itself)
         
         menu.addSeparator()
         menu.addAction("Hint: Hold Ctrl to stop • Hold Alt to slingshot").setEnabled(False)
@@ -748,7 +842,6 @@ class GoalWidget(QWidget):
             self.setGeometry(int(pos.x()), int(self._curr_y), self.width(), self.height())
         
     def spawn_randomly(self):
-        from PyQt5.QtWidgets import QApplication
         screen = QApplication.primaryScreen().geometry()
         
         self._edge = random.choice(["left", "right", "top"])
@@ -971,7 +1064,6 @@ class NoteEditorPopup(QWidget):
         layout.addWidget(btn_row)
 
         # Add size grip to bottom right corner
-        from PyQt5.QtWidgets import QSizeGrip
         grip_layout = QHBoxLayout()
         grip_layout.setContentsMargins(0, 0, 0, 0)
         grip_layout.addStretch()
@@ -1014,7 +1106,13 @@ class NoteEditorPopup(QWidget):
     def show_note(self, title, text, pos):
         self.title_label.setText(f"📝  {title}")
         self.text_edit.setPlainText(text)
-        self.move(pos.x(), pos.y() - self.height() - 10)
+        # BUG-14 FIX: Clamp position so the popup can't appear off-screen.
+        from PyQt5.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().geometry()
+        x = max(0, min(pos.x(), screen.width() - self.width()))
+        y = pos.y() - self.height() - 10
+        y = max(0, min(y, screen.height() - self.height()))
+        self.move(x, y)
         self.show()
         self.text_edit.setFocus()
         
