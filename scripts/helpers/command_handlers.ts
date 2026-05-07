@@ -204,7 +204,6 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string) 
         if (!existsSync(sessionPath)) return;
         const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
         const uids: string[] = data.folders?.[folderName] || [];
-        if (uids.length === 0) return;
 
         for (const fullId of uids) {
             const parts = fullId.split("___");

@@ -146,6 +146,9 @@ class SwitcherMenu(QWidget):
         
         self.installEventFilter(self)
         self.search_entry.installEventFilter(self)
+        self.live_list.installEventFilter(self)
+        self.tree.installEventFilter(self)
+        self.tabs.installEventFilter(self)
         self.live_list.viewport().installEventFilter(self)
         
         self.force_focus_title = title_win
