@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, accessSync, constants, mkdirSync } from 'fs';
+import { join, basename, extname } from 'path';
 import { execSync } from 'child_process';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
 import { Desktop } from './desktop_utils';
@@ -133,12 +133,43 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
     }
 }
 
-export function handleCreateLiveDesktop(folderName: string, sessionPath: string, currentDesktops: Desktop[], currentUuid: string) {
+export function handleCreateTemplate(folderName: string) {
     try {
-        // BUG-05 FIX: Use __dirname instead of a hardcoded absolute path so the
-        // app keeps working if the project directory is ever moved.
-        const renamePy = join(__dirname, '..', 'rename-box.py');
-        const name = runCommand(`'${renamePy}' "New Desktop"`);
+        const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+        const templatesDir = join(libraryDir, 'templates');
+        if (!existsSync(templatesDir)) {
+            mkdirSync(templatesDir, { recursive: true });
+        }
+        const filename = folderName.toLowerCase().replace(/\s+/g, '_') + '.json';
+        const templatePath = join(templatesDir, filename);
+
+        if (existsSync(templatePath)) {
+            runCommand(`notify-send "Desktop Manager" "⚠️ Template '${folderName}' already exists."`);
+            return;
+        }
+
+        const templateData = {
+            name: folderName,
+            tasks: []
+        };
+
+        writeFileSync(templatePath, JSON.stringify(templateData, null, 2));
+        runCommand(`notify-send "Desktop Manager" "📁 Created new template '${folderName}'"`);
+    } catch (e) {
+        console.error("Create Template error:", e);
+    }
+}
+
+export function handleCreateLiveDesktop(folderName: string, sessionPath: string, currentDesktops: Desktop[], currentUuid: string, providedName: string = "") {
+    try {
+        let name = providedName;
+        
+        if (!name) {
+            // Correct path to rename-box.py in the python_ui directory
+            const renamePy = join(__dirname, '..', '..', 'python_ui', 'rename-box.py');
+            name = runCommand(`'${renamePy}' "New Desktop"`) || "";
+        }
+        
         if (!name) return;
 
         const empties = currentDesktops.filter(d => {
@@ -146,9 +177,16 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
             return isNameEmpty && d.uuid !== currentUuid;
         });
 
-        if (empties.length === 0) return runCommand(`kdialog --msgbox "No empty desktops available (excluding your current one)."`);
+        console.log(`Found ${empties.length} empty desktops.`);
+
+        if (empties.length === 0) {
+            runCommand(`kdialog --msgbox "No empty desktops available (excluding your current one)."`);
+            return;
+        }
 
         const dest = empties[0];
+        console.log(`Targeting desktop: ${dest.uuid} (position ${dest.position})`);
+        
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${name}"`);
 
         let session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
@@ -156,12 +194,17 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         if (!session.folders[folderName]) session.folders[folderName] = [];
         
         const entry = `${dest.uuid}___${dest.position}`;
-        for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
+        for (const f of Object.keys(session.folders)) {
+            session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
+        }
         session.folders[folderName].push(entry);
 
+        console.log(`Saving session to ${sessionPath}...`);
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));
         runCommand(`notify-send "Desktop Manager" "➕ Created '${name}' in '${folderName}'"`);
-    } catch (e) {}
+    } catch (e) {
+        console.error("Error in handleCreateLiveDesktop:", e);
+    }
 }
 
 export function handleUngroupDesktop(result: string, sessionPath: string) {
@@ -202,7 +245,7 @@ export function handleRemoveLibraryFolder(folderName: string, templatesDir: stri
     } catch (e: any) {}
 }
 
-export function handleRemoveLiveFolder(folderName: string, sessionPath: string) {
+export function handleRemoveLiveFolder(folderName: string, sessionPath: string, keepFolder: boolean = false) {
     try {
         if (!existsSync(sessionPath)) return;
         const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
@@ -223,11 +266,18 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string) 
             if (data.startup_apps) delete data.startup_apps[uuid];
         }
 
-        if (data.folders) delete data.folders[folderName];
-        if (data.folder_order) data.folder_order = data.folder_order.filter((f: string) => f !== folderName);
+        if (!keepFolder) {
+            if (data.folders) delete data.folders[folderName];
+            if (data.folder_order) data.folder_order = data.folder_order.filter((f: string) => f !== folderName);
+            runCommand(`notify-send "Desktop Manager" "🧹 Folder '${folderName}' cleared and removed."`);
+        } else {
+            // Keep folder but reset its desktops list if you want, 
+            // though usually Wipe means clean the desktops but keep the assignment.
+            // Let's keep the desktops assigned to the folder but they are now named "Empty".
+            runCommand(`notify-send "Desktop Manager" "🧼 Folder '${folderName}' wiped clean (desktops kept)."`);
+        }
 
         writeFileSync(sessionPath, JSON.stringify(data, null, 2));
-        runCommand(`notify-send "Desktop Manager" "🧹 Folder '${folderName}' cleared and removed."`);
     } catch (e) {}
 }
 
@@ -272,5 +322,187 @@ export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string
         }
     } catch (e) {
         console.error("Clean Empty error:", e);
+    }
+}
+
+export function handleClearAll(currentDesktops: Desktop[], currentUuid: string, sessionPath: string) {
+    let clearedCount = 0;
+    try {
+        let session = existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, 'utf-8')) : {};
+        if (!session.folders) session.folders = {};
+        if (!session.desktop_notes) session.desktop_notes = {};
+
+        for (const d of currentDesktops) {
+            if (d.uuid === currentUuid) continue;
+            
+            const kwinIdx = (d.position + 1).toString();
+            closeWindowsOnDesktop(kwinIdx);
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${d.uuid}" "Empty"`);
+            clearedCount++;
+            
+            // Clean from session
+            const fullId = `${d.uuid}___${d.position}`;
+            for (const f of Object.keys(session.folders)) {
+                session.folders[f] = session.folders[f].filter((id: string) => id !== fullId);
+            }
+            delete session.desktop_notes[d.uuid];
+            if (session.startup_apps) delete session.startup_apps[d.uuid];
+        }
+        
+        writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+        runCommand(`notify-send "Desktop Manager" "💥 Nuked ${clearedCount} desktops (kept current)."`);
+    } catch (e) {
+        console.error("Clear All error:", e);
+    }
+}
+
+export function handleAddFolder(folderName: string, sessionPath: string) {
+    try {
+        let session = existsSync(sessionPath) ? JSON.parse(readFileSync(sessionPath, 'utf-8')) : {};
+        if (!session.folders) session.folders = {};
+        if (!session.folder_order) session.folder_order = [];
+        
+        if (!session.folders[folderName]) {
+            session.folders[folderName] = [];
+            session.folder_order.push(folderName);
+            writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+            runCommand(`notify-send "Desktop Manager" "📁 Created folder '${folderName}'"`);
+        } else {
+            runCommand(`notify-send "Desktop Manager" "⚠️ Folder '${folderName}' already exists."`);
+        }
+    } catch (e) {
+        console.error("Add Folder error:", e);
+    }
+}
+
+export function handleRenameFolder(oldName: string, newName: string, sessionPath: string) {
+    try {
+        if (!existsSync(sessionPath)) return;
+        let session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+        
+        if (session.folders && session.folders[oldName]) {
+            if (session.folders[newName]) {
+                runCommand(`notify-send "Desktop Manager" "⚠️ Folder '${newName}' already exists."`);
+                return;
+            }
+            
+            // Rename in folders dictionary
+            session.folders[newName] = session.folders[oldName];
+            delete session.folders[oldName];
+            
+            // Rename in folder_order array
+            if (session.folder_order) {
+                const idx = session.folder_order.indexOf(oldName);
+                if (idx !== -1) {
+                    session.folder_order[idx] = newName;
+                }
+            }
+            
+            writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+            runCommand(`notify-send "Desktop Manager" "✏️ Renamed folder to '${newName}'"`);
+        }
+    } catch (e) {
+        console.error("Rename Folder error:", e);
+    }
+}
+
+export function handleImportFolder(folderPath: string) {
+    try {
+        const folderName = basename(folderPath);
+        const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
+        const templatePath = join(templatesDir, `${folderName.toLowerCase().replace(/ /g, '_')}.json`);
+        
+        const tasks: any[] = [];
+        const files = readdirSync(folderPath);
+        for (const file of files) {
+            const fullPath = join(folderPath, file);
+            if (statSync(fullPath).isFile()) {
+                const isScript = fullPath.endsWith('.sh');
+                let isExec = false;
+                try {
+                    accessSync(fullPath, constants.X_OK);
+                    isExec = true;
+                } catch (e) {}
+                
+                if (isScript || isExec) {
+                    const ext = extname(file);
+                    const taskName = isScript ? basename(file, ext) : file;
+                    const cmd = isScript ? `bash '${fullPath}'` : `'${fullPath}'`;
+                    tasks.push({
+                        id: require('crypto').randomUUID(),
+                        name: taskName,
+                        script: cmd
+                    });
+                }
+            }
+        }
+        
+        if (tasks.length > 0) {
+            if (!existsSync(templatesDir)) {
+                mkdirSync(templatesDir, { recursive: true });
+            }
+            writeFileSync(templatePath, JSON.stringify({ tasks: tasks }, null, 2));
+            runCommand(`notify-send "Desktop Manager" "✅ Imported '${folderName}' with ${tasks.length} scripts."`);
+        } else {
+            runCommand(`notify-send "Desktop Manager" "⚠️ No scripts found in '${folderName}'."`);
+        }
+    } catch (e) {
+        console.error("Import Folder error:", e);
+        runCommand(`notify-send "Desktop Manager" "❌ Failed to import folder."`);
+    }
+}
+
+export function handleDeleteTemplate(filename: string) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (existsSync(templatePath)) {
+            unlinkSync(templatePath);
+            runCommand(`notify-send "Desktop Manager" "🗑️ Deleted template '${filename}'"`);
+        }
+    } catch (e) {
+        console.error("Delete Template error:", e);
+    }
+}
+
+export function handleDeleteTemplateTask(filename: string, taskId: string) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (existsSync(templatePath)) {
+            const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+            if (data.tasks) {
+                const initialLength = data.tasks.length;
+                data.tasks = data.tasks.filter((t: any) => t.id !== taskId);
+                if (data.tasks.length < initialLength) {
+                    writeFileSync(templatePath, JSON.stringify(data, null, 2));
+                    runCommand(`notify-send "Desktop Manager" "🗑️ Deleted script from template"`);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Delete Template Task error:", e);
+    }
+}
+
+export function handleImportScriptToTemplate(filename: string, scriptPath: string) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (existsSync(templatePath)) {
+            const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+            if (!data.tasks) data.tasks = [];
+            
+            const scriptName = basename(scriptPath);
+            const taskId = Date.now().toString(); // Simple unique ID
+            
+            data.tasks.push({
+                id: taskId,
+                name: scriptName.replace(/\.sh$/, ''),
+                script: scriptPath
+            });
+            
+            writeFileSync(templatePath, JSON.stringify(data, null, 2));
+            runCommand(`notify-send "Desktop Manager" "📜 Added '${scriptName}' to template"`);
+        }
+    } catch (e) {
+        console.error("Import Script to Template error:", e);
     }
 }

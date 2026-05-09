@@ -23,7 +23,7 @@ function main() {
     process.on('SIGINT', () => { process.exit(); });
     process.on('SIGTERM', () => { process.exit(); });
 
-    spawn(join(__dirname, 'desktop-tracker.py'), [], { detached: true, stdio: 'ignore' }).unref();
+    spawn(join(__dirname, '..', 'python_ui', 'desktop-tracker.py'), [], { detached: true, stdio: 'ignore' }).unref();
 
     let undoStack: any[] = [];
     const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
@@ -65,7 +65,7 @@ function main() {
             execSync('sleep 0.3');
         } else if (result.startsWith('RENAME:')) {
             const key = result.substring(7), id = key.split("___")[0], old = desktopMap.get(key) || "";
-            const fresh = runCommand(`'/home/dod/projects/Desktop Manager/scripts/rename-box.py' "${old}"`);
+            const fresh = runCommand(`'/home/dod/projects/Desktop Manager/python_ui/rename-box.py' "${old}"`);
             if (fresh) {
                 undoStack.push({ id, oldName: old });
                 runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "${fresh.replace(/"/g, '\\"')}"`);

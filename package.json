@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start:python": "npx ts-node shared_backend/label-desktop.ts",
+    "start": "cd electron_ui && npm start",
+    "start:electron": "cd electron_ui && npm start",
+    "rocket": "cd electron_ui && npm run rocket",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
