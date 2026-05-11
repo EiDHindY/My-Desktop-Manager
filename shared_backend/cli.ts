@@ -63,6 +63,8 @@ if (command.startsWith('RENAME:')) {
     const providedName = parts[1] || "";
     console.log(`Creating desktop in folder: "${folderName}" with name: "${providedName}"`);
     handleCreateLiveDesktop(folderName, sessionPath, currentDesktops, currentUuid, providedName);
+} else if (command.startsWith('SUMMON_FOLDER:')) {
+    handleSummonFolder(command.substring(14), sessionPath);
 } else if (command.startsWith('WIPE_FOLDER:')) {
     handleRemoveLiveFolder(command.substring(12), sessionPath, true);
 } else if (command.startsWith('REMOVE_LIVE_FOLDER:')) {

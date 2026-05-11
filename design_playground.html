@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Design Playground</title>
+    <style>
+        body {
+            background-color: #1a1b26;
+            color: #c8d3f5;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+        h2 { border-bottom: 1px solid #3b4261; padding-bottom: 10px; }
+        
+        /* Style A: Neon Cyberpunk */
+        .style-a {
+            padding: 20px;
+            width: 350px;
+            background-color: #24283b;
+            border: 2px solid #7aa2f7;
+            border-radius: 4px;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            cursor: pointer;
+        }
+        .style-a:hover {
+            background-color: #1a1b26;
+            border-color: #f7768e;
+            box-shadow: 0 0 15px rgba(247, 118, 142, 0.5);
+        }
+        .style-a-title {
+            color: #7aa2f7;
+            font-weight: bold;
+            font-size: 18px;
+            transition: all 0.2s;
+        }
+        .style-a:hover .style-a-title {
+            color: #f7768e;
+            text-shadow: 0 0 5px rgba(247, 118, 142, 0.5);
+        }
+
+        /* Style B: Frosted Glass */
+        .style-b {
+            padding: 20px;
+            width: 350px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.2);
+            transition: all 0.4s ease;
+            cursor: pointer;
+        }
+        .style-b:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Style C: Modern Minimalist */
+        .style-c {
+            padding: 20px;
+            width: 350px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            transition: all 0.15s ease-in-out;
+            cursor: pointer;
+        }
+        .style-c:hover {
+            background-color: #292e42;
+            border-color: #565f89;
+        }
+        .style-c-arrow {
+            opacity: 0;
+            margin-left: auto;
+            color: #7dcfff;
+            font-size: 12px;
+            padding: 2px 8px;
+            background-color: rgba(125, 207, 255, 0.1);
+            border-radius: 12px;
+            transition: opacity 0.2s;
+        }
+        .style-c:hover .style-c-arrow {
+            opacity: 1;
+        }
+
+        .flex-row { display: flex; align-items: center; gap: 10px; }
+        .desc { color: #a9b1d6; font-size: 13px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Live UI Playground</h2>
+    <p style="color: #9ece6a; margin-top: -20px;">Open this file in your browser. Hover over the cards to see the animations!</p>
+
+    <!-- Style A -->
+    <div>
+        <h3 style="color: #bb9af7;">Style A: Neon Cyberpunk</h3>
+        <div class="style-a">
+            <div class="flex-row">
+                <span style="font-size: 24px;">🔥</span>
+                <span class="style-a-title">Project Folder</span>
+            </div>
+            <p class="desc">High contrast, neon glow, and sharp transitions.</p>
+        </div>
+    </div>
+
+    <!-- Style B -->
+    <div>
+        <h3 style="color: #7aa2f7;">Style B: Frosted Glass (Glassmorphism)</h3>
+        <div class="style-b">
+            <div class="flex-row">
+                <span style="font-size: 24px;">🔮</span>
+                <span style="color: #fff; font-weight: 600; font-size: 18px; letter-spacing: 0.5px;">Project Folder</span>
+            </div>
+            <p class="desc" style="color: rgba(255,255,255,0.7);">Soft, premium feel. Transparent backgrounds with subtle blur and float animation.</p>
+        </div>
+    </div>
+
+    <!-- Style C -->
+    <div>
+        <h3 style="color: #e0af68;">Style C: Modern Minimalist</h3>
+        <div class="style-c">
+            <div class="flex-row">
+                <span style="font-size: 24px;">⚡</span>
+                <span style="color: #c8d3f5; font-weight: 500; font-size: 16px;">Project Folder</span>
+                <span class="style-c-arrow">Open &rarr;</span>
+            </div>
+            <p class="desc">Clean, professional. Content is the focus. Snappy and minimal borders.</p>
+        </div>
+    </div>
+
+</body>
+</html>

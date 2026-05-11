@@ -172,6 +172,12 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
     setContextMenu({ x: e.clientX, y: e.clientY, type, id, folderName });
   };
 
+  const handleDeployAll = async (folderName: string) => {
+    setContextMenu(null);
+    // Call the backend sequencer which handles the 1.5s delay and summoning
+    await executeMenuCommand(`SUMMON_FOLDER:${folderName}`);
+  };
+
   const onDragEnd = async (result: any) => {
     const { source, destination, type } = result;
     if (!destination) return;
@@ -277,17 +283,18 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
             height: '36px', 
             marginBottom: '2px', 
             padding: '0 12px',
-            backgroundColor: visibleItems[selectedIndex]?.id === folderName ? '#3b4261' : '#2a2e42',
+            backgroundColor: visibleItems[selectedIndex]?.id === folderName || hoveredFolder === folderName ? '#292e42' : 'transparent',
             borderRadius: '6px',
             alignItems: 'center',
-            color: '#7aa2f7',
-            fontWeight: 'bold',
+            color: '#c8d3f5',
+            fontWeight: '600',
             fontSize: '14px',
-            border: visibleItems[selectedIndex]?.id === folderName ? '1px solid #7aa2f7' : '1px solid transparent'
+            border: visibleItems[selectedIndex]?.id === folderName || hoveredFolder === folderName ? '1px solid #565f89' : '1px solid transparent',
+            transition: 'all 0.15s ease-in-out'
           }}
         >
-          <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center' }}>
-            {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#7aa2f7" />)}
+          <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
+            {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#565f89" />)}
           </span>
           <span style={{ flex: 1, userSelect: 'none' }}>{folderName}</span>
           
@@ -315,7 +322,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
           {hoveredFolder === folderName && folderName !== 'root' && (
             <div 
               className="btn-hover"
-              onClick={(e) => { e.stopPropagation(); executeMenuCommand(`DEPLOY_ALL:${folderName}`); }}
+              onClick={(e) => { e.stopPropagation(); handleDeployAll(folderName); }}
               style={{ 
                 backgroundColor: '#bb9af7', 
                 color: '#1a1b26', 
@@ -327,7 +334,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
                 justifyContent: 'center',
                 marginRight: '10px'
               }}
-              title="Deploy Entire Folder"
+              title="Summon All Desktops"
             >
               <IconRocket size={16} />
             </div>
@@ -355,7 +362,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
           )}
 
           <div style={{ fontSize: '11px', color: '#565f89' }}>
-            {folderActive > 0 && <span style={{ color: '#ff9e64', marginRight: '5px', fontWeight: 'bold' }}>{folderActive} active</span>}
+            {folderActive > 0 && <span style={{ color: '#7dcfff', marginRight: '5px', fontWeight: 'bold' }}>{folderActive} active</span>}
             {folderActive > 0 && folderEmpty > 0 && <span style={{ color: '#414868', marginRight: '5px' }}>/</span>}
             {folderEmpty > 0 && <span>{folderEmpty} empty</span>}
           </div>
@@ -397,20 +404,23 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
                             marginBottom: '2px',
                             padding: '0 0 0 12px',
                             alignItems: 'center',
-                            backgroundColor: snapshot.isDragging ? '#1a1b26' : (visibleItems[selectedIndex]?.id === desktopId ? '#3b4261' : (isActive ? 'rgba(255, 158, 100, 0.15)' : (hasWindows ? 'rgba(122, 162, 247, 0.12)' : 'rgba(31, 35, 53, 0.3)'))),
-                            border: visibleItems[selectedIndex]?.id === desktopId ? '1px solid #7aa2f7' : (isActive ? '1px solid #ff9e64' : (isReturn ? '1px solid #bb9af7' : (hasWindows ? '1px solid rgba(122, 162, 247, 0.5)' : '1px solid #2a2e42'))),
-                            borderLeft: hasWindows && !isActive && !isReturn && visibleItems[selectedIndex]?.id !== desktopId ? '3px solid #7aa2f7' : undefined,
+                            background: snapshot.isDragging ? '#1a1b26' : (isActive ? 'linear-gradient(90deg, rgba(125, 207, 255, 0.35) 0%, transparent 100%)' : (isReturn ? 'linear-gradient(90deg, rgba(187, 154, 247, 0.04) 0%, transparent 100%)' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '#292e42' : 'transparent'))),
+                            borderTop: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
+                            borderRight: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
+                            borderBottom: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
+                            borderLeft: isActive ? '3px solid #7dcfff' : (isReturn ? '3px solid #bb9af7' : (hasWindows ? '3px solid #7aa2f7' : '3px solid transparent')),
                             borderRadius: '6px',
                             boxSizing: 'border-box',
-                            opacity: isInactive && !snapshot.isDragging ? 0.55 : 1,
-                            color: isActive ? '#ff9e64' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89')),
+                            opacity: isInactive && !snapshot.isDragging && hoveredDesktop !== desktopId ? 0.6 : 1,
+                            color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
                             fontSize: '13px',
-                            fontWeight: isActive || isReturn || hasWindows || visibleItems[selectedIndex]?.id === desktopId ? 'bold' : 'normal',
-                            boxShadow: snapshot.isDragging ? '0 10px 20px rgba(0,0,0,0.5)' : (visibleItems[selectedIndex]?.id === desktopId ? '0 0 10px rgba(122, 162, 247, 0.3)' : (isActive ? '0 0 10px rgba(255, 158, 100, 0.2)' : (hasWindows ? '0 0 8px rgba(122, 162, 247, 0.15)' : 'none'))),
+                            fontWeight: isActive || isReturn || visibleItems[selectedIndex]?.id === desktopId ? 'bold' : '500',
+                            transition: 'all 0.15s ease-in-out',
+                            boxShadow: snapshot.isDragging ? '0 10px 20px rgba(0,0,0,0.5)' : 'none',
                             ...(providedDesktop.draggableProps.style || {})
                           }}
                         >
-                          <span style={{ marginRight: '10px', color: isActive ? '#ff9e64' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#414868')), flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                          <span style={{ marginRight: '10px', color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89')), flexShrink: 0, display: 'flex', alignItems: 'center', opacity: hoveredDesktop === desktopId || hasWindows ? 1 : 0.6, transition: 'opacity 0.2s' }}>
                             <IconMonitor size={14} color="currentColor" />
                           </span>
                           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px' }}>
@@ -425,7 +435,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
                               backgroundColor: '#7aa2f7',
                               padding: '1px 6px',
                               borderRadius: '10px',
-                              fontSize: '10px',
+                              fontSize: '11px',
                               fontWeight: 'bold',
                               letterSpacing: '0.3px'
                             }}>{winCount}w</span>
@@ -475,12 +485,12 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
                           )}
 
                           {isReturn && !isActive && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: '#bb9af7', marginRight: '8px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#bb9af7', marginRight: '8px' }}>
                               <IconUndo size={12} /> Return
                             </span>
                           )}
 
-                          {isActive && <span style={{ fontSize: '10px', backgroundColor: '#ff9e64', color: '#1a1b26', padding: '1px 8px', borderRadius: '10px', fontWeight: 'bold' }}>Current</span>}
+                          {isActive && <span style={{ fontSize: '11px', background: 'linear-gradient(90deg, #7dcfff, #7aa2f7)', color: '#1a1b26', padding: '1px 8px', borderRadius: '10px', fontWeight: 'bold' }}>Current</span>}
                         </div>
                       )}
                     </Draggable>
@@ -537,7 +547,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
               <div className="menu-item" onClick={() => setPromptConfig({ title: 'New Desktop Name', defaultValue: 'New Desktop', command: `CREATE_LIVE_DESKTOP:${contextMenu.id}` })}>
                 <IconPlus size={14} /> Add Desktop
               </div>
-              <div className="menu-item" onClick={() => executeMenuCommand(`DEPLOY_ALL:${contextMenu.id}`)}>
+              <div className="menu-item" onClick={() => handleDeployAll(contextMenu.id)}>
                 <IconRocket size={14} /> Deploy Entire Folder
               </div>
               <div className="menu-item" onClick={() => executeMenuCommand(`WIPE_FOLDER:${contextMenu.id}`)}>

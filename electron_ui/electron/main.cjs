@@ -61,7 +61,7 @@ function createWindow() {
     transparent: false, // Solid background for visibility
     backgroundColor: '#1a1b26', // Matching your theme
     alwaysOnTop: true,
-    title: "Desktop Manager UI", // Explicit title for wmctrl
+    title: "Desktop Manager", // Explicit title for wmctrl
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -78,12 +78,12 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Set behaviors
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mainWindow.setAlwaysOnTop(true, 'floating');
-  
   mainWindow.show();
   mainWindow.focus();
+
+  // Set behaviors AFTER show() so KDE registers the window properly
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mainWindow.setAlwaysOnTop(true, 'floating');
 
   // DIAGNOSTIC: Uncomment this if you still see a blank screen
   // mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -158,7 +158,13 @@ ipcMain.handle('fetch-desktops', async () => {
       const kdotoolRes = await execAsync(
         `for id in $(kdotool search --class '.*' 2>/dev/null); do` +
         `  wname=$(kdotool getwindowname "$id" 2>/dev/null);` +
-        `  if [[ "$wname" != "Desktop Manager UI" ]] && [[ "$wname" != "Desktop Manager" ]] && [[ "$wname" != "Menu" ]] && [[ "$wname" != "plasmashell" ]] && [[ "$wname" != "" ]]; then` +
+        `  if [[ "$wname" != *"Desktop Manager"* ]] && ` +
+        `     [[ "$wname" != *"Antigravity"* ]] && ` +
+        `     [[ "$wname" != "Menu" ]] && ` +
+        `     [[ "$wname" != "plasmashell" ]] && ` +
+        `     [[ "$wname" != "Xwayland Video Bridge" ]] && ` +
+        `     [[ "$wname" != "Wayland to X Recording bridge"* ]] && ` +
+        `     [[ "$wname" != "" ]]; then` +
         `    kdotool get_desktop_for_window "$id" 2>/dev/null;` +
         `  fi;` +
         `done`

@@ -5,7 +5,7 @@ import NotesTab from './components/NotesTab'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 
-import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus } from './components/Icons'
+import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText } from './components/Icons'
 import './App.css'
 
 function App() {
@@ -173,8 +173,8 @@ function App() {
       transition: 'all 0.2s ease'
     }}>
       {/* Search Bar & Stats */}
-      <div style={{ padding: '8px 12px', backgroundColor: '#1e2030', borderBottom: '1px solid #3b4261', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ flex: 1, maxWidth: '400px' }}>
+      <div style={{ padding: '8px 12px', backgroundColor: '#1e2030', borderBottom: '1px solid #3b4261', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
+        <div style={{ flex: 1, maxWidth: '300px' }}>
           <input 
             ref={searchInputRef}
             type="text" 
@@ -188,8 +188,8 @@ function App() {
         {/* Stats Summary moved here */}
         <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ff9e64' }}></span>
-            <span style={{ color: '#ff9e64', fontWeight: 'bold' }}>{totalActive}</span>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#7dcfff' }}></span>
+            <span style={{ color: '#7dcfff', fontWeight: 'bold' }}>{totalActive}</span>
             <span style={{ color: '#565f89' }}>Active</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -292,7 +292,7 @@ function App() {
                   style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#9ece6a', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
                   title="Add Checkbox"
                 >
-                  ☑ Checkbox
+                  <IconSquare size={12} /> Checkbox
                 </button>
                 <button
                   className="btn-hover"
@@ -300,7 +300,7 @@ function App() {
                   style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#bb9af7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
                   title="Add Note"
                 >
-                  📝 Note
+                  <IconFileText size={12} /> Note
                 </button>
               </>
             ) : activeTab === 'live' ? (
@@ -323,7 +323,7 @@ function App() {
                     setLastActionTime(Date.now());
                   }}
                   style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  title="Clean Empty"
+                  title="Clean Empty: Automatically remove all empty, unused desktops to keep your workspace tidy."
                 >
                   <IconWipe size={12} />
                 </button>
@@ -337,7 +337,7 @@ function App() {
                     }
                   }}
                   style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(247, 118, 142, 0.3)', backgroundColor: 'rgba(247, 118, 142, 0.1)', color: '#f7768e', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  title="Clear All"
+                  title="Clear All: Close all windows and completely reset your workspace (Asks for confirmation first)."
                 >
                   <IconTrash size={12} />
                 </button>

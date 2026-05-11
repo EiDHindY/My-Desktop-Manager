@@ -31,34 +31,48 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
 
 export function handleSummonFolder(folderName: string, sessionPath: string) {
     try {
+        if (!existsSync(sessionPath)) return;
         const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
         const uids: string[] = data.folders?.[folderName] || [];
-        if (uids.length === 0) return runCommand(`notify-send "Desktop Manager" "Folder is empty."`);
         
-        runCommand(`notify-send "Desktop Manager" "🚀 Summoning '${folderName}'..."`);
+        if (uids.length === 0) {
+            runCommand(`notify-send "Desktop Manager" "Folder '${folderName}' is empty."`);
+            return;
+        }
         
-        const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+        runCommand(`notify-send "Desktop Manager" "🚀 Sequencing '${folderName}'..."`);
+        
+        // 1. Find indices of desktops that HAVE windows to avoid redundant launches
+        const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager UI\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
         const activeStr = runCommand(cmd) || "";
         const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
 
-        for (const fullId of uids) {
+        for (let i = 0; i < uids.length; i++) {
+            const fullId = uids[i];
             const parts = fullId.split("___");
             const uuid = parts[0];
             const position = parts.length > 1 ? parseInt(parts[1]) : -1;
             
             if (uuid) {
+                console.log(`Summoning ${uuid} (Desktop ${i+1}/${uids.length})`);
                 runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
                 
                 // If desktop already has windows, skip launching apps to avoid duplicates
                 if (position >= 0 && activeIndices.includes(position + 1)) {
-                    console.log(`Desktop ${uuid} (pos ${position}) already has windows, skipping app launch.`);
+                    console.log(`Desktop ${uuid} already has windows, skipping app launch.`);
                 } else {
                     launchAppsForDesktop(uuid, true);
                 }
-                execSync('sleep 0.1');
+                
+                // Wait 1.5 seconds before the next one, unless it's the last one
+                if (i < uids.length - 1) {
+                    execSync('sleep 1.5');
+                }
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("Error in handleSummonFolder:", e);
+    }
 }
 
 export function handleDeploy(result: string, sessionPath: string, currentDesktops: Desktop[], currentUuid: string) {
@@ -123,7 +137,12 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${t.name}"`);
             const entry = `${dest.uuid}___${dest.position}`;
             for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
-            session.folders[folderName].push(entry);
+            
+            // Safety check: only add if not already present (though filter above should handle it)
+            if (!session.folders[folderName].includes(entry)) {
+                session.folders[folderName].push(entry);
+            }
+            
             if (t.script) session.startup_apps[dest.uuid] = [t.script];
         }
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));

@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { IconFolder, IconFolderOpen, IconTrash, IconGrip, IconCopy, IconCheck } from './Icons';
+import { 
+  IconFolder, IconFolderOpen, IconTrash, IconGrip, 
+  IconCopy, IconCheck, IconFileText, IconSquare
+} from './Icons';
 
 interface NoteItem {
   id: string;
@@ -16,6 +19,13 @@ interface NotesData {
   folder_names?: Record<string, string>;
 }
 
+interface FlatItem {
+  type: 'folder' | 'item';
+  id: string;
+  folderKey: string;
+  item?: NoteItem;
+}
+
 export default function NotesTab({ notesData }: { notesData: NotesData | null }) {
   const [expandedFolders, setExpandedFolders] = useState<string[]>(['root']);
   const [expandedNotes, setExpandedNotes] = useState<string[]>([]);
@@ -24,14 +34,14 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
-  // Optimistic local copy of notes data for instant drag-and-drop feedback
   const [localData, setLocalData] = useState<NotesData | null>(notesData);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const notesDataRef = useRef(notesData);
   const expandedFoldersRef = useRef(expandedFolders);
-
-  // Sync local data from props, but not while a drag is in progress
   const isDragging = useRef(false);
+
   useEffect(() => {
     if (!isDragging.current) setLocalData(notesData);
   }, [notesData]);
@@ -55,6 +65,20 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
 
   const folderNames = data?.folder_names || {};
   const getFolderName = (key: string) => key === 'root' ? 'General' : (folderNames[key] || key);
+
+  const flatItems = useMemo(() => {
+    const items: FlatItem[] = [];
+    folderOrder.forEach(folderKey => {
+      items.push({ type: 'folder', id: folderKey, folderKey });
+      if (expandedFolders.includes(folderKey)) {
+        const folderItems = folders[folderKey] || [];
+        folderItems.forEach(item => {
+          items.push({ type: 'item', id: item.id, folderKey, item });
+        });
+      }
+    });
+    return items;
+  }, [folderOrder, expandedFolders, folders]);
 
   const toggleFolder = (key: string) => {
     setExpandedFolders(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -107,7 +131,47 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
     setExpandedNotes(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
   };
 
-  // Drag and drop
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (flatItems.length === 0 || editingItemId || Object.keys(editingContent).length > 0) return;
+
+      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % flatItems.length);
+      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + flatItems.length) % flatItems.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const item = flatItems[selectedIndex];
+        if (item.type === 'folder') {
+          toggleFolder(item.folderKey);
+        } else if (item.type === 'item' && item.item) {
+          if (item.item.type === 'note') {
+            toggleNoteExpand(item.item.id);
+          } else {
+            toggleCheck(item.folderKey, item.item.id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [flatItems, selectedIndex, editingItemId, editingContent]);
+
+  useEffect(() => {
+    const focusedEl = document.getElementById(`flat-item-${selectedIndex}`);
+    if (focusedEl && containerRef.current) {
+      const container = containerRef.current;
+      const rect = focusedEl.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      if (rect.top < containerRect.top || rect.bottom > containerRect.bottom) {
+        focusedEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedIndex]);
+
   const onDragEnd = (result: any) => {
     isDragging.current = false;
     const { source, destination, type } = result;
@@ -115,7 +179,6 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
 
     if (type === 'FOLDER') {
       if (source.index === destination.index) return;
-      // Reorder folders (root stays at index 0 but we keep it in folderOrder)
       const reorderable = folderOrder.filter(k => k !== 'root');
       const [removed] = reorderable.splice(source.index, 1);
       reorderable.splice(destination.index, 0, removed);
@@ -141,14 +204,12 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
       setLocalData(newData as NotesData);
       writeNotes(newData);
 
-      // Auto-expand destination folder
       if (!expandedFolders.includes(dstFolder)) {
         setExpandedFolders(prev => [...prev, dstFolder]);
       }
     }
   };
 
-  // Listen for custom events from App.tsx header buttons
   useEffect(() => {
     const handleAdd = (e: CustomEvent) => {
       const { type, folderKey = 'root' } = e.detail;
@@ -185,58 +246,62 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
     return () => window.removeEventListener('notes-add', handleAdd as EventListener);
   }, []);
 
-  // Draggable folders exclude root from reordering (root is always first)
   const draggableFolders = folderOrder.filter(k => k !== 'root');
 
   return (
-    <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div ref={containerRef} style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', height: '100%' }}>
       <DragDropContext
         onDragStart={() => { isDragging.current = true; }}
         onDragEnd={onDragEnd}
       >
-        {/* Draggable folders */}
         <Droppable droppableId="folders" type="FOLDER">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {draggableFolders.map((folderKey, index) => (
-                <Draggable key={folderKey} draggableId={`folder-${folderKey}`} index={index}>
-                  {(drag, snapshot) => (
-                    <div ref={drag.innerRef} {...drag.draggableProps} style={{ ...drag.draggableProps.style, opacity: snapshot.isDragging ? 0.85 : 1 }}>
-                      <FolderBlock
-                        folderKey={folderKey}
-                        folderLabel={getFolderName(folderKey)}
-                        items={folders[folderKey] as NoteItem[]}
-                        isExpanded={expandedFolders.includes(folderKey)}
-                        isRoot={false}
-                        dragHandle={drag.dragHandleProps}
-                        hoveredFolder={hoveredFolder}
-                        hoveredItem={hoveredItem}
-                        expandedNotes={expandedNotes}
-                        localChecked={localChecked}
-                        editingItemId={editingItemId}
-                        editingContent={editingContent}
-                        onToggleFolder={() => toggleFolder(folderKey)}
-                        onToggleCheck={toggleCheck}
-                        onDeleteItem={deleteItem}
-                        onDeleteFolder={deleteFolder}
-                        onToggleNote={toggleNoteExpand}
-                        onSaveText={saveItemText}
-                        onSaveContent={saveItemContent}
-                        setHoveredFolder={setHoveredFolder}
-                        setHoveredItem={setHoveredItem}
-                        setEditingItemId={setEditingItemId}
-                        setEditingContent={setEditingContent}
-                      />
-                    </div>
-                  )}
-                </Draggable>
-              ))}
+              {draggableFolders.map((folderKey, index) => {
+                const flatIndex = flatItems.findIndex(i => i.id === folderKey && i.type === 'folder');
+                const isFocused = selectedIndex === flatIndex;
+                return (
+                  <Draggable key={folderKey} draggableId={`folder-${folderKey}`} index={index}>
+                    {(drag, snapshot) => (
+                      <div ref={drag.innerRef} {...drag.draggableProps} style={{ ...drag.draggableProps.style, opacity: snapshot.isDragging ? 0.85 : 1 }}>
+                        <FolderBlock
+                          folderKey={folderKey}
+                          folderLabel={getFolderName(folderKey)}
+                          items={folders[folderKey] as NoteItem[]}
+                          isExpanded={expandedFolders.includes(folderKey)}
+                          isRoot={false}
+                          dragHandle={drag.dragHandleProps}
+                          hoveredFolder={hoveredFolder}
+                          hoveredItem={hoveredItem}
+                          expandedNotes={expandedNotes}
+                          localChecked={localChecked}
+                          editingItemId={editingItemId}
+                          editingContent={editingContent}
+                          isFocused={isFocused}
+                          flatItems={flatItems}
+                          selectedIndex={selectedIndex}
+                          onToggleFolder={() => toggleFolder(folderKey)}
+                          onToggleCheck={toggleCheck}
+                          onDeleteItem={deleteItem}
+                          onDeleteFolder={deleteFolder}
+                          onToggleNote={toggleNoteExpand}
+                          onSaveText={saveItemText}
+                          onSaveContent={saveItemContent}
+                          setHoveredFolder={setHoveredFolder}
+                          setHoveredItem={setHoveredItem}
+                          setEditingItemId={setEditingItemId}
+                          setEditingContent={setEditingContent}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
               {provided.placeholder}
             </div>
           )}
         </Droppable>
 
-        {/* General (root) folder — always at bottom, not reorderable */}
         {folders['root'] !== undefined && (
           <FolderBlock
             folderKey="root"
@@ -250,6 +315,9 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
             localChecked={localChecked}
             editingItemId={editingItemId}
             editingContent={editingContent}
+            isFocused={selectedIndex === flatItems.findIndex(i => i.id === 'root' && i.type === 'folder')}
+            flatItems={flatItems}
+            selectedIndex={selectedIndex}
             onToggleFolder={() => toggleFolder('root')}
             onToggleCheck={toggleCheck}
             onDeleteItem={deleteItem}
@@ -268,32 +336,42 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
   );
 }
 
-// ─── FolderBlock sub-component ───────────────────────────────────────────────
 function FolderBlock({
   folderKey, folderLabel, items = [], isExpanded, isRoot, dragHandle,
   hoveredFolder, hoveredItem, expandedNotes, localChecked,
-  editingItemId, editingContent,
+  editingItemId, editingContent, isFocused, flatItems, selectedIndex,
   onToggleFolder, onToggleCheck, onDeleteItem, onDeleteFolder, onToggleNote,
   onSaveText, onSaveContent,
   setHoveredFolder, setHoveredItem, setEditingItemId, setEditingContent,
 }: any) {
   const pendingCount = (items as NoteItem[]).filter(i => (i.type || 'checkbox') === 'checkbox' && !((localChecked[i.id] ?? i.checked))).length;
+  const folderFlatIndex = flatItems.findIndex((i: any) => i.id === folderKey && i.type === 'folder');
 
   return (
-    <div style={{ borderRadius: '10px', border: '1px solid #3b4261', overflow: 'hidden', backgroundColor: '#1e2030' }}>
-      {/* Folder Header */}
+    <div 
+      id={`flat-item-${folderFlatIndex}`}
+      style={{ 
+        borderRadius: '10px', 
+        border: isFocused ? '1px solid #7aa2f7' : (isExpanded ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid #3b4261'), 
+        overflow: 'hidden', 
+        backgroundColor: isFocused ? 'rgba(122, 162, 247, 0.1)' : (isExpanded ? 'rgba(36, 40, 59, 0.3)' : 'transparent'),
+        transition: 'all 0.2s ease'
+      }}
+    >
       <div
         onClick={onToggleFolder}
         onMouseEnter={() => setHoveredFolder(folderKey)}
         onMouseLeave={() => setHoveredFolder(null)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 14px', backgroundColor: '#24283b',
+          padding: '10px 14px', 
+          backgroundColor: isFocused ? 'rgba(122, 162, 247, 0.15)' : (hoveredFolder === folderKey ? '#292e42' : 'transparent'),
           cursor: 'pointer', userSelect: 'none',
+          transition: 'background 0.2s ease',
+          borderLeft: isFocused ? '3px solid #7aa2f7' : '3px solid transparent'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Drag handle for non-root folders */}
           {!isRoot && dragHandle && (
             <span {...dragHandle} onClick={(e) => e.stopPropagation()} style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <IconGrip size={14} />
@@ -302,43 +380,50 @@ function FolderBlock({
           <span style={{ color: '#7aa2f7' }}>
             {isExpanded ? <IconFolderOpen size={20} /> : <IconFolder size={20} />}
           </span>
-          <span style={{ fontWeight: 'bold', color: '#c8d3f5', fontSize: '14px' }}>{folderLabel}</span>
+          <span style={{ fontWeight: 'bold', color: isFocused ? '#7dcfff' : (isExpanded ? '#7dcfff' : '#c8d3f5'), fontSize: '14px' }}>{folderLabel}</span>
           {items.length > 0 && (
-            <span style={{ backgroundColor: '#3b4261', color: '#7aa2f7', padding: '1px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+            <span style={{ 
+              backgroundColor: pendingCount > 0 ? 'rgba(122, 162, 247, 0.1)' : '#3b4261', 
+              color: pendingCount > 0 ? '#7aa2f7' : '#565f89', 
+              padding: '1px 8px', 
+              borderRadius: '10px', 
+              fontSize: '11px', 
+              fontWeight: '600' 
+            }}>
               {pendingCount > 0 ? `${pendingCount} pending` : `${items.length} items`}
             </span>
           )}
         </div>
-        {hoveredFolder === folderKey && (
-          <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '8px', opacity: (hoveredFolder === folderKey || isFocused) ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+          <button
+            className="btn-hover"
+            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey } })); }}
+            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#9ece6a', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            title="Add Checkbox"
+          >
+            <IconSquare size={14} />
+          </button>
+          <button
+            className="btn-hover"
+            onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey } })); }}
+            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#bb9af7', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            title="Add Note"
+          >
+            <IconFileText size={14} />
+          </button>
+          {!isRoot && (
             <button
-              onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey } })); }}
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#9ece6a', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: '4px', fontSize: '12px' }}
-              title="Add Checkbox"
+              className="btn-hover"
+              onClick={(e) => { e.stopPropagation(); onDeleteFolder(folderKey); }}
+              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+              title="Delete Folder"
             >
-              ☑
+              <IconTrash size={14} />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey } })); }}
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#bb9af7', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: '4px', fontSize: '12px' }}
-              title="Add Note"
-            >
-              📝
-            </button>
-            {!isRoot && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDeleteFolder(folderKey); }}
-                style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: '4px' }}
-                title="Delete Folder"
-              >
-                <IconTrash size={13} />
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Items droppable area */}
       {isExpanded && (
         <Droppable droppableId={folderKey} type="ITEM">
           {(provided, snapshot) => (
@@ -346,53 +431,59 @@ function FolderBlock({
               ref={provided.innerRef}
               {...provided.droppableProps}
               style={{
-                display: 'flex', flexDirection: 'column', gap: '2px', padding: '8px',
+                display: 'flex', flexDirection: 'column', gap: '2px', padding: '6px',
                 minHeight: '36px',
                 backgroundColor: snapshot.isDraggingOver ? 'rgba(122,162,247,0.05)' : 'transparent',
                 transition: 'background 0.15s',
               }}
             >
               {items.length === 0 && !snapshot.isDraggingOver && (
-                <div style={{ color: '#565f89', fontSize: '12px', fontStyle: 'italic', textAlign: 'center', padding: '12px' }}>
+                <div style={{ color: '#565f89', fontSize: '12px', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
                   Empty — drag items here or use the buttons above.
                 </div>
               )}
-              {(items as NoteItem[]).map((item, idx) => (
-                <Draggable key={item.id} draggableId={item.id} index={idx}>
-                  {(drag, dSnap) => (
-                    <div
-                      ref={drag.innerRef}
-                      {...drag.draggableProps}
-                      style={{ ...drag.draggableProps.style, opacity: dSnap.isDragging ? 0.8 : 1 }}
-                      onMouseEnter={() => setHoveredItem(item.id)}
-                      onMouseLeave={() => setHoveredItem(null)}
-                    >
-                      <NoteItemRow
-                        item={item}
-                        folderKey={folderKey}
-                        dragHandle={drag.dragHandleProps}
-                        isNoteExpanded={expandedNotes.includes(item.id)}
-                        isEditingText={editingItemId === item.id}
-                        isEditingContent={editingContent[item.id] !== undefined}
-                        editContentValue={editingContent[item.id]}
-                        localChecked={localChecked}
-                        hovered={hoveredItem === item.id}
-                        onToggleCheck={() => onToggleCheck(folderKey, item.id)}
-                        onDelete={() => onDeleteItem(folderKey, item.id)}
-                        onToggleNote={() => onToggleNote(item.id)}
-                        onStartEditText={() => setEditingItemId(item.id)}
-                        onBlurText={(newText: string) => { 
-                          if (newText.trim() && newText !== item.text) onSaveText(folderKey, item.id, newText); 
-                          setEditingItemId(null); 
-                        }}
-                        onFocusContent={() => setEditingContent((p: any) => ({ ...p, [item.id]: item.content || '' }))}
-                        onChangeContent={(v: string) => setEditingContent((p: any) => ({ ...p, [item.id]: v }))}
-                        onBlurContent={() => { onSaveContent(folderKey, item.id, editingContent[item.id]); setEditingContent((p: any) => { const n = { ...p }; delete n[item.id]; return n; }); }}
-                      />
-                    </div>
-                  )}
-                </Draggable>
-              ))}
+              {(items as NoteItem[]).map((item, idx) => {
+                const itemFlatIndex = flatItems.findIndex((i: any) => i.id === item.id && i.type === 'item');
+                const isItemFocused = selectedIndex === itemFlatIndex;
+                return (
+                  <Draggable key={item.id} draggableId={item.id} index={idx}>
+                    {(drag, dSnap) => (
+                      <div
+                        ref={drag.innerRef}
+                        {...drag.draggableProps}
+                        style={{ ...drag.draggableProps.style, opacity: dSnap.isDragging ? 0.8 : 1 }}
+                        onMouseEnter={() => setHoveredItem(item.id)}
+                        onMouseLeave={() => setHoveredItem(null)}
+                      >
+                        <NoteItemRow
+                          item={item}
+                          id={`flat-item-${itemFlatIndex}`}
+                          folderKey={folderKey}
+                          dragHandle={drag.dragHandleProps}
+                          isNoteExpanded={expandedNotes.includes(item.id)}
+                          isEditingText={editingItemId === item.id}
+                          isEditingContent={editingContent[item.id] !== undefined}
+                          editContentValue={editingContent[item.id]}
+                          localChecked={localChecked}
+                          hovered={hoveredItem === item.id || isItemFocused}
+                          isFocused={isItemFocused}
+                          onToggleCheck={() => onToggleCheck(folderKey, item.id)}
+                          onDelete={() => onDeleteItem(folderKey, item.id)}
+                          onToggleNote={() => onToggleNote(item.id)}
+                          onStartEditText={() => setEditingItemId(item.id)}
+                          onBlurText={(newText: string) => { 
+                            if (newText.trim() && newText !== item.text) onSaveText(folderKey, item.id, newText); 
+                            setEditingItemId(null); 
+                          }}
+                          onFocusContent={() => setEditingContent((p: any) => ({ ...p, [item.id]: item.content || '' }))}
+                          onChangeContent={(v: string) => setEditingContent((p: any) => ({ ...p, [item.id]: v }))}
+                          onBlurContent={() => { onSaveContent(folderKey, item.id, editingContent[item.id]); setEditingContent((p: any) => { const n = { ...p }; delete n[item.id]; return n; }); }}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                );
+              })}
               {provided.placeholder}
             </div>
           )}
@@ -402,10 +493,9 @@ function FolderBlock({
   );
 }
 
-// ─── NoteItemRow sub-component ───────────────────────────────────────────────
 function NoteItemRow({
-  item, dragHandle, isNoteExpanded, isEditingText,
-  isEditingContent, editContentValue, localChecked, hovered,
+  item, id, dragHandle, isNoteExpanded, isEditingText,
+  isEditingContent, editContentValue, localChecked, hovered, isFocused,
   onToggleCheck, onDelete, onToggleNote,
   onStartEditText, onBlurText,
   onFocusContent, onChangeContent, onBlurContent,
@@ -415,37 +505,59 @@ function NoteItemRow({
   const isChecked = localChecked[item.id] ?? item.checked ?? false;
 
   return (
-    <div style={{ borderRadius: '6px', overflow: 'hidden' }}>
-      {/* Row */}
+    <div id={id} style={{ borderRadius: '6px', overflow: 'hidden', marginBottom: '2px' }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '8px',
-        padding: '7px 10px',
-        backgroundColor: hovered ? '#24283b' : 'transparent',
-        borderRadius: '6px', transition: 'background 0.15s',
+        display: 'flex', alignItems: 'center', gap: '10px',
+        padding: '8px 12px',
+        backgroundColor: hovered ? '#292e42' : 'transparent',
+        borderRadius: '6px', transition: 'background 0.15s ease',
+        borderLeft: isFocused ? '3px solid #7dcfff' : '3px solid transparent'
       }}>
-        {/* Drag grip */}
         <span
           {...dragHandle}
-          style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+          style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: hovered ? 1 : 0 }}
         >
           <IconGrip size={13} />
         </span>
 
-        {/* Checkbox or note icon */}
         {itemType === 'checkbox' ? (
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={onToggleCheck}
-            style={{ width: '15px', height: '15px', cursor: 'pointer', flexShrink: 0, accentColor: '#7aa2f7' }}
-          />
+          <div 
+            className="btn-hover"
+            onClick={onToggleCheck}
+            style={{ 
+              width: '18px', 
+              height: '18px', 
+              borderRadius: '4px', 
+              border: isChecked ? '1px solid #7aa2f7' : '1px solid #3b4261',
+              backgroundColor: isChecked ? '#7aa2f7' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'all 0.2s ease',
+              boxShadow: isChecked ? '0 0 8px rgba(122, 162, 247, 0.4)' : 'none'
+            }}
+          >
+            {isChecked && <IconCheck size={12} color="#1a1b26" />}
+          </div>
         ) : (
-          <span onClick={onToggleNote} style={{ cursor: 'pointer', flexShrink: 0, fontSize: '14px', userSelect: 'none' }}>
-            {isNoteExpanded ? '🗒️' : '📝'}
+          <span 
+            className="btn-hover"
+            onClick={onToggleNote} 
+            style={{ 
+              color: isNoteExpanded ? '#7dcfff' : '#bb9af7', 
+              cursor: 'pointer', 
+              flexShrink: 0, 
+              display: 'flex', 
+              alignItems: 'center',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <IconFileText size={16} />
           </span>
         )}
 
-        {/* Title */}
         {isEditingText ? (
           <input
             id={`item-text-${item.id}`}
@@ -460,61 +572,55 @@ function NoteItemRow({
                 e.currentTarget.blur();
               } 
             }}
-            style={{ flex: 1, background: '#1a1b26', border: '1px solid #7aa2f7', borderRadius: '4px', color: '#c8d3f5', padding: '2px 6px', fontSize: '13px', outline: 'none' }}
+            style={{ flex: 1, background: '#1a1b26', border: '1px solid #7aa2f7', borderRadius: '4px', color: '#c8d3f5', padding: '4px 8px', fontSize: '13px', outline: 'none' }}
           />
         ) : (
           <span
             onDoubleClick={onStartEditText}
             onClick={itemType === 'note' ? onToggleNote : undefined}
-            title={itemType === 'note' ? 'Click to expand · Double-click to rename' : 'Double-click to rename'}
             style={{
               flex: 1, fontSize: '13px',
               color: (itemType === 'checkbox' && isChecked) ? '#565f89' : '#c8d3f5',
               textDecoration: (itemType === 'checkbox' && isChecked) ? 'line-through' : 'none',
               cursor: itemType === 'note' ? 'pointer' : 'default',
               userSelect: 'none',
+              fontWeight: (isFocused || (itemType === 'note' && isNoteExpanded)) ? '600' : '400',
+              transition: 'all 0.2s ease'
             }}
           >
             {item.text}
           </span>
         )}
 
-        {/* Actions (Copy & Delete) */}
-        {hovered && (
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                const textToCopy = itemType === 'note' && item.content ? item.content : item.text;
-                navigator.clipboard.writeText(textToCopy)
-                  .then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  })
-                  .catch(err => console.error('Copy failed:', err));
-              }} 
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: copied ? '#9ece6a' : '#7aa2f7', display: 'flex', alignItems: 'center', padding: '3px', borderRadius: '4px', transition: 'color 0.2s ease' }} 
-              title={copied ? "Copied!" : "Copy to clipboard"}
-            >
-              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-            </button>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }} 
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '3px', borderRadius: '4px' }} 
-              title="Delete"
-            >
-              <IconTrash size={13} />
-            </button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '6px', opacity: hovered ? 1 : 0, transition: 'opacity 0.2s' }}>
+          <button 
+            className="btn-hover"
+            onClick={(e) => {
+              e.stopPropagation();
+              const textToCopy = itemType === 'note' && item.content ? item.content : item.text;
+              navigator.clipboard.writeText(textToCopy).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              });
+            }} 
+            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: copied ? '#9ece6a' : '#7aa2f7', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }} 
+            title="Copy"
+          >
+            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+          </button>
+          <button 
+            className="btn-hover"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }} 
+            title="Delete"
+          >
+            <IconTrash size={14} />
+          </button>
+        </div>
       </div>
 
-      {/* Expanded note textarea */}
       {itemType === 'note' && isNoteExpanded && (
-        <div style={{ padding: '0 10px 10px 48px' }}>
+        <div style={{ padding: '4px 12px 12px 40px' }}>
           <textarea
             value={isEditingContent ? editContentValue : (item.content || '')}
             onFocus={onFocusContent}
@@ -523,11 +629,12 @@ function NoteItemRow({
             placeholder="Write your note here..."
             rows={5}
             style={{
-              width: '100%', backgroundColor: '#1a1b26',
-              border: '1px solid #3b4261', borderRadius: '6px',
-              color: '#c8d3f5', fontSize: '13px', padding: '10px',
+              width: '100%', backgroundColor: 'rgba(26, 27, 38, 0.5)',
+              border: '1px solid #3b4261', borderRadius: '8px',
+              color: '#c8d3f5', fontSize: '13px', padding: '12px',
               resize: 'vertical', outline: 'none', fontFamily: 'inherit',
               lineHeight: '1.6', boxSizing: 'border-box',
+              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
             }}
           />
         </div>
