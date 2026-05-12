@@ -12,13 +12,39 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    const focusInput = () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+    
+    focusInput();
+    setTimeout(focusInput, 50);
+    setTimeout(focusInput, 150);
   }, []);
 
+  useEffect(() => {
+    // Trap all keydown events in the capturing phase so the background app NEVER sees them
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      e.stopPropagation(); // stop bubbling
+      e.stopImmediatePropagation(); // stop other listeners on window
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onSubmit(value);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
+  }, [value, onSubmit, onCancel]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') onSubmit(value);
-    if (e.key === 'Escape') onCancel();
+    // Redundant now, but keeps React happy.
+    e.nativeEvent.stopImmediatePropagation();
+    e.nativeEvent.stopPropagation();
   };
 
   return (
@@ -35,7 +61,12 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
       zIndex: 2000,
       backdropFilter: 'blur(4px)'
     }}>
-      <div style={{
+      <form 
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit(value);
+        }}
+        style={{
         backgroundColor: '#1e2030',
         border: '1px solid #3b4261',
         borderRadius: '12px',
@@ -66,6 +97,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
         />
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
           <button 
+            type="button"
             onClick={onCancel}
             style={{
               padding: '8px 16px',
@@ -80,7 +112,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
             Cancel
           </button>
           <button 
-            onClick={() => onSubmit(value)}
+            type="submit"
             style={{
               padding: '8px 16px',
               backgroundColor: '#7aa2f7',
@@ -95,7 +127,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
             Submit
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

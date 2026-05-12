@@ -17,6 +17,7 @@ interface NotesData {
   folders: Record<string, NoteItem[]>;
   folder_order?: string[];
   folder_names?: Record<string, string>;
+  expanded_folders?: string[];
 }
 
 interface FlatItem {
@@ -27,7 +28,7 @@ interface FlatItem {
 }
 
 export default function NotesTab({ notesData }: { notesData: NotesData | null }) {
-  const [expandedFolders, setExpandedFolders] = useState<string[]>(['root']);
+  const [expandedFolders, setExpandedFolders] = useState<string[]>(notesData?.expanded_folders || ['root']);
   const [expandedNotes, setExpandedNotes] = useState<string[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<Record<string, string>>({});
@@ -44,6 +45,7 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
 
   useEffect(() => {
     if (!isDragging.current) setLocalData(notesData);
+    if (notesData?.expanded_folders) setExpandedFolders(notesData.expanded_folders);
   }, [notesData]);
   useEffect(() => { notesDataRef.current = notesData; }, [notesData]);
   useEffect(() => { expandedFoldersRef.current = expandedFolders; }, [expandedFolders]);
@@ -81,7 +83,11 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
   }, [folderOrder, expandedFolders, folders]);
 
   const toggleFolder = (key: string) => {
-    setExpandedFolders(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+    const next = expandedFolders.includes(key) 
+      ? expandedFolders.filter(k => k !== key) 
+      : [...expandedFolders, key];
+    setExpandedFolders(next);
+    writeNotes({ ...data, expanded_folders: next });
   };
 
   const toggleCheck = (folderKey: string, itemId: string) => {
@@ -133,6 +139,7 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
       if (flatItems.length === 0 || editingItemId || Object.keys(editingContent).length > 0) return;
 
       if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
@@ -205,7 +212,13 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
       writeNotes(newData);
 
       if (!expandedFolders.includes(dstFolder)) {
-        setExpandedFolders(prev => [...prev, dstFolder]);
+        const nextExpanded = [...expandedFolders, dstFolder];
+        setExpandedFolders(nextExpanded);
+        const finalData = { ...data, folders: newFolders, expanded_folders: nextExpanded };
+        setLocalData(finalData as NotesData);
+        writeNotes(finalData);
+      } else {
+        writeNotes(newData);
       }
     }
   };
@@ -225,16 +238,19 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
       };
 
       const currentItems = currentFolders[folderKey] || [];
+      let nextExpanded = expandedFoldersRef.current;
+      if (!nextExpanded.includes(folderKey)) {
+        nextExpanded = [...nextExpanded, folderKey];
+        setExpandedFolders(nextExpanded);
+      }
+
       const newData = {
         ...currentData,
         folders: { ...currentFolders, [folderKey]: [newItem, ...currentItems] },
+        expanded_folders: nextExpanded
       };
       setLocalData(newData as NotesData);
       writeNotes(newData);
-
-      if (!expandedFoldersRef.current.includes(folderKey)) {
-        setExpandedFolders(prev => [...prev, folderKey]);
-      }
       if (type === 'note') {
         setExpandedNotes(prev => [...prev, newItem.id]);
         setEditingContent(prev => ({ ...prev, [newItem.id]: '' }));

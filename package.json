@@ -7,6 +7,7 @@
     "start:python": "npx ts-node shared_backend/label-desktop.ts",
     "start": "cd electron_ui && npm start",
     "start:electron": "cd electron_ui && npm start",
+    "build": "cd electron_ui && npm run build",
     "rocket": "cd electron_ui && npm run rocket",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

@@ -7,6 +7,10 @@ const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
 
+// ─── APP NAME & ICON ───
+app.setName('Desktop Manager');
+const ICON_PATH = path.join(__dirname, 'icon.png');
+
 // ─── PID FILE PATH ───
 const PID_FILE = '/tmp/desktop-manager.pid';
 
@@ -62,6 +66,7 @@ function createWindow() {
     backgroundColor: '#1a1b26', // Matching your theme
     alwaysOnTop: true,
     title: "Desktop Manager", // Explicit title for wmctrl
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -158,13 +163,15 @@ ipcMain.handle('fetch-desktops', async () => {
       const kdotoolRes = await execAsync(
         `for id in $(kdotool search --class '.*' 2>/dev/null); do` +
         `  wname=$(kdotool getwindowname "$id" 2>/dev/null);` +
-        `  if [[ "$wname" != *"Desktop Manager"* ]] && ` +
-        `     [[ "$wname" != *"Antigravity"* ]] && ` +
-        `     [[ "$wname" != "Menu" ]] && ` +
-        `     [[ "$wname" != "plasmashell" ]] && ` +
-        `     [[ "$wname" != "Xwayland Video Bridge" ]] && ` +
-        `     [[ "$wname" != "Wayland to X Recording bridge"* ]] && ` +
-        `     [[ "$wname" != "" ]]; then` +
+        `  wclass=$(kdotool getwindowclass "$id" 2>/dev/null);` +
+        `  if [[ "$wclass" == *"desktop-manager"* ]] || ` +
+        `     [[ "$wname" == "Menu" ]] || ` +
+        `     [[ "$wname" == "plasmashell" ]] || ` +
+        `     [[ "$wname" == "Xwayland Video Bridge" ]] || ` +
+        `     [[ "$wname" == "Wayland to X Recording bridge"* ]] || ` +
+        `     [[ "$wname" == "" ]]; then` +
+        `    : ;` + // Ignore these
+        `  else` +
         `    kdotool get_desktop_for_window "$id" 2>/dev/null;` +
         `  fi;` +
         `done`
@@ -225,16 +232,20 @@ ipcMain.handle('list-templates', async () => {
 
 ipcMain.handle('write-json', async (event, filename, data) => {
   const filePath = path.join(os.homedir(), '.config', 'desktop-manager', filename);
+  const tempPath = filePath + '.tmp.' + Date.now() + '-' + Math.random().toString(36).substring(2);
   try {
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
+    await fs.rename(tempPath, filePath);
     return true;
   } catch (error) {
+    try { await fs.unlink(tempPath); } catch (e) {}
     return false;
   }
 });
 
 ipcMain.handle('move-desktop', async (event, fullId, targetFolder, targetIndex) => {
   const sessionPath = path.join(os.homedir(), '.config', 'desktop-manager', 'session.json');
+  const tempPath = sessionPath + '.tmp.' + Date.now() + '-' + Math.random().toString(36).substring(2);
   try {
     const raw = await fs.readFile(sessionPath, 'utf-8');
     const data = JSON.parse(raw);
@@ -244,11 +255,13 @@ ipcMain.handle('move-desktop', async (event, fullId, targetFolder, targetIndex) 
       }
       if (!data.folders[targetFolder]) data.folders[targetFolder] = [];
       data.folders[targetFolder].splice(targetIndex, 0, fullId);
-      await fs.writeFile(sessionPath, JSON.stringify(data, null, 2));
+      await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
+      await fs.rename(tempPath, sessionPath);
       return true;
     }
     return false;
   } catch (error) {
+    try { await fs.unlink(tempPath); } catch (e) {}
     return false;
   }
 });

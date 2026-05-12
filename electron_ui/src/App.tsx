@@ -364,7 +364,7 @@ function App() {
                   onSwitch={handleSwitch}
                 />
               )}
-              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} />}
+              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'notes' && <NotesTab notesData={data?.notes} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
@@ -380,16 +380,27 @@ function App() {
           onSubmit={async (value) => {
             if (promptConfig.command === 'NOTES_ADD_FOLDER') {
               const folderKey = value.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
-              const currentNotes = data?.notes || { folders: { root: [] } };
-              const currentFolders = currentNotes.folders || { root: [] };
+              
+              // SAFETY CHECK: Ensure we have valid notes data before attempting to update.
+              // If data.notes is missing its core structure, abort to prevent overwriting with defaults.
+              if (!data?.notes || !data.notes.folders) {
+                console.error("Abort: Notes data is missing or corrupted. Cannot add folder safely.");
+                alert("Error: Could not add folder because the notes data is currently unavailable or corrupted. Please restart the app.");
+                return;
+              }
+
+              const currentNotes = data.notes;
+              const currentFolders = currentNotes.folders;
               const currentOrder = currentNotes.folder_order || Object.keys(currentFolders);
               const currentNames = currentNotes.folder_names || {};
+              
               // @ts-ignore
               await window.electronAPI.writeJSON('notes.json', {
                 ...currentNotes,
                 folders: { ...currentFolders, [folderKey]: [] },
-                folder_order: [...currentOrder, folderKey],
+                folder_order: [...currentOrder.filter((k: string) => k !== folderKey), folderKey],
                 folder_names: { ...currentNames, [folderKey]: value },
+                expanded_folders: [...(currentNotes.expanded_folders || ['root']).filter((k: string) => k !== folderKey), folderKey]
               });
             } else {
               // @ts-ignore

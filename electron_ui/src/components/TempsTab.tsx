@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus } from './Icons';
+import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash } from './Icons';
 
 interface Task {
   id: string;
@@ -22,7 +22,7 @@ interface FlatItem {
   taskId?: string;
 }
 
-export default function TempsTab({ templates, searchQuery }: { templates: Template[], searchQuery?: string }) {
+export default function TempsTab({ templates, searchQuery, onAction }: { templates: Template[], searchQuery?: string, onAction?: () => void }) {
   const [expandedTemps, setExpandedTemps] = useState<string[]>([]);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
@@ -189,6 +189,7 @@ export default function TempsTab({ templates, searchQuery }: { templates: Templa
                           // @ts-ignore
                           await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "IMPORT_SCRIPT_TO_TEMPLATE:${temp.filename}:${scriptPath}"`);
                           setLoadingTasks(prev => ({ ...prev, [key]: false }));
+                          onAction?.();
                         }
                       }}
                       disabled={loadingTasks[`import-script-${temp.filename}`]}
@@ -196,6 +197,25 @@ export default function TempsTab({ templates, searchQuery }: { templates: Templa
                       title="Add Script"
                     >
                       {loadingTasks[`import-script-${temp.filename}`] ? <IconLoader size={14} /> : <IconFilePlus size={16} />}
+                    </button>
+                    <button 
+                      className="btn-hover"
+                      onClick={async (e) => { 
+                        e.stopPropagation(); 
+                        if (window.confirm(`Delete template "${temp.name}"?`)) {
+                          const key = `delete-temp-${temp.filename}`;
+                          setLoadingTasks(prev => ({ ...prev, [key]: true }));
+                          // @ts-ignore
+                          await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
+                          setLoadingTasks(prev => ({ ...prev, [key]: false }));
+                          onAction?.();
+                        }
+                      }}
+                      disabled={loadingTasks[`delete-temp-${temp.filename}`]}
+                      style={{ backgroundColor: 'transparent', color: '#f7768e', border: 'none', padding: '4px', borderRadius: '4px' }}
+                      title="Delete Template"
+                    >
+                      {loadingTasks[`delete-temp-${temp.filename}`] ? <IconLoader size={14} /> : <IconTrash size={16} />}
                     </button>
                     <button 
                       className="btn-hover"
@@ -260,6 +280,25 @@ export default function TempsTab({ templates, searchQuery }: { templates: Templa
                               title="Edit Script"
                             >
                               <IconPencil size={14} />
+                            </button>
+                            <button 
+                              className="btn-hover"
+                              onClick={async (e) => { 
+                                e.stopPropagation(); 
+                                if (window.confirm(`Delete script "${task.name}" from template "${temp.name}"?`)) {
+                                  const key = `delete-task-${taskId}`;
+                                  setLoadingTasks(prev => ({ ...prev, [key]: true }));
+                                  // @ts-ignore
+                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}"`);
+                                  setLoadingTasks(prev => ({ ...prev, [key]: false }));
+                                  onAction?.();
+                                }
+                              }}
+                              disabled={loadingTasks[`delete-task-${taskId}`]}
+                              style={{ backgroundColor: 'transparent', color: '#f7768e', border: 'none', padding: '4px' }}
+                              title="Delete Script"
+                            >
+                              {loadingTasks[`delete-task-${taskId}`] ? <IconLoader size={14} /> : <IconTrash size={14} />}
                             </button>
                             <button 
                               className="btn-hover"
