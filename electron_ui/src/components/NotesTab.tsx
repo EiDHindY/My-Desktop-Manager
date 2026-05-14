@@ -27,7 +27,7 @@ interface FlatItem {
   item?: NoteItem;
 }
 
-export default function NotesTab({ notesData, onAction }: { notesData: NotesData | null, onAction?: () => void }) {
+export default function NotesTab({ notesData, searchQuery = '', onAction }: { notesData: NotesData | null, searchQuery?: string, onAction?: () => void }) {
   const [expandedFolders, setExpandedFolders] = useState<string[]>(notesData?.expanded_folders || ['root']);
   const [expandedNotes, setExpandedNotes] = useState<string[]>([]);
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
@@ -103,19 +103,38 @@ export default function NotesTab({ notesData, onAction }: { notesData: NotesData
   const folderNames = data?.folder_names || {};
   const getFolderName = (key: string) => key === 'root' ? 'General' : (folderNames[key] || key);
 
+  const query = searchQuery.toLowerCase();
+
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
     folderOrder.forEach(folderKey => {
+      const folderName = getFolderName(folderKey).toLowerCase();
+      const folderItems = folders[folderKey] || [];
+      const matchingItems = folderItems.filter(item => 
+        item.text.toLowerCase().includes(query) || 
+        (item.content || '').toLowerCase().includes(query)
+      );
+      const folderMatches = folderName.includes(query);
+
+      if (query && !folderMatches && matchingItems.length === 0) return;
+
       items.push({ type: 'folder', id: folderKey, folderKey });
-      if (expandedFolders.includes(folderKey)) {
-        const folderItems = folders[folderKey] || [];
-        folderItems.forEach(item => {
+      if (query || expandedFolders.includes(folderKey)) {
+        const itemsToDisplay = query ? matchingItems : folderItems;
+        itemsToDisplay.forEach(item => {
           items.push({ type: 'item', id: item.id, folderKey, item });
         });
       }
     });
     return items;
-  }, [folderOrder, expandedFolders, folders]);
+  }, [folderOrder, expandedFolders, folders, query]);
+
+  // Auto-select first item when searching
+  useEffect(() => {
+    if (searchQuery) {
+      setSelectedIndex(0);
+    }
+  }, [searchQuery]);
 
   useEffect(() => {
     flatDataRef.current = flatItems;
@@ -392,21 +411,21 @@ export default function NotesTab({ notesData, onAction }: { notesData: NotesData
           onDragStart={() => { isDragging.current = true; }}
           onDragEnd={onDragEnd}
         >
-          <Droppable droppableId="folders" type="FOLDER">
+          <Droppable droppableId="folders" type="FOLDER" isDropDisabled={!!query}>
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {draggableFolders.map((folderKey, index) => {
                 const flatIndex = flatItems.findIndex(i => i.id === folderKey && i.type === 'folder');
                 const isFocused = selectedIndex === flatIndex;
                 return (
-                  <Draggable key={folderKey} draggableId={`folder-${folderKey}`} index={index}>
+                  <Draggable key={folderKey} draggableId={`folder-${folderKey}`} index={index} isDragDisabled={!!query}>
                     {(drag, snapshot) => (
                       <div ref={drag.innerRef} {...drag.draggableProps} style={{ ...drag.draggableProps.style, opacity: snapshot.isDragging ? 0.85 : 1 }}>
                         <FolderBlock
                           folderKey={folderKey}
                           folderLabel={getFolderName(folderKey)}
-                          items={folders[folderKey] as NoteItem[]}
-                          isExpanded={expandedFolders.includes(folderKey)}
+                          items={(folders[folderKey] || []).filter(item => !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query))}
+                          isExpanded={query || expandedFolders.includes(folderKey)}
                           isRoot={false}
                           dragHandle={drag.dragHandleProps}
                           hoveredFolder={hoveredFolder}
@@ -417,6 +436,7 @@ export default function NotesTab({ notesData, onAction }: { notesData: NotesData
                           editingItemId={editingItemId}
                           editingContent={editingContent}
                           isFocused={isFocused}
+                          isSearchActive={!!query}
                           flatItems={flatItems}
                           selectedIndex={selectedIndex}
                           onToggleFolder={() => toggleFolder(folderKey)}
@@ -446,8 +466,8 @@ export default function NotesTab({ notesData, onAction }: { notesData: NotesData
           <FolderBlock
             folderKey="root"
             folderLabel="General"
-            items={folders['root'] as NoteItem[]}
-            isExpanded={expandedFolders.includes('root')}
+            items={(folders['root'] || []).filter(item => !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query))}
+            isExpanded={query || expandedFolders.includes('root')}
             isRoot
             hoveredFolder={hoveredFolder}
             hoveredItem={hoveredItem}
@@ -456,6 +476,7 @@ export default function NotesTab({ notesData, onAction }: { notesData: NotesData
             editingItemId={editingItemId}
             editingContent={editingContent}
             isFocused={selectedIndex === flatItems.findIndex(i => i.id === 'root' && i.type === 'folder')}
+            isSearchActive={!!query}
             flatItems={flatItems}
             selectedIndex={selectedIndex}
             onToggleFolder={() => toggleFolder('root')}
@@ -486,7 +507,7 @@ function FolderBlock({
   onToggleFolder, onToggleCheck, onDeleteItem, onDeleteFolder, onToggleNote,
    onSaveText, onSaveContent,
    setHoveredFolder, setHoveredItem, setEditingItemId, setEditingContent,
-    savingIds = new Set(), onMarkFinishedEditing,
+    savingIds = new Set(), onMarkFinishedEditing, isSearchActive,
  }: any) {
     const isAnyEditing = !!editingItemId || Object.keys(editingContent).length > 0;
     const pendingCount = items.filter((i: any) => {
@@ -585,7 +606,7 @@ function FolderBlock({
       </div>
 
       {isExpanded && (
-        <Droppable droppableId={folderKey} type="ITEM">
+        <Droppable droppableId={folderKey} type="ITEM" isDropDisabled={isSearchActive}>
           {(provided, snapshot) => (
             <div
               ref={provided.innerRef}
@@ -606,7 +627,7 @@ function FolderBlock({
                 const itemFlatIndex = flatItems.findIndex((i: any) => i.id === item.id && i.type === 'item');
                 const isItemFocused = selectedIndex === itemFlatIndex;
                 return (
-                  <Draggable key={item.id} draggableId={item.id} index={idx}>
+                  <Draggable key={item.id} draggableId={item.id} index={idx} isDragDisabled={isSearchActive}>
                     {(drag, dSnap) => (
                       <div
                         ref={drag.innerRef}

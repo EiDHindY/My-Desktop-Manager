@@ -101,11 +101,10 @@ function App() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // ABSOLUTE GUARD: if user is typing in any input, this handler does nothing
       const tag = (document.activeElement as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
 
-      // Circular Tab Navigation
+      // Circular Tab Navigation - ALWAYS allow these even in inputs if Ctrl is held
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
@@ -129,10 +128,15 @@ function App() {
         }
       }
 
-      // Clear search on Escape
+      // Clear search on Escape - Allow if in search input or no input
       if (e.key === 'Escape') {
-        setSearchQuery('')
+        if (!isInput || document.activeElement === searchInputRef.current) {
+          setSearchQuery('')
+        }
       }
+
+      // ABSOLUTE GUARD for other keys: if user is typing in any input, ignore
+      if (isInput) return;
 
       // Auto-focus search on any alphanumeric key if not already in an input
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
@@ -370,7 +374,7 @@ function App() {
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
-              {activeTab === 'notes' && <NotesTab notesData={data?.notes} onAction={() => setLastActionTime(Date.now())} />}
+              {activeTab === 'notes' && <NotesTab notesData={data?.notes} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
             </>
