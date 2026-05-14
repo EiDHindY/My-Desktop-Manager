@@ -225,7 +225,8 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
     window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
   };
 
-  const renderFolder = (folderName: string, index: number, isDraggable: boolean) => {
+  const renderFolder = (folderName: string, index: number, isDraggable: boolean, displayName?: string) => {
+    const label = displayName || folderName;
     const desktops = folders[folderName] || [];
     
     const matchingDesktops = desktops.filter((id: string) => {
@@ -296,7 +297,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
           <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
             {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#565f89" />)}
           </span>
-          <span style={{ flex: 1, userSelect: 'none' }}>{folderName}</span>
+          <span style={{ flex: 1, userSelect: 'none' }}>{label}</span>
           
           {hoveredFolder === folderName && (
             <div 
@@ -527,7 +528,18 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
         <Droppable droppableId="board" type="FOLDER">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps}>
-              {folderNames.filter(f => f !== 'root').map((folderName, index) => renderFolder(folderName, index, true))}
+              {folderNames.filter(f => f !== 'root').map((folderName, index) => {
+                const parts = folderName.split('/');
+                const displayName = parts[parts.length - 1];
+                const level = parts.length - 1;
+                const indent = level * 24;
+
+                return (
+                  <div key={folderName} style={{ marginLeft: `${indent}px` }}>
+                    {renderFolder(folderName, index, true, displayName)}
+                  </div>
+                );
+              })}
               {provided.placeholder}
             </div>
           )}

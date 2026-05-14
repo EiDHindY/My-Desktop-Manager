@@ -84,7 +84,10 @@ function App() {
   useEffect(() => {
     const handleFocus = () => {
       setIsFocused(true);
-      setTimeout(() => searchInputRef.current?.focus(), 10);
+      // Only auto-focus search if we aren't already editing something else
+      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        setTimeout(() => searchInputRef.current?.focus(), 10);
+      }
     };
     const handleBlur = () => setIsFocused(false);
     window.addEventListener('focus', handleFocus);
@@ -98,6 +101,10 @@ function App() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // ABSOLUTE GUARD: if user is typing in any input, this handler does nothing
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
       // Circular Tab Navigation
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
@@ -128,10 +135,8 @@ function App() {
       }
 
       // Auto-focus search on any alphanumeric key if not already in an input
-      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
-          searchInputRef.current?.focus()
-        }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
+        searchInputRef.current?.focus()
       }
     }
 
@@ -365,7 +370,7 @@ function App() {
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
-              {activeTab === 'notes' && <NotesTab notesData={data?.notes} />}
+              {activeTab === 'notes' && <NotesTab notesData={data?.notes} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
             </>

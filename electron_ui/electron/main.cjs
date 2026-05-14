@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -90,18 +90,13 @@ function createWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   mainWindow.setAlwaysOnTop(true, 'floating');
 
-  // DIAGNOSTIC: Uncomment this if you still see a blank screen
-  // mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(() => {
-  createWindow();
+  // Removes default menu to free up Ctrl+Q for React
+  Menu.setApplicationMenu(null);
 
-  // ─── SHORTCUT: Handled by KDE Custom Shortcut → SIGUSR1 ───────────────────
-  // Electron's globalShortcut is NOT used — it routes through the KDE D-Bus
-  // portal which has ~3s latency on KDE Wayland. The KDE Custom Shortcut
-  // (System Settings → Shortcuts → Commands → DM) sends SIGUSR1 instead.
-  console.log('[APP] Ready. Listening for SIGUSR1 from KDE Custom Shortcut (Ctrl+Space).');
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -111,7 +106,6 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
-  // Clean up PID file
   try { fsSync.unlinkSync(PID_FILE); } catch (e) {}
 });
 

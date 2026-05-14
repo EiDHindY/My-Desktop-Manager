@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { 
   IconFolder, IconFolderOpen, IconTrash, IconGrip, 
-  IconCopy, IconCheck, IconFileText, IconSquare
+  IconCopy, IconCheck, IconFileText, IconSquare, IconLoader
 } from './Icons';
 
 interface NoteItem {
@@ -27,32 +27,67 @@ interface FlatItem {
   item?: NoteItem;
 }
 
-export default function NotesTab({ notesData }: { notesData: NotesData | null }) {
+export default function NotesTab({ notesData, onAction }: { notesData: NotesData | null, onAction?: () => void }) {
   const [expandedFolders, setExpandedFolders] = useState<string[]>(notesData?.expanded_folders || ['root']);
   const [expandedNotes, setExpandedNotes] = useState<string[]>([]);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState<Record<string, string>>({});
-  const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [localChecked, setLocalChecked] = useState<Record<string, boolean>>({});
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [localData, setLocalData] = useState<NotesData | null>(notesData);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [editingItemId, _setEditingItemId] = useState<string | null>(null);
+  const editingItemIdRef = useRef<string | null>(null);
+  const editingContentRef = useRef<{ [key: string]: string }>({});
+  const selectedIndexRef = useRef(0);
+  const flatDataRef = useRef<any[]>([]);
 
+  const setEditingItemId = (id: string | null) => {
+    editingItemIdRef.current = id;
+    _setEditingItemId(id);
+    if (id) {
+      const idx = flatDataRef.current.findIndex((i: any) => i.id === id);
+      if (idx !== -1) setSelectedIndex(idx);
+    }
+  };
+  const [editingContent, _setEditingContent] = useState<Record<string, string>>({});
+  const setEditingContent = (val: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => {
+    const next = typeof val === 'function' ? val(editingContentRef.current) : val;
+    editingContentRef.current = next;
+    _setEditingContent(next);
+  };
+  const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
   const notesDataRef = useRef(notesData);
   const expandedFoldersRef = useRef(expandedFolders);
   const isDragging = useRef(false);
+  const justFinishedEditingRef = useRef(false); // blocks key-repeat Enter after input blur
+
+  useEffect(() => { selectedIndexRef.current = selectedIndex; }, [selectedIndex]);
 
   useEffect(() => {
     if (!isDragging.current) setLocalData(notesData);
     if (notesData?.expanded_folders) setExpandedFolders(notesData.expanded_folders);
   }, [notesData]);
+
+  // Handle focus management separately from data updates
+  useEffect(() => {
+    // Focus on initial mount
+    containerRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    // Return focus to container when editing finishes
+    if (editingItemId === null && !isDragging.current) {
+      containerRef.current?.focus();
+    }
+  }, [editingItemId]);
   useEffect(() => { notesDataRef.current = notesData; }, [notesData]);
   useEffect(() => { expandedFoldersRef.current = expandedFolders; }, [expandedFolders]);
 
-  const writeNotes = (newData: any) => {
+  const writeNotes = async (newData: any) => {
     // @ts-ignore
-    window.electronAPI.writeJSON('notes.json', newData);
+    return await window.electronAPI.writeJSON('notes.json', newData);
   };
 
   const data = localData || notesData;
@@ -81,6 +116,10 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
     });
     return items;
   }, [folderOrder, expandedFolders, folders]);
+
+  useEffect(() => {
+    flatDataRef.current = flatItems;
+  }, [flatItems]);
 
   const toggleFolder = (key: string) => {
     const next = expandedFolders.includes(key) 
@@ -119,53 +158,102 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
     writeNotes(newData);
   };
 
-  const saveItemText = (folderKey: string, itemId: string, text: string) => {
+  const saveItemText = async (folderKey: string, itemId: string, text: string) => {
     const items = (folders[folderKey] || []).map((item: NoteItem) =>
       item.id === itemId ? { ...item, text } : item
     );
-    writeNotes({ ...data, folders: { ...folders, [folderKey]: items } });
+    const newData = { ...data, folders: { ...folders, [folderKey]: items } };
+    
+    // Optimistic Update
+    setLocalData(newData as NotesData);
+    
+    setSavingIds(prev => new Set(prev).add(itemId));
+    try {
+      await writeNotes(newData);
+      if (onAction) onAction();
+    } finally {
+      setSavingIds(prev => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
   };
 
-  const saveItemContent = (folderKey: string, itemId: string, content: string) => {
+  const saveItemContent = async (folderKey: string, itemId: string, content: string) => {
     const items = (folders[folderKey] || []).map((item: NoteItem) =>
       item.id === itemId ? { ...item, content } : item
     );
-    writeNotes({ ...data, folders: { ...folders, [folderKey]: items } });
+    const newData = { ...data, folders: { ...folders, [folderKey]: items } };
+    
+    // Optimistic Update
+    setLocalData(newData as NotesData);
+
+    setSavingIds(prev => new Set(prev).add(itemId));
+    try {
+      await writeNotes(newData);
+      if (onAction) onAction();
+    } finally {
+      setSavingIds(prev => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    }
   };
 
   const toggleNoteExpand = (itemId: string) => {
     setExpandedNotes(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
-      if (flatItems.length === 0 || editingItemId || Object.keys(editingContent).length > 0) return;
+  const handleContainerKeyDown = (e: React.KeyboardEvent) => {
+    // GUARDS: don't run navigation while focus is inside an input/textarea
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
 
-      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev + 1) % flatItems.length);
-      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
-        e.preventDefault();
-        setSelectedIndex(prev => (prev - 1 + flatItems.length) % flatItems.length);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        const item = flatItems[selectedIndex];
-        if (item.type === 'folder') {
-          toggleFolder(item.folderKey);
-        } else if (item.type === 'item' && item.item) {
-          if (item.item.type === 'note') {
-            toggleNoteExpand(item.item.id);
-          } else {
-            toggleCheck(item.folderKey, item.item.id);
+    if (justFinishedEditingRef.current) { 
+      justFinishedEditingRef.current = false; 
+      return; 
+    }
+
+    const currentFlatData = flatDataRef.current;
+    const currentIdx = selectedIndexRef.current;
+    if (currentFlatData.length === 0) return;
+
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev + 1) % currentFlatData.length);
+    } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev - 1 + currentFlatData.length) % currentFlatData.length);
+    } else if (e.ctrlKey && e.key === 'Enter') {
+      console.warn('NAV: Ctrl+Enter caught by container');
+      e.preventDefault();
+      const item = currentFlatData[currentIdx];
+      if (!item) return;
+      if (item.type === 'folder') {
+        toggleFolder(item.folderKey);
+      } else if (item.type === 'item' && item.item) {
+        if (item.item.type === 'note') {
+          const noteId = item.item.id;
+          if (!expandedNotes.includes(noteId)) {
+            toggleNoteExpand(noteId);
           }
+          // Focus the textarea after expansion
+          setTimeout(() => {
+            const el = document.getElementById(`note-content-${noteId}`);
+            if (el) (el as HTMLTextAreaElement).focus();
+          }, 100);
+        } else {
+          toggleCheck(item.folderKey, item.item.id);
         }
       }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [flatItems, selectedIndex, editingItemId, editingContent]);
+    } else if (e.key === 'Enter') {
+       console.log('NAV: Plain Enter ignored by container (Reserved for Rename)');
+    } else if (e.key === 'Escape') {
+      setSelectedIndex(-1);
+    }
+  };
 
   useEffect(() => {
     const focusedEl = document.getElementById(`flat-item-${selectedIndex}`);
@@ -256,6 +344,27 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
         setEditingContent(prev => ({ ...prev, [newItem.id]: '' }));
       }
       setEditingItemId(newItem.id);
+
+      // Sync selection to the new item
+      setTimeout(() => {
+        const currentNotes = notesDataRef.current;
+        const currentFolders = currentNotes?.folders || {};
+        const currentOrder = currentNotes?.folder_order || Object.keys(currentFolders);
+        const currentExpanded = expandedFoldersRef.current;
+
+        const newFlatItems: any[] = [];
+        currentOrder.forEach(fk => {
+          newFlatItems.push({ type: 'folder', id: fk });
+          if (currentExpanded.includes(fk)) {
+            (currentFolders[fk] || []).forEach((item: any) => {
+              newFlatItems.push({ type: 'item', id: item.id });
+            });
+          }
+        });
+
+        const idx = newFlatItems.findIndex(i => i.id === newItem.id);
+        if (idx !== -1) setSelectedIndex(idx);
+      }, 50); // Slight delay to let React process the addition
     };
 
     window.addEventListener('notes-add', handleAdd as EventListener);
@@ -265,12 +374,25 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
   const draggableFolders = folderOrder.filter(k => k !== 'root');
 
   return (
-    <div ref={containerRef} style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', height: '100%' }}>
-      <DragDropContext
-        onDragStart={() => { isDragging.current = true; }}
-        onDragEnd={onDragEnd}
-      >
-        <Droppable droppableId="folders" type="FOLDER">
+    <div 
+      className="flex flex-col h-full overflow-hidden" 
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={handleContainerKeyDown}
+      onClick={(e) => {
+        // If clicking the background or non-interactive areas, regain focus
+        if ((e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+          containerRef.current?.focus();
+        }
+      }}
+      style={{ outline: 'none' }} 
+    >
+      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', height: '100%' }}>
+        <DragDropContext
+          onDragStart={() => { isDragging.current = true; }}
+          onDragEnd={onDragEnd}
+        >
+          <Droppable droppableId="folders" type="FOLDER">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {draggableFolders.map((folderKey, index) => {
@@ -291,6 +413,7 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
                           hoveredItem={hoveredItem}
                           expandedNotes={expandedNotes}
                           localChecked={localChecked}
+                          savingIds={savingIds}
                           editingItemId={editingItemId}
                           editingContent={editingContent}
                           isFocused={isFocused}
@@ -307,6 +430,7 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
                           setHoveredItem={setHoveredItem}
                           setEditingItemId={setEditingItemId}
                           setEditingContent={setEditingContent}
+                          onMarkFinishedEditing={() => { justFinishedEditingRef.current = true; }}
                         />
                       </div>
                     )}
@@ -345,9 +469,12 @@ export default function NotesTab({ notesData }: { notesData: NotesData | null })
             setHoveredItem={setHoveredItem}
             setEditingItemId={setEditingItemId}
             setEditingContent={setEditingContent}
+            savingIds={savingIds}
+            onMarkFinishedEditing={() => { justFinishedEditingRef.current = true; }}
           />
         )}
       </DragDropContext>
+      </div>
     </div>
   );
 }
@@ -357,34 +484,51 @@ function FolderBlock({
   hoveredFolder, hoveredItem, expandedNotes, localChecked,
   editingItemId, editingContent, isFocused, flatItems, selectedIndex,
   onToggleFolder, onToggleCheck, onDeleteItem, onDeleteFolder, onToggleNote,
-  onSaveText, onSaveContent,
-  setHoveredFolder, setHoveredItem, setEditingItemId, setEditingContent,
-}: any) {
-  const pendingCount = (items as NoteItem[]).filter(i => (i.type || 'checkbox') === 'checkbox' && !((localChecked[i.id] ?? i.checked))).length;
-  const folderFlatIndex = flatItems.findIndex((i: any) => i.id === folderKey && i.type === 'folder');
-
-  return (
-    <div 
-      id={`flat-item-${folderFlatIndex}`}
-      style={{ 
-        borderRadius: '10px', 
-        border: isFocused ? '1px solid #7aa2f7' : (isExpanded ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid #3b4261'), 
-        overflow: 'hidden', 
-        backgroundColor: isFocused ? 'rgba(122, 162, 247, 0.1)' : (isExpanded ? 'rgba(36, 40, 59, 0.3)' : 'transparent'),
-        transition: 'all 0.2s ease'
-      }}
-    >
+   onSaveText, onSaveContent,
+   setHoveredFolder, setHoveredItem, setEditingItemId, setEditingContent,
+    savingIds = new Set(), onMarkFinishedEditing,
+ }: any) {
+    const isAnyEditing = !!editingItemId || Object.keys(editingContent).length > 0;
+    const pendingCount = items.filter((i: any) => {
+      const isChecked = localChecked[i.id] ?? i.checked ?? false;
+      return (i.type === 'checkbox' || !i.type) && !isChecked;
+    }).length;
+  
+    return (
+      <div 
+        style={{ 
+          borderRadius: '10px', 
+          border: (isFocused && !isAnyEditing) ? '1px solid #7aa2f7' : (isExpanded ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid #3b4261'), 
+          overflow: 'hidden', 
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.1)' : (isExpanded ? 'rgba(36, 40, 59, 0.3)' : 'transparent'),
+          transition: 'all 0.2s ease'
+        }}
+      >
       <div
-        onClick={onToggleFolder}
+        onClick={(e) => {
+          // If this was triggered by a keyboard "Enter" translation, block it if editing
+          if (!e.clientX && !e.clientY && isAnyEditing) {
+            console.log('BLOCKED: Keyboard-to-Click translation');
+            return;
+          }
+          onToggleFolder();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            console.log('BLOCKED: Enter/Space on Folder Header');
+            e.stopPropagation();
+            e.preventDefault();
+          }
+        }}
         onMouseEnter={() => setHoveredFolder(folderKey)}
         onMouseLeave={() => setHoveredFolder(null)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '10px 14px', 
-          backgroundColor: isFocused ? 'rgba(122, 162, 247, 0.15)' : (hoveredFolder === folderKey ? '#292e42' : 'transparent'),
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.15)' : (hoveredFolder === folderKey ? '#292e42' : 'transparent'),
           cursor: 'pointer', userSelect: 'none',
           transition: 'background 0.2s ease',
-          borderLeft: isFocused ? '3px solid #7aa2f7' : '3px solid transparent'
+          borderLeft: (isFocused && !isAnyEditing) ? '3px solid #7aa2f7' : '3px solid transparent'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -481,12 +625,14 @@ function FolderBlock({
                           isEditingContent={editingContent[item.id] !== undefined}
                           editContentValue={editingContent[item.id]}
                           localChecked={localChecked}
+                          isSaving={savingIds?.has?.(item.id) || false}
                           hovered={hoveredItem === item.id || isItemFocused}
                           isFocused={isItemFocused}
                           onToggleCheck={() => onToggleCheck(folderKey, item.id)}
                           onDelete={() => onDeleteItem(folderKey, item.id)}
                           onToggleNote={() => onToggleNote(item.id)}
                           onStartEditText={() => setEditingItemId(item.id)}
+                          onEnterConfirm={() => { if (onMarkFinishedEditing) onMarkFinishedEditing(); }}
                           onBlurText={(newText: string) => { 
                             if (newText.trim() && newText !== item.text) onSaveText(folderKey, item.id, newText); 
                             setEditingItemId(null); 
@@ -513,22 +659,25 @@ function NoteItemRow({
   item, id, dragHandle, isNoteExpanded, isEditingText,
   isEditingContent, editContentValue, localChecked, hovered, isFocused,
   onToggleCheck, onDelete, onToggleNote,
-  onStartEditText, onBlurText,
-  onFocusContent, onChangeContent, onBlurContent,
-}: any) {
+   onStartEditText, onBlurText, onEnterConfirm,
+   onFocusContent, onChangeContent, onBlurContent,
+   isSaving,
+ }: any) {
   const [copied, setCopied] = useState(false);
   const itemType = item.type || 'checkbox';
   const isChecked = localChecked[item.id] ?? item.checked ?? false;
 
-  return (
-    <div id={id} style={{ borderRadius: '6px', overflow: 'hidden', marginBottom: '2px' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        padding: '8px 12px',
-        backgroundColor: hovered ? '#292e42' : 'transparent',
-        borderRadius: '6px', transition: 'background 0.15s ease',
-        borderLeft: isFocused ? '3px solid #7dcfff' : '3px solid transparent'
-      }}>
+    const isAnyEditing = !!isEditingText || !!isEditingContent;
+  
+    return (
+      <div id={id} style={{ borderRadius: '6px', overflow: 'hidden', marginBottom: '2px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '8px 12px',
+          backgroundColor: hovered ? '#292e42' : 'transparent',
+          borderRadius: '6px', transition: 'background 0.15s ease',
+          borderLeft: (isFocused && !isAnyEditing) ? '3px solid #7dcfff' : '3px solid transparent'
+        }}>
         <span
           {...dragHandle}
           style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: hovered ? 1 : 0 }}
@@ -536,43 +685,47 @@ function NoteItemRow({
           <IconGrip size={13} />
         </span>
 
-        {itemType === 'checkbox' ? (
-          <div 
-            className="btn-hover"
-            onClick={onToggleCheck}
-            style={{ 
-              width: '18px', 
-              height: '18px', 
-              borderRadius: '4px', 
-              border: isChecked ? '1px solid #7aa2f7' : '1px solid #3b4261',
-              backgroundColor: isChecked ? '#7aa2f7' : 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              flexShrink: 0,
-              transition: 'all 0.2s ease',
-              boxShadow: isChecked ? '0 0 8px rgba(122, 162, 247, 0.4)' : 'none'
-            }}
-          >
-            {isChecked && <IconCheck size={12} color="#1a1b26" />}
-          </div>
-        ) : (
-          <span 
-            className="btn-hover"
-            onClick={onToggleNote} 
-            style={{ 
-              color: isNoteExpanded ? '#7dcfff' : '#bb9af7', 
-              cursor: 'pointer', 
-              flexShrink: 0, 
-              display: 'flex', 
-              alignItems: 'center',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            <IconFileText size={16} />
-          </span>
-        )}
+         {isSaving ? (
+           <span style={{ color: '#7aa2f7', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+             <IconLoader size={16} />
+           </span>
+         ) : itemType === 'checkbox' ? (
+           <div 
+             className="btn-hover"
+             onClick={onToggleCheck}
+             style={{ 
+               width: '18px', 
+               height: '18px', 
+               borderRadius: '4px', 
+               border: isChecked ? '1px solid #7aa2f7' : '1px solid #3b4261',
+               backgroundColor: isChecked ? '#7aa2f7' : 'transparent',
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               cursor: 'pointer',
+               flexShrink: 0,
+               transition: 'all 0.2s ease',
+               boxShadow: isChecked ? '0 0 8px rgba(122, 162, 247, 0.4)' : 'none'
+             }}
+           >
+             {isChecked && <IconCheck size={12} color="#1a1b26" />}
+           </div>
+         ) : (
+           <span 
+             className="btn-hover"
+             onClick={onToggleNote} 
+             style={{ 
+               color: isNoteExpanded ? '#7dcfff' : '#bb9af7', 
+               cursor: 'pointer', 
+               flexShrink: 0, 
+               display: 'flex', 
+               alignItems: 'center',
+               transition: 'all 0.2s ease'
+             }}
+           >
+             <IconFileText size={16} />
+           </span>
+         )}
 
         {isEditingText ? (
           <input
@@ -582,12 +735,19 @@ function NoteItemRow({
             autoFocus
             onFocus={(e) => e.target.select()}
             onBlur={(e) => onBlurText(e.target.value)}
-            onKeyDown={(e) => { 
-              if (e.key === 'Enter' || e.key === 'Escape') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              } 
-            }}
+             onKeyDown={(e) => {
+               e.nativeEvent.stopImmediatePropagation();
+               e.stopPropagation();
+               if (e.key === 'Enter') {
+                 e.preventDefault();
+                 onEnterConfirm?.(); // set the flag BEFORE blur so container ignores next Enter
+                 e.currentTarget.blur();
+               } else if (e.key === 'Escape') {
+                 e.preventDefault();
+                 e.currentTarget.value = item.text;
+                 e.currentTarget.blur();
+               }
+             }}
             style={{ flex: 1, background: '#1a1b26', border: '1px solid #7aa2f7', borderRadius: '4px', color: '#c8d3f5', padding: '4px 8px', fontSize: '13px', outline: 'none' }}
           />
         ) : (
@@ -638,12 +798,23 @@ function NoteItemRow({
       {itemType === 'note' && isNoteExpanded && (
         <div style={{ padding: '4px 12px 12px 40px' }}>
           <textarea
+            id={`note-content-${item.id}`}
             value={isEditingContent ? editContentValue : (item.content || '')}
             onFocus={onFocusContent}
             onChange={(e) => onChangeContent(e.target.value)}
             onBlur={onBlurContent}
             placeholder="Write your note here..."
             rows={5}
+            onKeyDown={(e) => {
+              // Kill the event at the native level — no window listener will ever see this
+              e.nativeEvent.stopImmediatePropagation();
+              e.stopPropagation();
+              // Escape cancels editing without saving
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
             style={{
               width: '100%', backgroundColor: 'rgba(26, 27, 38, 0.5)',
               border: '1px solid #3b4261', borderRadius: '8px',
