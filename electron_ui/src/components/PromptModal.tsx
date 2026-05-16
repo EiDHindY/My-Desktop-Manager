@@ -10,6 +10,8 @@ interface PromptModalProps {
 export default function PromptModal({ title, defaultValue, onSubmit, onCancel }: PromptModalProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  const isDesktopOp = title.toLowerCase().includes('desktop');
 
   useEffect(() => {
     const focusInput = () => {
@@ -23,14 +25,13 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
   }, []);
 
   useEffect(() => {
-    // Trap all keydown events in the capturing phase so the background app NEVER sees them
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      e.stopPropagation(); // stop bubbling
-      e.stopImmediatePropagation(); // stop other listeners on window
+      e.stopPropagation();
+      e.stopImmediatePropagation();
 
       if (e.key === 'Enter') {
         e.preventDefault();
-        onSubmit(value);
+        onSubmit(value + (isDesktopOp ? '|None' : ''));
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
@@ -39,13 +40,19 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
 
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [value, onSubmit, onCancel]);
+  }, [value, onSubmit, onCancel, isDesktopOp]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Redundant now, but keeps React happy.
     e.nativeEvent.stopImmediatePropagation();
     e.nativeEvent.stopPropagation();
   };
+
+  const priorityBtns = [
+    { label: '⚓ Anchor', value: 'Anchor', color: '#c3e88d' },
+    { label: '🔴 High', value: 'High', color: '#ff757f' },
+    { label: '🟡 Mid', value: 'Mid', color: '#ffc777' },
+    { label: '🔵 Low', value: 'Low', color: '#82aaff' }
+  ];
 
   return (
     <div style={{
@@ -64,20 +71,21 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
       <form 
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit(value);
+          onSubmit(value + (isDesktopOp ? '|None' : ''));
         }}
         style={{
         backgroundColor: '#1e2030',
-        border: '1px solid #3b4261',
-        borderRadius: '12px',
-        padding: '20px',
-        width: '320px',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+        border: '2px solid #5a4a78',
+        borderRadius: '16px',
+        padding: '24px',
+        width: '380px',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
         display: 'flex',
         flexDirection: 'column',
         gap: '15px'
       }}>
-        <h3 style={{ margin: 0, color: '#7aa2f7', fontSize: '16px' }}>{title}</h3>
+        <h3 style={{ margin: 0, color: '#a9b1d6', fontSize: '18px', textAlign: 'center', fontWeight: '500' }}>{title}</h3>
+        
         <input 
           ref={inputRef}
           type="text" 
@@ -86,27 +94,67 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
           onKeyDown={handleKeyDown}
           style={{
             width: '100%',
-            padding: '10px',
-            borderRadius: '6px',
-            backgroundColor: '#24283b',
-            border: '1px solid #3b4261',
-            color: '#fff',
+            padding: '12px',
+            borderRadius: '10px',
+            backgroundColor: '#2f334d',
+            border: '2px solid #3b4261',
+            color: '#c8d3f5',
             outline: 'none',
-            fontSize: '14px'
+            fontSize: '16px',
+            textAlign: 'center'
           }}
         />
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+
+        {isDesktopOp && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '5px' }}>
+            {priorityBtns.map(btn => (
+              <button
+                key={btn.value}
+                type="button"
+                onClick={() => onSubmit(`${value}|${btn.value}`)}
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#222436',
+                  color: btn.color,
+                  border: `1px solid ${btn.color}44`,
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = `${btn.color}22`;
+                  e.currentTarget.style.borderColor = btn.color;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#222436';
+                  e.currentTarget.style.borderColor = `${btn.color}44`;
+                }}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
           <button 
             type="button"
             onClick={onCancel}
             style={{
-              padding: '8px 16px',
-              backgroundColor: 'transparent',
-              color: '#565f89',
-              border: '1px solid #3b4261',
-              borderRadius: '6px',
+              flex: 1,
+              padding: '10px',
+              backgroundColor: '#3b4261',
+              color: '#c8d3f5',
+              border: 'none',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '13px'
+              fontSize: '14px',
+              fontWeight: '500'
             }}
           >
             Cancel
@@ -114,17 +162,18 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
           <button 
             type="submit"
             style={{
-              padding: '8px 16px',
+              flex: 1,
+              padding: '10px',
               backgroundColor: '#7aa2f7',
               color: '#1a1b26',
               border: 'none',
-              borderRadius: '6px',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '13px',
+              fontSize: '14px',
               fontWeight: 'bold'
             }}
           >
-            Submit
+            {isDesktopOp ? 'Set Generic' : 'Submit'}
           </button>
         </div>
       </form>

@@ -147,54 +147,119 @@ ipcMain.handle('fetch-desktops', async () => {
 
     const currentOutput = currentRes.stdout.trim();
     const output = desktopsRes.stdout;
+    console.log("QDBUS DESKTOPS OUTPUT:", output);
 
-    // Use kdotool to count windows per desktop (Wayland compatible)
-    // Filter out system windows (Plasma panel, Desktop Manager, empty titles) that appear on all workspaces
-    // kdotool get_desktop_for_window returns 1-based desktop numbers
-    // qdbus pos is 0-based, so we do pos+1 when looking up counts
-    let windowCountsByPos = {};
+    // Load labels.json cache for persistent names
+    const labelsPath = path.join(os.homedir(), '.config', 'desktop-manager', 'labels.json');
+    let labelCache = {};
     try {
-      const kdotoolRes = await execAsync(
-        `for id in $(kdotool search --class '.*' 2>/dev/null); do` +
-        `  wname=$(kdotool getwindowname "$id" 2>/dev/null);` +
-        `  wclass=$(kdotool getwindowclass "$id" 2>/dev/null);` +
-        `  if [[ "$wclass" == *"desktop-manager"* ]] || ` +
-        `     [[ "$wname" == "Menu" ]] || ` +
-        `     [[ "$wname" == "plasmashell" ]] || ` +
-        `     [[ "$wname" == "Xwayland Video Bridge" ]] || ` +
-        `     [[ "$wname" == "Wayland to X Recording bridge"* ]] || ` +
-        `     [[ "$wname" == "" ]]; then` +
-        `    : ;` + // Ignore these
-        `  else` +
-        `    kdotool get_desktop_for_window "$id" 2>/dev/null;` +
-        `  fi;` +
-        `done`
+      const labelsData = await fs.readFile(labelsPath, 'utf-8');
+      labelCache = JSON.parse(labelsData);
+    } catch (e) {}
+
+    // ─── IMPROVED WINDOW DETECTION (WAYLAND NATIVE) ───
+    const windowCountsByUuid = {};
+    const appIconsByUuid = {};
+
+    try {
+      const searchRes = await execAsync("kdotool search --class '.*' 2>/dev/null");
+      const windowIds = searchRes.stdout.split('\n').filter(id => id.trim().length > 0);
+
+      const windowInfos = await Promise.all(
+        windowIds.map(async (id) => {
+          try {
+            const infoRes = await execAsync(`qdbus-qt6 --literal org.kde.KWin /KWin org.kde.KWin.getWindowInfo "${id}"`);
+            const info = infoRes.stdout;
+
+            const typeMatch = info.match(/"type" = \[Variant\(int\): (\d+)\]/);
+            const skipTaskbarMatch = info.match(/"skipTaskbar" = \[Variant\(bool\): (true|false)\]/);
+            
+            if (typeMatch && typeMatch[1] === '0' && skipTaskbarMatch && skipTaskbarMatch[1] === 'false') {
+              const classMatch = info.match(/"resourceClass" = \[Variant\(QString\): "([^"]+)"\]/);
+              const desktopsMatch = info.match(/"desktops" = \[Variant\(QStringList\): \{([^}]*)\}\]/);
+
+              if (classMatch) {
+                const wclass = classMatch[1];
+                const desktopUuids = desktopsMatch && desktopsMatch[1] 
+                  ? desktopsMatch[1].split(',').map(u => u.trim().replace(/"/g, '')) 
+                  : [];
+                
+                return { wclass, desktopUuids };
+              }
+            }
+          } catch (e) {}
+          return null;
+        })
       );
-      kdotoolRes.stdout.split('\n').forEach(line => {
-        const idx = parseInt(line.trim());
-        if (!isNaN(idx) && idx > 0) {
-          windowCountsByPos[idx] = (windowCountsByPos[idx] || 0) + 1;
-        }
+
+      windowInfos.forEach(info => {
+        if (!info) return;
+        info.desktopUuids.forEach(uuid => {
+          windowCountsByUuid[uuid] = (windowCountsByUuid[uuid] || 0) + 1;
+          if (!appIconsByUuid[uuid]) appIconsByUuid[uuid] = [];
+          if (!appIconsByUuid[uuid].includes(info.wclass)) {
+            appIconsByUuid[uuid].push(info.wclass);
+          }
+        });
       });
     } catch (e) {
-      // kdotool not available — all counts stay 0
+      console.error("Window detection failed:", e);
     }
 
     const regex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
     let match;
     const desktops = {};
+    const priorities = {};
     const counts = {};
+    const appMap = {};
+    let cacheUpdated = false;
+
     while ((match = regex.exec(output)) !== null) {
-      const pos = parseInt(match[1]); // 0-based from qdbus
+      const pos = parseInt(match[1]);
       const uuid = match[2];
-      desktops[uuid] = match[3];
-      counts[uuid] = windowCountsByPos[pos + 1] || 0; // +1 to convert to kdotool's 1-based
+      let name = match[3];
+      let priority = "None";
+
+      const isNameEmpty = !name || name === "" || name.toLowerCase() === "empty" || name.toLowerCase().startsWith("desktop ");
+      
+      let cached = labelCache[uuid];
+      if (typeof cached === 'string') {
+        cached = { name: cached, priority: "None" };
+        labelCache[uuid] = cached;
+        cacheUpdated = true;
+      }
+
+      if (isNameEmpty && cached) {
+        name = cached.name;
+        priority = cached.priority || "None";
+        exec(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "${name.replace(/"/g, '\\"')}"`);
+      } else if (!isNameEmpty) {
+        if (cached) {
+          priority = cached.priority || "None";
+          if (name !== cached.name) {
+            cached.name = name;
+            cacheUpdated = true;
+          }
+        } else {
+          labelCache[uuid] = { name, priority: "None" };
+          cacheUpdated = true;
+        }
+      }
+
+      desktops[uuid] = name;
+      priorities[uuid] = priority;
+      counts[uuid] = windowCountsByUuid[uuid] || 0;
+      appMap[uuid] = appIconsByUuid[uuid] || [];
+    }
+
+    if (cacheUpdated) {
+      await fs.writeFile(labelsPath, JSON.stringify(labelCache, null, 2));
     }
     
-    return { names: desktops, counts: counts, current: currentOutput };
+    return { names: desktops, priorities: priorities, counts: counts, apps: appMap, current: currentOutput };
   } catch (error) {
     console.error('Error fetching desktops:', error);
-    return { names: {}, counts: {}, current: null };
+    return { names: {}, priorities: {}, counts: {}, apps: {}, current: null };
   }
 });
 

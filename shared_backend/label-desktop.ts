@@ -8,6 +8,7 @@ import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './helpe
 import { checkFreshSession, saveSnapshot, applyTemplate } from './helpers/session_manager';
 import { fetchDesktops, buildMenuCommand } from './helpers/desktop_utils';
 import { handleClear, handleSummonFolder, handleDeploy, handleRemoveLibraryFolder, handleRemoveLiveFolder, handleCreateLiveDesktop, handleUngroupDesktop, handleCleanEmpty } from './helpers/command_handlers';
+import { updateLabel, removeLabel } from './helpers/label_cache';
 
 function main() {
     const lockPath = '/tmp/desktop-manager.lock';
@@ -67,8 +68,13 @@ function main() {
             const key = result.substring(7), id = key.split("___")[0], old = desktopMap.get(key) || "";
             const fresh = runCommand(`'/home/dod/projects/Desktop Manager/python_ui/rename-box.py' "${old}"`);
             if (fresh) {
+                const parts = fresh.split('|');
+                const newName = parts[0] || "Empty";
+                const priority = parts[1] || "None";
+                
                 undoStack.push({ id, oldName: old });
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "${fresh.replace(/"/g, '\\"')}"`);
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "${newName.replace(/"/g, '\\"')}"`);
+                updateLabel(id, newName, priority);
             }
         } else if (result.startsWith('CLEAR:')) {
             handleClear(result, sessionPath, desktopMap, undoStack);
@@ -85,7 +91,11 @@ function main() {
             handleSummonFolder(result.substring(14), sessionPath);
         } else if (result.startsWith('UNDO')) {
             const last = undoStack.pop();
-            if (last) runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${last.id}" "${last.oldName}"`);
+            if (last) {
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${last.id}" "${last.oldName}"`);
+                if (last.oldName === "Empty") removeLabel(last.id);
+                else updateLabel(last.id, last.oldName);
+            }
         } else if (result.startsWith('LOAD_TEMPLATE:')) {
             applyTemplate(join(templatesDir, result.substring(14)), currentDesktops, sessionPath);
         } else if (result.startsWith('DEPLOY_ALL:') || result.startsWith('DEPLOY_SELECTED:') || result.startsWith('DEPLOY_TASK:')) {

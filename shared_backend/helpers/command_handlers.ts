@@ -3,30 +3,68 @@ import { join, basename, extname } from 'path';
 import { execSync } from 'child_process';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
 import { Desktop } from './desktop_utils';
+import { updateLabel, removeLabel } from './label_cache';
 
 export function handleClear(result: string, sessionPath: string, desktopMap: Map<string, string>, undoStack: any[]) {
+    const logPath = join(process.env.HOME || '', '.config', 'desktop-manager', 'debug.log');
+    const log = (msg: string) => {
+        const time = new Date().toISOString();
+        require('fs').appendFileSync(logPath, `[${time}] ${msg}\n`);
+    };
+
+    log(`handleClear started with: ${result}`);
     const rawOutput = result.substring(6);
     const parts = rawOutput.split("___");
     const id = parts[0];
-    const kwinIdx = parts.length > 1 ? (parseInt(parts[1]) + 1).toString() : null;
+    // Use 0-based index directly for kdotool
+    const kwinIdx = parts.length > 1 ? parts[1] : null; 
+    
+    log(`Parsed: id=${id}, kwinIdx=${kwinIdx}, rawOutput=${rawOutput}`);
     
     undoStack.push({ id, oldName: desktopMap.get(rawOutput) || "" });
-    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
-    
-    if (kwinIdx) {
-        closeWindowsOnDesktop(kwinIdx);
-    }
     
     try {
+        // 1. Update session.json FIRST for immediate persistence
         if (existsSync(sessionPath)) {
+            log(`Updating session.json at ${sessionPath}`);
             const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
             if (data.folders) {
-                for (const f of Object.keys(data.folders)) data.folders[f] = data.folders[f].filter((i: string) => i !== rawOutput);
+                for (const f of Object.keys(data.folders)) {
+                    const originalLen = data.folders[f].length;
+                    data.folders[f] = data.folders[f].filter((i: string) => i !== rawOutput);
+                    if (data.folders[f].length !== originalLen) {
+                        log(`Removed ${rawOutput} from folder ${f}`);
+                    }
+                }
             }
-            if (data.desktop_notes) delete data.desktop_notes[id];
+            if (data.desktop_notes) {
+                if (data.desktop_notes[id]) {
+                    delete data.desktop_notes[id];
+                    log(`Deleted notes for ${id}`);
+                }
+            }
             writeFileSync(sessionPath, JSON.stringify(data, null, 2));
+            log(`Successfully wrote session.json`);
         }
-    } catch (e) {}
+
+        // 2. Perform cleanup tasks (can be slightly slower)
+        log(`Running qdbus rename command for ${id}`);
+        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
+        log(`Removing label for ${id}`);
+        removeLabel(id);
+        
+        // 3. Kill windows in background (very slow)
+        if (kwinIdx !== null) {
+            log(`Triggering window closing on desktop ${kwinIdx} in background`);
+            // We pass the 0-based index to cli.ts
+            runCommand(`(npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" CLOSE_WINDOWS:${kwinIdx} && notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} cleaned up") &`);
+        } else {
+            runCommand(`notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} removed from list"`);
+        }
+    } catch (e: any) {
+        log(`ERROR in handleClear: ${e.message}\n${e.stack}`);
+        runCommand(`notify-send "Desktop Manager" "❌ Deletion failed: ${e.message}"`);
+    }
 }
 
 export function handleSummonFolder(folderName: string, sessionPath: string) {
@@ -135,6 +173,8 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
         for (let i = 0; i < tasks.length; i++) {
             const t = tasks[i], dest = empties[i];
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${t.name}"`);
+            updateLabel(dest.uuid, t.name);
+            
             const entry = `${dest.uuid}___${dest.position}`;
             for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
             
@@ -206,7 +246,10 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         const dest = empties[0];
         console.log(`Targeting desktop: ${dest.uuid} (position ${dest.position})`);
         
-        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${name}"`);
+        const [nameOnly] = name.split('|');
+        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${nameOnly.replace(/"/g, '\\"')}"`);
+        updateLabel(dest.uuid, name);
+        name = nameOnly; // for the notification below
 
         let session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
         if (!session.folders) session.folders = {};
@@ -281,6 +324,7 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
         for (const fullId of uids) {
             const uuid = fullId.split("___")[0];
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
+            removeLabel(uuid);
             if (data.desktop_notes) delete data.desktop_notes[uuid];
             if (data.startup_apps) delete data.startup_apps[uuid];
         }
@@ -320,6 +364,7 @@ export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string
                 // If the desktop is empty and NOT already named "Empty"
                 if (d.name.toLowerCase() !== "empty") {
                     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${d.uuid}" "Empty"`);
+                    removeLabel(d.uuid);
                     cleanedCount++;
                     
                     // Remove from session folders to keep them clean
@@ -357,6 +402,7 @@ export function handleClearAll(currentDesktops: Desktop[], currentUuid: string, 
             const kwinIdx = (d.position + 1).toString();
             closeWindowsOnDesktop(kwinIdx);
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${d.uuid}" "Empty"`);
+            removeLabel(d.uuid);
             clearedCount++;
             
             // Clean from session

@@ -11,7 +11,9 @@ import './App.css'
 function App() {
   const [data, setData] = useState<any>(null)
   const [desktopNames, setDesktopNames] = useState<Record<string, string>>({})
+  const [desktopPriorities, setDesktopPriorities] = useState<Record<string, string>>({})
   const [windowCounts, setWindowCounts] = useState<Record<string, number>>({})
+  const [desktopApps, setDesktopApps] = useState<Record<string, string[]>>({})
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
   const [returnDesktop, setReturnDesktop] = useState<string | null>(null)
   const [templates, setTemplates] = useState<any[]>([])
@@ -32,6 +34,7 @@ function App() {
 
     // @ts-ignore
     if (window.electronAPI && window.electronAPI.readJSON) {
+      console.log("Starting loadData (Promise.all)...");
       // @ts-ignore
       Promise.all([
         // @ts-ignore
@@ -45,18 +48,25 @@ function App() {
         // @ts-ignore
         window.electronAPI.readJSON('history.json')
       ]).then(([sessionData, notesData, desktopInfo, templateList, historyData]) => {
+        console.log("Data received in frontend:", { sessionData, notesData, desktopInfo });
+        
         // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment 
         // to prevent the "state revert" flicker before the backend files have fully updated.
         if (!ignoreThrottle && Date.now() - lastActionTime < 1500) return;
 
         setData({ session: sessionData, notes: notesData })
         setDesktopNames(desktopInfo?.names || {})
+        setDesktopPriorities(desktopInfo?.priorities || {})
         setWindowCounts(desktopInfo?.counts || {})
+        setDesktopApps(desktopInfo?.apps || {})
         setCurrentDesktop(desktopInfo?.current || null)
         setReturnDesktop(historyData?.last_uuid || null)
         setTemplates(templateList || [])
         setLoading(false)
-      })
+      }).catch(err => {
+        console.error("Error in loadData Promise.all:", err);
+        setLoading(false)
+      });
     } else {
       setLoading(false)
     }
@@ -73,8 +83,9 @@ function App() {
   useEffect(() => {
     if (lastActionTime > 0) {
       const timer = setTimeout(() => {
+        console.log("Snappy refresh triggered...");
         loadData(true);
-      }, 400); // 400ms is enough for backend scripts to finish writing to disk
+      }, 1000); // Increased to 1000ms to ensure slow backend writes (like npx tsx) are finished
       return () => clearTimeout(timer);
     }
   }, [lastActionTime])
@@ -355,7 +366,7 @@ function App() {
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#1a1b26' }}>
+        <div className="main-content-area">
           {loading ? (
             <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
           ) : (
@@ -364,7 +375,9 @@ function App() {
                 <LiveTab 
                   sessionData={data?.session} 
                   desktopNames={desktopNames} 
+                  desktopPriorities={desktopPriorities}
                   windowCounts={windowCounts}
+                  desktopApps={desktopApps}
                   searchQuery={searchQuery} 
                   currentDesktop={currentDesktop} 
                   returnDesktop={returnDesktop}

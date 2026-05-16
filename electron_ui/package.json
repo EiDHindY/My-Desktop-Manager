@@ -6,7 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron .",
+    "dev:electron": "wait-on tcp:5173 && cross-env NODE_ENV=development electron --remote-debugging-port=9222 .",
     "start": "concurrently -k \"npm run dev\" \"npm run dev:electron\"",
     "rocket": "electron .",
     "build": "tsc -b && vite build",

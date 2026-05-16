@@ -1,22 +1,58 @@
 import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import ReactDOM from 'react-dom';
 import PromptModal from './PromptModal';
 import { 
-  IconFolder, 
-  IconFolderOpen, 
-  IconMonitor, 
-  IconPlus, 
-  IconRocket, 
-  IconTrash, 
-  IconWipe,
-  IconChevronRight,
-  IconUndo,
+  IconTerminal,
+  IconNotion,
+  IconChrome,
+  IconHospitable,
+  IconGmail,
+  IconCalendar,
+  IconWhatsApp,
+  IconAntigravity,
+  IconMusic,
+  IconMessage,
+  IconFolder,
+  IconMonitor,
+  IconRocket,
+  IconPencil,
   IconGrip,
+  IconFolderOpen,
   IconZap,
-  IconPencil
+  IconUndo,
+  IconWipe,
+  IconTrash,
+  IconChevronRight,
+  IconGhost,
+  IconPlus
 } from './Icons';
 
-export default function LiveTab({ sessionData, desktopNames = {}, windowCounts = {}, searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, windowCounts?: Record<string, number>, searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+/*
+const _AppIcon = ({ appClass, size = 12 }: { appClass: string, size?: number }) => {
+  ...
+};
+*/
+
+export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+
+  const getPriorityScore = (p: string) => {
+    const up = p?.toUpperCase();
+    if (up === 'ANCHOR') return 1;
+    if (up === 'HIGH') return 2;
+    if (up === 'MID') return 3;
+    if (up === 'LOW') return 4;
+    return 5;
+  };
+
+  const getPriorityColor = (p: string) => {
+    const up = p?.toUpperCase();
+    if (up === 'ANCHOR') return '#38bdf8'; // Blue-ish for Anchor
+    if (up === 'HIGH') return '#ff4d4d';   // Sharp Red
+    if (up === 'MID') return '#fbbf24';    // Amber
+    if (up === 'LOW') return '#34d399';    // Green
+    return 'transparent';
+  };
   const [expandedFolders, setExpandedFolders] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('desktopManager_expandedFolders');
@@ -109,15 +145,31 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
     }
   });
 
-  // Auto-select first desktop when searching
   useEffect(() => {
     if (searchQuery) {
       const firstDesktopIndex = visibleItems.findIndex(item => item.type === 'desktop');
       setSelectedIndex(firstDesktopIndex !== -1 ? firstDesktopIndex : 0);
     } else {
-      setSelectedIndex(0);
+      // Find which folder contains the current desktop
+      const parentFolder = Object.keys(folders).find(folderName => 
+        folders[folderName].some((id: string) => id.split("___")[0] === currentDesktop)
+      );
+      
+      // Try to find the desktop itself first
+      let targetIndex = visibleItems.findIndex(item => item.id.split("___")[0] === currentDesktop);
+      
+      // If not found (likely folder is collapsed), find the parent folder
+      if (targetIndex === -1 && parentFolder) {
+        targetIndex = visibleItems.findIndex(item => item.id === parentFolder);
+      }
+      
+      if (targetIndex !== -1) {
+        setSelectedIndex(targetIndex);
+      } else {
+        setSelectedIndex(0);
+      }
     }
-  }, [searchQuery]);
+  }, [searchQuery, currentDesktop, visibleItems.length]);
 
   // Keyboard Navigation: Ctrl + J / K
   useEffect(() => {
@@ -169,7 +221,25 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
 
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'desktop', id: string, folderName?: string) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, type, id, folderName });
+    
+    // Smart positioning logic
+    const menuWidth = 220;
+    const menuHeight = type === 'folder' ? 180 : 260; // Approximate heights
+    
+    let x = e.clientX;
+    let y = e.clientY;
+    
+    // Prevent menu from going off-screen horizontally
+    if (x + menuWidth > window.innerWidth) {
+      x = x - menuWidth;
+    }
+    
+    // Prevent menu from going off-screen vertically
+    if (y + menuHeight > window.innerHeight) {
+      y = y - menuHeight;
+    }
+
+    setContextMenu({ x, y, type, id, folderName });
   };
 
   const handleDeployAll = async (folderName: string) => {
@@ -242,35 +312,32 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
     const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split("___")[0]] || 0) > 0).length;
     const folderEmpty = displayDesktops.length - folderActive;
     
-    const sortedDesktops = folderName === 'root' 
-      ? [...displayDesktops].sort((a, b) => {
-          const pureIdA = a.split('___')[0];
-          const pureIdB = b.split('___')[0];
-          const nameA = (desktopNames[pureIdA] || "").toLowerCase();
-          const nameB = (desktopNames[pureIdB] || "").toLowerCase();
-          const countA = windowCounts[pureIdA] || 0;
-          const countB = windowCounts[pureIdB] || 0;
-          
-          const isAEmpty = !nameA || nameA === "empty" || nameA.startsWith("desktop ");
-          const isBEmpty = !nameB || nameB === "empty" || nameB.startsWith("desktop ");
-          
-          if (countA > 0 && countB === 0) return -1;
-          if (countA === 0 && countB > 0) return 1;
-          
-          if (!isAEmpty && isBEmpty) return -1;
-          if (isAEmpty && !isBEmpty) return 1;
-          
-          return 0;
-        })
-      : displayDesktops;
+    const sortedDesktops = [...displayDesktops].sort((a, b) => {
+      const pureIdA = a.split('___')[0];
+      const pureIdB = b.split('___')[0];
+      const priorityA = getPriorityScore(desktopPriorities[pureIdA] || 'None');
+      const priorityB = getPriorityScore(desktopPriorities[pureIdB] || 'None');
+      
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      return 0; // Maintain manual/natural order for everything else
+    });
 
     if (query && !folderMatches && matchingDesktops.length === 0) return null;
+
+    const hasCurrent = sortedDesktops.some((id: string) => id.split("___")[0] === currentDesktop);
+    const isSelected = visibleItems[selectedIndex]?.id === folderName;
 
     const innerContent = (providedDraggable?: any) => (
       <div 
         ref={providedDraggable?.innerRef} 
         {...providedDraggable?.draggableProps} 
-        style={{ marginBottom: '10px', ...(providedDraggable?.draggableProps.style || {}) }}
+        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : ""}`}
+        style={{ 
+          ...(providedDraggable?.draggableProps.style || {})
+        }}
       >
         <div 
           {...providedDraggable?.dragHandleProps}
@@ -278,26 +345,31 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
           onContextMenu={(e) => handleContextMenu(e, 'folder', folderName)}
           onClick={() => toggleFolder(folderName)}
           onMouseEnter={() => setHoveredFolder(folderName)}
-          onMouseLeave={() => setHoveredFolder(null)}
-          style={{ 
-            display: 'flex', 
-            height: '36px', 
-            marginBottom: '2px', 
-            padding: '0 12px',
-            backgroundColor: visibleItems[selectedIndex]?.id === folderName || hoveredFolder === folderName ? '#292e42' : 'transparent',
-            borderRadius: '6px',
-            alignItems: 'center',
-            color: '#c8d3f5',
-            fontWeight: '600',
-            fontSize: '14px',
-            border: visibleItems[selectedIndex]?.id === folderName || hoveredFolder === folderName ? '1px solid #565f89' : '1px solid transparent',
-            transition: 'all 0.15s ease-in-out'
-          }}
-        >
+            onMouseLeave={() => setHoveredFolder(null)}
+            style={{ 
+              display: 'flex',
+              padding: '10px 14px',
+              background: hasCurrent ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent'),
+              alignItems: 'center',
+              color: hasCurrent ? '#7dcfff' : '#c8d3f5',
+              fontWeight: '600',
+              fontSize: '15px',
+              position: 'relative',
+              transition: 'all 0.25s ease',
+              borderBottom: isExpanded ? '1px solid rgba(255, 255, 255, 0.03)' : '1px solid transparent'
+            }}
+          >
+          {hasCurrent && <div className="active-pillar" style={{ top: '20%', bottom: '20%' }} />}
           <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
             {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#565f89" />)}
           </span>
-          <span style={{ flex: 1, userSelect: 'none' }}>{label}</span>
+          <span style={{ 
+            flex: 1, 
+            userSelect: 'none', 
+            fontSize: '1.1rem', 
+            fontWeight: '600',
+            letterSpacing: '0.01em'
+          }}>{label}</span>
           
           {hoveredFolder === folderName && (
             <div 
@@ -362,7 +434,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
             </div>
           )}
 
-          <div style={{ fontSize: '11px', color: '#565f89' }}>
+          <div style={{ fontSize: '11px', color: '#565f89', flexShrink: 0 }}>
             {folderActive > 0 && <span style={{ color: '#7dcfff', marginRight: '5px', fontWeight: 'bold' }}>{folderActive} active</span>}
             {folderActive > 0 && folderEmpty > 0 && <span style={{ color: '#414868', marginRight: '5px' }}>/</span>}
             {folderEmpty > 0 && <span>{folderEmpty} empty</span>}
@@ -370,142 +442,185 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
         </div>
 
         {isExpanded && (
-          <Droppable droppableId={folderName} type="DESKTOP" isDropDisabled={!!query}>
-            {(providedDroppable) => (
-              <div 
-                ref={providedDroppable.innerRef} 
-                {...providedDroppable.droppableProps}
-                style={{ marginLeft: '20px', display: 'flex', flexDirection: 'column', gap: '2px', minHeight: '10px' }}
-              >
-                {sortedDesktops.map((desktopId: string, dIndex: number) => {
-                  const pureId = desktopId.split("___")[0];
-                  const displayName = desktopNames[pureId] || (pureId.substring(0, 8) + '...');
-                  const isActive = pureId === (currentDesktop || '').trim();
-                  const isReturn = pureId === (returnDesktop || '').trim();
-                  const winCount = windowCounts[pureId] || 0;
-                  const hasWindows = winCount > 0;
-                  const isInactive = !hasWindows && !isActive && !isReturn;
-                  const hasScriptAttached = sessionData?.startup_apps?.[pureId] && sessionData.startup_apps[pureId].length > 0;
-                  
-                  return (
-                    <Draggable draggableId={desktopId} index={dIndex} key={desktopId} isDragDisabled={!!query}>
-                      {(providedDesktop, snapshot) => (
-                        <div 
-                          ref={providedDesktop.innerRef}
-                          {...providedDesktop.draggableProps}
-                          {...providedDesktop.dragHandleProps}
-                          className="interactive-element"
-                          onContextMenu={(e) => handleContextMenu(e, 'desktop', desktopId, folderName)}
-                          onClick={() => handleSwitchDesktop(desktopId)}
-                          onMouseEnter={() => setHoveredDesktop(desktopId)}
-                          onMouseLeave={() => setHoveredDesktop(null)}
-                          style={{ 
-                            display: 'flex', 
-                            height: '32px', 
-                            marginBottom: '2px',
-                            padding: '0 0 0 12px',
-                            alignItems: 'center',
-                            background: snapshot.isDragging ? '#1a1b26' : (isActive ? 'linear-gradient(90deg, rgba(125, 207, 255, 0.35) 0%, transparent 100%)' : (isReturn ? 'linear-gradient(90deg, rgba(187, 154, 247, 0.04) 0%, transparent 100%)' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '#292e42' : 'transparent'))),
-                            borderTop: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
-                            borderRight: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
-                            borderBottom: snapshot.isDragging ? '1px solid #565f89' : (visibleItems[selectedIndex]?.id === desktopId || hoveredDesktop === desktopId ? '1px solid #565f89' : '1px solid transparent'),
-                            borderLeft: isActive ? '3px solid #7dcfff' : (isReturn ? '3px solid #bb9af7' : (hasWindows ? '3px solid #7aa2f7' : '3px solid transparent')),
-                            borderRadius: '6px',
-                            boxSizing: 'border-box',
-                            opacity: isInactive && !snapshot.isDragging && hoveredDesktop !== desktopId ? 0.6 : 1,
-                            color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
-                            fontSize: '13px',
-                            fontWeight: isActive || isReturn || visibleItems[selectedIndex]?.id === desktopId ? 'bold' : '500',
-                            transition: 'all 0.15s ease-in-out',
-                            boxShadow: snapshot.isDragging ? '0 10px 20px rgba(0,0,0,0.5)' : 'none',
-                            ...(providedDesktop.draggableProps.style || {})
-                          }}
-                        >
-                          <span style={{ marginRight: '10px', color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89')), flexShrink: 0, display: 'flex', alignItems: 'center', opacity: hoveredDesktop === desktopId || hasWindows ? 1 : 0.6, transition: 'opacity 0.2s' }}>
-                            <IconMonitor size={14} color="currentColor" />
-                          </span>
-                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px' }}>
-                            {displayName}
-                          </span>
-                          {/* Always-visible window count badge for hasWindows state */}
-                          {winCount > 0 && !isActive && (
-                            <span style={{
-                              marginRight: '8px',
-                              flexShrink: 0,
-                              color: '#1a1b26',
-                              backgroundColor: '#7aa2f7',
-                              padding: '1px 6px',
-                              borderRadius: '10px',
-                              fontSize: '11px',
-                              fontWeight: 'bold',
-                              letterSpacing: '0.3px'
-                            }}>{winCount}w</span>
-                          )}
-                          
-                          {hoveredDesktop === desktopId && hasScriptAttached && (
+          <div style={{ padding: '4px 0 8px 0', marginLeft: '12px' }}>
+            <Droppable droppableId={folderName} type="DESKTOP" isDropDisabled={!!query}>
+              {(providedDroppable) => (
+                <div 
+                  ref={providedDroppable.innerRef} 
+                  {...providedDroppable.droppableProps}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '2px', minHeight: '10px' }}
+                >
+                  {sortedDesktops.map((desktopId: string, dIndex: number) => {
+                    const pureId = desktopId.split("___")[0];
+                    const displayName = desktopNames[pureId] || (pureId.substring(0, 8) + '...');
+                    const isActive = pureId === (currentDesktop || '').trim();
+                    const isReturn = pureId === (returnDesktop || '').trim();
+                    const winCount = windowCounts[pureId] || 0;
+                    const hasWindows = winCount > 0;
+                    const isSelected = visibleItems[selectedIndex]?.id === desktopId;
+                    const isHovered = hoveredDesktop === desktopId;
+                    const priority = desktopPriorities[pureId] || 'None';
+                    const priorityColor = getPriorityColor(priority);
+                    
+                    // Determine desktop state classes
+                    let stateClass = "desktop-item ";
+                    if (isActive) stateClass += "active ";
+                    if (hasWindows) stateClass += "busy ";
+                    if (!hasWindows && !isActive && !isReturn) stateClass += "empty ";
+
+                    const hasScriptAttached = sessionData?.startup_apps?.[pureId] && sessionData.startup_apps[pureId].length > 0;
+                    
+                    return (
+                      <Draggable draggableId={desktopId} index={dIndex} key={desktopId} isDragDisabled={!!query}>
+                        {(providedDesktop, snapshot) => {
+                          const content = (
                             <div 
-                              className="btn-hover"
-                              onClick={(e) => { e.stopPropagation(); executeMenuCommand(`SUMMON:${desktopId}`); }}
+                              ref={providedDesktop.innerRef}
+                              {...providedDesktop.draggableProps}
+                              {...providedDesktop.dragHandleProps}
+                              className={`${stateClass} interactive-element ${isHovered && !snapshot.isDragging ? 'hover-lift' : ''}`}
+                              onContextMenu={(e) => handleContextMenu(e, 'desktop', desktopId, folderName)}
+                              onClick={() => handleSwitchDesktop(desktopId)}
+                              onMouseEnter={() => setHoveredDesktop(desktopId)}
+                              onMouseLeave={() => setHoveredDesktop(null)}
                               style={{ 
-                                backgroundColor: 'rgba(187, 154, 247, 0.15)', 
-                                color: '#bb9af7', 
-                                borderRadius: '4px', 
-                                width: '24px', 
-                                height: '24px', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                marginRight: '8px',
-                                border: '1px solid rgba(187, 154, 247, 0.3)'
+                                background: snapshot.isDragging ? '#24283b' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent')),
+                                boxSizing: 'border-box',
+                                color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
+                                fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
+                                transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
+                                transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
+                                paddingLeft: '24px',
+                                zIndex: snapshot.isDragging ? 9999 : 1,
+                                boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : 'none',
+                                width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : 'auto',
+                                ...(providedDesktop.draggableProps.style || {})
                               }}
-                              title="Summon"
                             >
-                              <IconZap size={14} />
+                              {isActive && <div className="active-pillar" style={{ top: '15%', bottom: '15%' }} />}
+                              <span style={{ marginRight: '10px', color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89')), flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isHovered || hasWindows || isActive ? 1 : 0.6 }}>
+                                <IconMonitor size={14} />
+                              </span>
+                              {priority !== 'None' && priority?.toUpperCase() !== 'ANCHOR' && (
+                                <div style={{ 
+                                  width: '8px', 
+                                  height: '8px', 
+                                  borderRadius: '50%', 
+                                  backgroundColor: priorityColor, 
+                                  marginRight: '10px',
+                                  boxShadow: `0 0 10px ${priorityColor}88`,
+                                  flexShrink: 0
+                                }} />
+                              )}
+                              <span style={{ 
+                                flex: 1, 
+                                whiteSpace: 'nowrap', 
+                                overflow: 'hidden', 
+                                textOverflow: 'ellipsis',
+                                color: isHovered && priority !== 'None' ? priorityColor : 'inherit'
+                              }}>{displayName}</span>
+                              
+                              {/* 3. Action Buttons (Appear on hover) */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease', flexShrink: 0 }}>
+                                {hasScriptAttached && (
+                                  <div 
+                                    className="btn-hover"
+                                    onClick={(e) => { e.stopPropagation(); executeMenuCommand(`SUMMON:${desktopId}`); }}
+                                    style={{ 
+                                      backgroundColor: 'rgba(187, 154, 247, 0.15)', 
+                                      color: '#bb9af7', 
+                                      width: '24px', 
+                                      height: '24px', 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      border: '1px solid rgba(187, 154, 247, 0.3)'
+                                    }}
+                                    title="Summon"
+                                  >
+                                    <IconZap size={14} />
+                                  </div>
+                                )}
+                                
+                                <div 
+                                  className="btn-hover"
+                                  onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'Rename Desktop', defaultValue: desktopNames[pureId] || '', command: `RENAME:${desktopId}` }); }}
+                                  style={{ 
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                                    color: '#9aa5ce', 
+                                    width: '24px', 
+                                    height: '24px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                                  }}
+                                  title="Rename"
+                                >
+                                  <IconPencil size={14} />
+                                </div>
+
+                                 {/* (Other buttons will remain in the hover group) */}
+                              </div>
+
+                              {/* 4. Badges & Fixed Actions */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', flexShrink: 0 }}>
+                                {isReturn && !isActive && (
+                                  <div 
+                                    className="btn-hover"
+                                    onClick={(e) => { e.stopPropagation(); executeMenuCommand(`GOTO_RETURN:${pureId}`); }}
+                                    style={{ 
+                                      backgroundColor: 'rgba(187, 154, 247, 0.1)', 
+                                      color: '#bb9af7', 
+                                      padding: '0 8px', 
+                                      height: '24px', 
+                                      fontSize: '11px',
+                                      fontWeight: '600',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      border: '1px solid rgba(187, 154, 247, 0.2)',
+                                      borderRadius: '6px'
+                                    }}
+                                    title="Return to this desktop"
+                                  >
+                                    <IconUndo size={12} />
+                                    <span>Return</span>
+                                  </div>
+                                )}
+                                
+                                {isSelected && !isActive && (
+                                  <span className="active-badge" style={{ backgroundColor: 'rgba(125, 207, 255, 0.1)', color: '#7dcfff' }}>Selected</span>
+                                )}
+                                
+                                {isActive && <span className="active-badge">CURRENT</span>}
+
+                                {winCount > 0 && !isActive && (
+                                  <span className="window-badge" style={{ margin: 0 }}>{winCount}w</span>
+                                )}
+                              </div>
                             </div>
-                          )}
+                          );
 
-                          {hoveredDesktop === desktopId && (
-                            <div 
-                              className="btn-hover"
-                              onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'Rename Desktop', defaultValue: desktopNames[pureId] || '', command: `RENAME:${desktopId}` }); }}
-                              style={{ 
-                                backgroundColor: '#3b4261', 
-                                color: '#c8d3f5', 
-                                borderRadius: '4px', 
-                                width: '24px', 
-                                height: '24px', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
-                                marginRight: '8px'
-                              }}
-                              title="Rename"
-                            >
-                              <IconPencil size={14} />
-                            </div>
-                          )}
-
-                          {isReturn && !isActive && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#bb9af7', marginRight: '8px' }}>
-                              <IconUndo size={12} /> Return
-                            </span>
-                          )}
-
-                          {isActive && <span style={{ fontSize: '11px', background: 'linear-gradient(90deg, #7dcfff, #7aa2f7)', color: '#1a1b26', padding: '1px 8px', borderRadius: '10px', fontWeight: 'bold' }}>Current</span>}
-                        </div>
-                      )}
-                    </Draggable>
-                  );
-                })}
-                {providedDroppable.placeholder}
-                {desktops.length === 0 && !query && (
-                  <div style={{ padding: '4px 10px', color: '#565f89', fontSize: '12px', fontStyle: 'italic' }}>
-                    Empty folder
-                  </div>
-                )}
-              </div>
-            )}
-          </Droppable>
+                          if (snapshot.isDragging) {
+                            return ReactDOM.createPortal(content, document.body);
+                          }
+                          return content;
+                        }}
+                      </Draggable>
+                    );
+                  })}
+                  {providedDroppable.placeholder}
+                  {desktops.length === 0 && !query && (
+                    <div style={{ padding: '20px', color: '#565f89', fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', opacity: 0.5 }}>
+                      <IconGhost size={24} />
+                      <span>Empty neighborhood</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Droppable>
+          </div>
         )}
       </div>
     );
@@ -549,7 +664,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
         {folders['root'] && renderFolder('root', 999, false)}
       </div>
 
-      {contextMenu && (
+      {contextMenu && ReactDOM.createPortal(
         <div 
           className="context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -583,16 +698,46 @@ export default function LiveTab({ sessionData, desktopNames = {}, windowCounts =
               <div className="menu-item" onClick={() => setPromptConfig({ title: 'Rename Desktop', defaultValue: desktopNames[contextMenu.id.split('___')[0]] || '', command: `RENAME:${contextMenu.id}` })}>
                 <IconPencil size={14} /> Rename
               </div>
-              <div className="menu-item" onClick={() => {
-                if (window.confirm('Are you sure you want to delete this desktop?')) {
-                  executeMenuCommand(`CLEAR:${contextMenu.id}`);
+              <div className="menu-item" onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  const targetId = contextMenu?.id;
+                  const targetFolder = contextMenu?.folderName;
+                  
+                  if (!targetId) {
+                    window.alert("Error: No desktop ID found in context menu!");
+                    return;
+                  }
+
+                  if (window.confirm(`Are you sure you want to delete this desktop?`)) {
+                    // EMERGENCY FLARE: Send a notification immediately
+                    await window.electronAPI.executeCommand(`notify-send "Desktop Manager" "Deletion started for: ${targetId}"`);
+                    
+                    console.log(`Starting deletion for ${targetId} in folder ${targetFolder}`);
+                    
+                    // OPTIMISTIC UPDATE: Remove it from the local UI immediately
+                    if (setSessionData && sessionData && targetFolder) {
+                      const newFolders = { ...sessionData.folders };
+                      if (newFolders[targetFolder]) {
+                        newFolders[targetFolder] = newFolders[targetFolder].filter((id: string) => id !== targetId);
+                        setSessionData({ ...sessionData, folders: newFolders });
+                      }
+                    }
+                    
+                    // Trigger the actual backend command
+                    executeMenuCommand(`CLEAR:${targetId}`);
+                  }
+                } catch (err: any) {
+                  window.alert(`CRITICAL ERROR during delete: ${err.message}`);
+                  console.error(err);
                 }
               }} style={{ color: '#f7768e' }}>
                 <IconTrash size={14} /> Delete Desktop
               </div>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       {promptConfig && (

@@ -1,0 +1,7 @@
+
+> desktop-manager@0.0.0 build
+> tsc -b && vite build
+
+src/components/LiveTab.tsx(7,3): error TS6133: 'IconFileText' is declared but its value is never read.
+src/components/LiveTab.tsx(8,3): error TS6133: 'IconGlobe' is declared but its value is never read.
+src/components/LiveTab.tsx(33,7): error TS6133: '_AppIcon' is declared but its value is never read.

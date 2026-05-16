@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { fetchDesktops } from './helpers/desktop_utils';
 import { runCommand, launchAppsForDesktop } from './helpers/kwin_utils';
+import { updateLabel } from './helpers/label_cache';
 import { 
     handleCreateLiveDesktop, 
     handleRemoveLiveFolder,
@@ -41,6 +42,7 @@ for (const d of currentDesktops) {
 }
 
 console.log(`Executing: ${command}`);
+runCommand(`notify-send "Desktop Manager" "Executing command: ${command.split(':')[0]}"`);
 
 if (command.startsWith('RENAME:')) {
     const parts = command.substring(7).split(':');
@@ -55,7 +57,9 @@ if (command.startsWith('RENAME:')) {
 
     if (fresh) {
         const pureId = id.split("___")[0];
-        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${pureId}" "${fresh.replace(/"/g, '\\"')}"`);
+        const [nameOnly] = fresh.split('|');
+        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${pureId}" "${nameOnly.replace(/"/g, '\\"')}"`);
+        updateLabel(pureId, fresh);
     }
 } else if (command.startsWith('CREATE_LIVE_DESKTOP:')) {
     const parts = command.substring(20).split(':');
