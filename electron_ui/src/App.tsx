@@ -14,6 +14,9 @@ function App() {
   const [desktopPriorities, setDesktopPriorities] = useState<Record<string, string>>({})
   const [windowCounts, setWindowCounts] = useState<Record<string, number>>({})
   const [desktopApps, setDesktopApps] = useState<Record<string, string[]>>({})
+  const [desktopIcons, setDesktopIcons] = useState<Record<string, string[] | null>>({})
+  const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
+  const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
   const [returnDesktop, setReturnDesktop] = useState<string | null>(null)
   const [templates, setTemplates] = useState<any[]>([])
@@ -59,6 +62,8 @@ function App() {
         setDesktopPriorities(desktopInfo?.priorities || {})
         setWindowCounts(desktopInfo?.counts || {})
         setDesktopApps(desktopInfo?.apps || {})
+        setDesktopIcons(desktopInfo?.icons || {})
+        setDesktopShortcuts(desktopInfo?.shortcuts || {})
         setCurrentDesktop(desktopInfo?.current || null)
         setReturnDesktop(historyData?.last_uuid || null)
         setTemplates(templateList || [])
@@ -78,6 +83,22 @@ function App() {
     const interval = setInterval(loadData, 2000)
     return () => clearInterval(interval)
   }, [lastActionTime])
+
+  // Register global shortcuts whenever desktopShortcuts changes
+  useEffect(() => {
+    // @ts-ignore
+    if (window.electronAPI && window.electronAPI.registerShortcuts) {
+      const shortcutList = Object.entries(desktopShortcuts)
+        .filter(([_, shortcut]) => !!shortcut)
+        .map(([uuid, shortcut]) => ({ uuid, shortcut }));
+      
+      console.log("Syncing global shortcuts:", shortcutList);
+      // @ts-ignore
+      window.electronAPI.registerShortcuts(shortcutList).then((failures: string[]) => {
+        setShortcutErrors(failures || []);
+      });
+    }
+  }, [desktopShortcuts])
 
   // FAST REFRESH: Fetch new data shortly after an action to make the app feel snappy
   useEffect(() => {
@@ -179,43 +200,81 @@ function App() {
 
   return (
     <div style={{ 
-      color: '#c8d3f5', 
-      fontFamily: 'Inter, sans-serif',
-      backgroundColor: 'rgba(34, 36, 54, 0.95)',
+      color: 'var(--text-main)', 
+      fontFamily: 'Outfit, sans-serif',
+      backgroundColor: 'rgba(26, 27, 38, 0.85)',
       height: '100vh',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
-      borderRadius: '8px',
-      border: isFocused ? '2px solid #7aa2f7' : '2px solid #3b4261',
-      boxShadow: isFocused ? '0 0 15px rgba(122, 162, 247, 0.3)' : 'none',
+      borderRadius: '12px',
+      border: isFocused ? '2px solid var(--accent-blue)' : '2px solid var(--border-glass)',
+      boxShadow: isFocused ? '0 0 30px rgba(122, 162, 247, 0.2), inset 0 0 20px rgba(122, 162, 247, 0.05)' : '0 10px 40px rgba(0,0,0,0.4)',
       overflow: 'hidden',
-      transition: 'all 0.2s ease'
+      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+      backdropFilter: 'blur(20px)'
     }}>
       {/* Search Bar & Stats */}
-      <div style={{ padding: '8px 12px', backgroundColor: '#1e2030', borderBottom: '1px solid #3b4261', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px' }}>
-        <div style={{ flex: 1, maxWidth: '300px' }}>
+      <div style={{ 
+        padding: '12px 16px', 
+        backgroundColor: 'rgba(30, 32, 48, 0.6)', 
+        borderBottom: '1px solid var(--border-glass)', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        gap: '24px',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <div style={{ flex: 1, maxWidth: '220px', position: 'relative' }}>
           <input 
             ref={searchInputRef}
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search or Command..." 
-            style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', backgroundColor: '#292e42', border: '1px solid #3b4261', color: '#fff', outline: 'none', fontSize: '13px' }}
+            style={{ 
+              width: '100%', 
+              padding: '10px 14px', 
+              borderRadius: '10px', 
+              backgroundColor: 'rgba(26, 27, 38, 0.5)', 
+              border: '1px solid var(--border-glass)', 
+              color: 'var(--text-main)', 
+              outline: 'none', 
+              fontSize: '14px',
+              transition: 'all 0.3s ease',
+              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+            }}
+            className="search-input-hover"
           />
         </div>
 
-        {/* Stats Summary moved here */}
-        <div style={{ display: 'flex', gap: '12px', fontSize: '11px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#7dcfff' }}></span>
-            <span style={{ color: '#7dcfff', fontWeight: 'bold' }}>{totalActive}</span>
-            <span style={{ color: '#565f89' }}>Active</span>
+        {/* Stats Summary */}
+        <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            backgroundColor: 'rgba(125, 207, 255, 0.1)', 
+            padding: '4px 10px', 
+            borderRadius: '20px',
+            border: '1px solid rgba(125, 207, 255, 0.2)'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)', boxShadow: '0 0 8px var(--accent-cyan)' }}></span>
+            <span style={{ color: 'var(--accent-cyan)', fontWeight: '800' }}>{totalActive}</span>
+            <span style={{ color: 'var(--text-dim)', fontWeight: '500' }}>Active</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#414868' }}></span>
-            <span style={{ color: '#c8d3f5', fontWeight: 'bold' }}>{totalEmpty}</span>
-            <span style={{ color: '#565f89' }}>Empty</span>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            backgroundColor: 'rgba(30, 32, 48, 0.4)', 
+            padding: '4px 10px', 
+            borderRadius: '20px',
+            border: '1px solid var(--border-glass)'
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-dim)' }}></span>
+            <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{totalEmpty}</span>
+            <span style={{ color: 'var(--text-dim)', fontWeight: '500' }}>Empty</span>
           </div>
         </div>
       </div>
@@ -227,42 +286,50 @@ function App() {
           alignItems: 'center', 
           justifyContent: 'space-between',
           padding: '0 12px', 
-          borderBottom: '1px solid #3b4261', 
-          backgroundColor: '#1e2030',
+          borderBottom: '1px solid var(--border-glass)', 
+          backgroundColor: 'rgba(30, 32, 48, 0.4)',
           height: '40px'
         }}>
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: '4px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
             {['live', 'temps', 'notes', 'chrome'].map(tab => (
                 <div 
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className="interactive-element"
-                style={{ 
-                  padding: '6px 12px', 
-                  color: activeTab === tab ? '#7aa2f7' : '#565f89',
-                  backgroundColor: activeTab === tab ? 'rgba(122, 162, 247, 0.1)' : 'transparent',
-                  borderRadius: '4px',
-                  fontWeight: 'bold',
-                  fontSize: '12px',
-                  textTransform: 'capitalize'
-                }}
+                  style={{ 
+                    padding: '5px 12px', 
+                    color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-dim)',
+                    backgroundColor: activeTab === tab ? 'rgba(122, 162, 247, 0.1)' : 'transparent',
+                    borderRadius: '6px',
+                    fontWeight: '800',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer',
+                    border: activeTab === tab ? '1px solid rgba(122, 162, 247, 0.2)' : '1px solid transparent'
+                  }}
               >{tab}</div>
             ))}
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {activeTab === 'temps' ? (
               <>
                 <button 
                   className="btn-hover"
+                  onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE' })}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Create New Template Folder"
+                >
+                  <IconPlus size={16} />
+                </button>
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
+                <button 
+                  className="btn-hover"
                   onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText('/home/dod/.local/bin/Scripts/');
-                    } catch (err) {
-                      console.error('Failed to copy text: ', err);
-                    }
                     // @ts-ignore
                     const folderPath = await window.electronAPI.nativeAction('select-folder');
                     if (folderPath) {
@@ -271,18 +338,10 @@ function App() {
                       setLastActionTime(Date.now());
                     }
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   title="Import Folder"
                 >
-                  <IconImport size={12} /> Import
-                </button>
-                <button 
-                  className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE' })}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  title="Create New Template Folder"
-                >
-                  <IconFolderPlus size={12} /> New Folder
+                  <IconImport size={13} /> Import
                 </button>
                 <button 
                   className="btn-hover"
@@ -290,10 +349,10 @@ function App() {
                     // @ts-ignore
                     await window.electronAPI.executeCommand(`xdg-open "/home/dod/.local/bin/Scripts/"`);
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   title="Open Scripts Directory"
                 >
-                  <IconTerminal size={12} /> Scripts
+                  <IconTerminal size={13} /> Scripts
                 </button>
               </>
             ) : activeTab === 'notes' ? (
@@ -301,26 +360,27 @@ function App() {
                 <button
                   className="btn-hover"
                   onClick={() => setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' })}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="New Folder"
                 >
-                  <IconFolderPlus size={12} /> New Folder
+                  <IconPlus size={16} />
                 </button>
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button
                   className="btn-hover"
                   onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey: 'root' } }))}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#9ece6a', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(158, 206, 106, 0.2)', backgroundColor: 'rgba(158, 206, 106, 0.1)', color: 'var(--accent-green)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
                   title="Add Checkbox"
                 >
-                  <IconSquare size={12} /> Checkbox
+                  <IconSquare size={13} /> Checkbox
                 </button>
                 <button
                   className="btn-hover"
                   onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey: 'root' } }))}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#bb9af7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(187, 154, 247, 0.2)', backgroundColor: 'rgba(187, 154, 247, 0.1)', color: 'var(--accent-purple)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
                   title="Add Note"
                 >
-                  <IconFileText size={12} /> Note
+                  <IconFileText size={13} /> Note
                 </button>
               </>
             ) : activeTab === 'live' ? (
@@ -330,11 +390,12 @@ function App() {
                   onClick={() => {
                     setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'ADD_FOLDER' });
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Add Folder"
                 >
-                  <IconPlus size={12} />
+                  <IconPlus size={16} />
                 </button>
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button 
                   className="btn-hover"
                   onClick={async () => {
@@ -342,10 +403,10 @@ function App() {
                     await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
                     setLastActionTime(Date.now());
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #3b4261', backgroundColor: '#292e42', color: '#7aa2f7', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  title="Clean Empty: Automatically remove all empty, unused desktops to keep your workspace tidy."
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(122, 162, 247, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Clean Empty"
                 >
-                  <IconWipe size={12} />
+                  <IconWipe size={14} /> Clean
                 </button>
                 <button 
                   className="btn-hover"
@@ -356,19 +417,22 @@ function App() {
                       setLastActionTime(Date.now());
                     }
                   }}
-                  style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid rgba(247, 118, 142, 0.3)', backgroundColor: 'rgba(247, 118, 142, 0.1)', color: '#f7768e', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  title="Clear All: Close all windows and completely reset your workspace (Asks for confirmation first)."
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(247, 118, 142, 0.3)', backgroundColor: 'rgba(247, 118, 142, 0.1)', color: 'var(--accent-red)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  title="Clear All"
                 >
-                  <IconTrash size={12} />
+                  <IconTrash size={14} /> Clear
                 </button>
               </>
             ) : null}
           </div>
         </div>
 
-        <div className="main-content-area">
+        <div className="main-content-area" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {loading ? (
-            <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
+            <div style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+              <div style={{ width: '40px', height: '40px', border: '3px solid rgba(122, 162, 247, 0.1)', borderTop: '3px solid var(--accent-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              <span style={{ color: 'var(--text-dim)', fontWeight: '600', letterSpacing: '1px' }}>SYNCHRONIZING WORKSPACE...</span>
+            </div>
           ) : (
             <>
               {activeTab === 'live' && (
@@ -378,6 +442,9 @@ function App() {
                   desktopPriorities={desktopPriorities}
                   windowCounts={windowCounts}
                   desktopApps={desktopApps}
+                  desktopIcons={desktopIcons}
+                  desktopShortcuts={desktopShortcuts}
+                  shortcutErrors={shortcutErrors}
                   searchQuery={searchQuery} 
                   currentDesktop={currentDesktop} 
                   returnDesktop={returnDesktop}
@@ -434,6 +501,18 @@ function App() {
           onCancel={() => setPromptConfig(null)}
         />
       )}
+
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .search-input-hover:focus {
+          border-color: var(--accent-blue) !important;
+          box-shadow: 0 0 15px rgba(122, 162, 247, 0.2), inset 0 2px 4px rgba(0,0,0,0.1) !important;
+          background-color: rgba(26, 27, 38, 0.8) !important;
+        }
+      `}</style>
     </div>
   )
 

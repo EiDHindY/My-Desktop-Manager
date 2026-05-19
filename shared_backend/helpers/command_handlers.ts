@@ -3,37 +3,57 @@ import { join, basename, extname } from 'path';
 import { execSync } from 'child_process';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
 import { Desktop } from './desktop_utils';
-import { updateLabel, removeLabel } from './label_cache';
+import { updateLabel, removeLabel, updateIcon, updateShortcut } from './label_cache';
 
-export function handleClear(result: string, sessionPath: string, desktopMap: Map<string, string>, undoStack: any[]) {
+export function handleClear(result: string, sessionPath: string, desktopMap: Map<string, string>, undoStack: any[], currentDesktops: Desktop[] = []) {
     const logPath = join(process.env.HOME || '', '.config', 'desktop-manager', 'debug.log');
     const log = (msg: string) => {
-        const time = new Date().toISOString();
-        require('fs').appendFileSync(logPath, `[${time}] ${msg}\n`);
+        try {
+            const time = new Date().toISOString();
+            // console.log(`[${time}] ${msg}`);
+            // appendFileSync(logPath, `[${time}] ${msg}\n`);
+        } catch (e) {}
     };
 
     log(`handleClear started with: ${result}`);
     const rawOutput = result.substring(6);
     const parts = rawOutput.split("___");
     const id = parts[0];
-    // Use 0-based index directly for kdotool
-    const kwinIdx = parts.length > 1 ? parts[1] : null; 
+    
+    // Improved kwinIdx lookup:
+    let kwinIdx = parts.length > 1 ? parts[1] : null;
+    
+    // If not in the command string, find it from currentDesktops by UUID
+    if (!kwinIdx || isNaN(parseInt(kwinIdx))) {
+        const d = currentDesktops.find(desk => desk.uuid === id);
+        if (d) {
+            kwinIdx = d.position.toString();
+            log(`Resolved kwinIdx from UUID ${id} -> ${kwinIdx}`);
+        } else {
+            log(`Could not resolve kwinIdx for UUID ${id}`);
+        }
+    }
     
     log(`Parsed: id=${id}, kwinIdx=${kwinIdx}, rawOutput=${rawOutput}`);
     
     undoStack.push({ id, oldName: desktopMap.get(rawOutput) || "" });
     
     try {
-        // 1. Update session.json FIRST for immediate persistence
+        // 1. Remove label from cache FIRST to prevent restoration logic in fetchDesktops from kicking in
+        log(`Removing label for ${id}`);
+        removeLabel(id);
+
+        // 2. Update session.json for immediate persistence
         if (existsSync(sessionPath)) {
             log(`Updating session.json at ${sessionPath}`);
             const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
             if (data.folders) {
                 for (const f of Object.keys(data.folders)) {
                     const originalLen = data.folders[f].length;
-                    data.folders[f] = data.folders[f].filter((i: string) => i !== rawOutput);
+                    // Filter by UUID part instead of full string
+                    data.folders[f] = data.folders[f].filter((i: string) => i.split("___")[0] !== id);
                     if (data.folders[f].length !== originalLen) {
-                        log(`Removed ${rawOutput} from folder ${f}`);
+                        log(`Removed ${id} from folder ${f}`);
                     }
                 }
             }
@@ -47,16 +67,14 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
             log(`Successfully wrote session.json`);
         }
 
-        // 2. Perform cleanup tasks (can be slightly slower)
+        // 3. Perform rename
         log(`Running qdbus rename command for ${id}`);
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
-        log(`Removing label for ${id}`);
-        removeLabel(id);
         
-        // 3. Kill windows in background (very slow)
+        // 4. Kill windows in background
         if (kwinIdx !== null) {
-            log(`Triggering window closing on desktop ${kwinIdx} in background`);
-            // We pass the 0-based index to cli.ts
+            log(`Triggering window closing on desktop ${kwinIdx} (0-based) in background`);
+            // cli.ts now handles the 0->1 conversion
             runCommand(`(npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" CLOSE_WINDOWS:${kwinIdx} && notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} cleaned up") &`);
         } else {
             runCommand(`notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} removed from list"`);
@@ -184,6 +202,18 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             }
             
             if (t.script) session.startup_apps[dest.uuid] = [t.script];
+            
+            // Handle multiple icons
+            if (t.icons && Array.isArray(t.icons)) {
+                updateIcon(dest.uuid, t.icons.join(','));
+            } else if (t.icon) {
+                updateIcon(dest.uuid, t.icon);
+            }
+            
+            // Handle shortcut
+            if (t.shortcut) {
+                updateShortcut(dest.uuid, t.shortcut);
+            }
         }
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));
         runCommand(`notify-send "Desktop Manager" "🚀 Deployed ${tasks.length} tasks to '${folderName}'"`);
@@ -569,5 +599,50 @@ export function handleImportScriptToTemplate(filename: string, scriptPath: strin
         }
     } catch (e) {
         console.error("Import Script to Template error:", e);
+    }
+}
+export function handleSetTemplateTaskIcon(filename: string, taskId: string, iconsStr: string | null) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (existsSync(templatePath)) {
+            const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+            if (data.tasks) {
+                const task = data.tasks.find((t: any) => t.id === taskId);
+                if (task) {
+                    const icons = iconsStr ? iconsStr.split(',').filter(i => i.trim() !== '') : [];
+                    task.icons = icons;
+                    // Remove legacy icon field if it exists
+                    if (task.icon) delete task.icon;
+                    
+                    writeFileSync(templatePath, JSON.stringify(data, null, 2));
+                    runCommand(`notify-send "Desktop Manager" "🖼️ Updated icons for script (${icons.length} set)"`);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Set Template Task Icon error:", e);
+    }
+}
+
+export function handleSetTemplateTaskShortcut(filename: string, taskId: string, shortcut: string | null) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (existsSync(templatePath)) {
+            const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+            if (data.tasks) {
+                const task = data.tasks.find((t: any) => t.id === taskId);
+                if (task) {
+                    if (shortcut) {
+                        task.shortcut = shortcut;
+                    } else {
+                        delete task.shortcut;
+                    }
+                    writeFileSync(templatePath, JSON.stringify(data, null, 2));
+                    runCommand(`notify-send "Desktop Manager" "⌨️ Shortcut updated for task: ${shortcut || 'cleared'}"`);
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Set Template Task Shortcut error:", e);
     }
 }

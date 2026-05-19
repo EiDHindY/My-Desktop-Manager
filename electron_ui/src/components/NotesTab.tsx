@@ -394,7 +394,6 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
 
   return (
     <div 
-      className="flex flex-col h-full overflow-hidden" 
       ref={containerRef}
       tabIndex={0}
       onKeyDown={handleContainerKeyDown}
@@ -404,16 +403,16 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
           containerRef.current?.focus();
         }
       }}
-      style={{ outline: 'none' }} 
+      className="custom-scrollbar"
+      style={{ outline: 'none', height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '16px', gap: '16px', scrollBehavior: 'smooth' }} 
     >
-      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', height: '100%' }}>
         <DragDropContext
           onDragStart={() => { isDragging.current = true; }}
           onDragEnd={onDragEnd}
         >
           <Droppable droppableId="folders" type="FOLDER" isDropDisabled={!!query}>
           {(provided) => (
-            <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {draggableFolders.map((folderKey, index) => {
                 const flatIndex = flatItems.findIndex(i => i.id === folderKey && i.type === 'folder');
                 const isFocused = selectedIndex === flatIndex;
@@ -495,7 +494,6 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
           />
         )}
       </DragDropContext>
-      </div>
     </div>
   );
 }
@@ -517,69 +515,75 @@ function FolderBlock({
   
     return (
       <div 
+        className={`unified-glass-card ${isFocused && !isAnyEditing ? 'lifted-card' : ''}`}
         style={{ 
-          borderRadius: '10px', 
-          border: (isFocused && !isAnyEditing) ? '1px solid #7aa2f7' : (isExpanded ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid #3b4261'), 
+          border: (isFocused && !isAnyEditing) ? '1px solid var(--accent-blue)' : (isExpanded ? '1px solid var(--border-glass)' : '1px solid var(--border-glass)'), 
           overflow: 'hidden', 
-          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.1)' : (isExpanded ? 'rgba(36, 40, 59, 0.3)' : 'transparent'),
-          transition: 'all 0.2s ease'
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.08)' : (isExpanded ? 'rgba(30, 32, 48, 0.45)' : 'rgba(30, 32, 48, 0.3)'),
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: (isFocused && !isAnyEditing) ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(122, 162, 247, 0.1)' : 'none'
         }}
       >
       <div
         onClick={(e) => {
           // If this was triggered by a keyboard "Enter" translation, block it if editing
           if (!e.clientX && !e.clientY && isAnyEditing) {
-            console.log('BLOCKED: Keyboard-to-Click translation');
             return;
           }
           onToggleFolder();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            console.log('BLOCKED: Enter/Space on Folder Header');
-            e.stopPropagation();
-            e.preventDefault();
-          }
         }}
         onMouseEnter={() => setHoveredFolder(folderKey)}
         onMouseLeave={() => setHoveredFolder(null)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '10px 14px', 
-          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.15)' : (hoveredFolder === folderKey ? '#292e42' : 'transparent'),
+          padding: '12px 16px', 
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(122, 162, 247, 0.05)' : 'transparent',
           cursor: 'pointer', userSelect: 'none',
           transition: 'background 0.2s ease',
-          borderLeft: (isFocused && !isAnyEditing) ? '3px solid #7aa2f7' : '3px solid transparent'
+          borderLeft: (isFocused && !isAnyEditing) ? '4px solid var(--accent-blue)' : '4px solid transparent'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {!isRoot && dragHandle && (
-            <span {...dragHandle} onClick={(e) => e.stopPropagation()} style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            <span {...dragHandle} onClick={(e) => e.stopPropagation()} style={{ color: 'var(--text-dim)', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <IconGrip size={14} />
             </span>
           )}
-          <span style={{ color: '#7aa2f7' }}>
-            {isExpanded ? <IconFolderOpen size={20} /> : <IconFolder size={20} />}
-          </span>
-          <span style={{ fontWeight: 'bold', color: isFocused ? '#7dcfff' : (isExpanded ? '#7dcfff' : '#c8d3f5'), fontSize: '14px' }}>{folderLabel}</span>
+          <div style={{ 
+            width: '28px', 
+            height: '28px', 
+            borderRadius: '6px', 
+            background: isExpanded ? 'rgba(122, 162, 247, 0.15)' : 'rgba(30, 32, 48, 0.5)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: 'var(--accent-blue)',
+            transition: 'all 0.3s'
+          }}>
+            {isExpanded ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
+          </div>
+          <span style={{ fontWeight: '700', color: isFocused ? 'var(--accent-cyan)' : 'var(--text-main)', fontSize: '14px' }}>{folderLabel}</span>
           {items.length > 0 && (
             <span style={{ 
-              backgroundColor: pendingCount > 0 ? 'rgba(122, 162, 247, 0.1)' : '#3b4261', 
-              color: pendingCount > 0 ? '#7aa2f7' : '#565f89', 
-              padding: '1px 8px', 
+              backgroundColor: pendingCount > 0 ? 'rgba(122, 162, 247, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
+              color: pendingCount > 0 ? 'var(--accent-blue)' : 'var(--text-dim)', 
+              padding: '2px 8px', 
               borderRadius: '10px', 
-              fontSize: '11px', 
-              fontWeight: '600' 
+              fontSize: '10px', 
+              fontWeight: '800',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              border: '1px solid rgba(122, 162, 247, 0.1)'
             }}>
               {pendingCount > 0 ? `${pendingCount} pending` : `${items.length} items`}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px', opacity: (hoveredFolder === folderKey || isFocused) ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+        <div style={{ display: 'flex', gap: '10px', opacity: (hoveredFolder === folderKey || isFocused) ? 1 : 0.4, transition: 'opacity 0.2s' }}>
           <button
             className="btn-hover"
             onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey } })); }}
-            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#9ece6a', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            style={{ backgroundColor: 'rgba(158, 206, 106, 0.1)', border: '1px solid rgba(158, 206, 106, 0.2)', cursor: 'pointer', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
             title="Add Checkbox"
           >
             <IconSquare size={14} />
@@ -587,7 +591,7 @@ function FolderBlock({
           <button
             className="btn-hover"
             onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey } })); }}
-            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#bb9af7', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            style={{ backgroundColor: 'rgba(187, 154, 247, 0.1)', border: '1px solid rgba(187, 154, 247, 0.2)', cursor: 'pointer', color: 'var(--accent-purple)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
             title="Add Note"
           >
             <IconFileText size={14} />
@@ -596,7 +600,7 @@ function FolderBlock({
             <button
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); onDeleteFolder(folderKey); }}
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+              style={{ backgroundColor: 'rgba(247, 118, 142, 0.1)', border: '1px solid rgba(247, 118, 142, 0.2)', cursor: 'pointer', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
               title="Delete Folder"
             >
               <IconTrash size={14} />
@@ -612,14 +616,15 @@ function FolderBlock({
               ref={provided.innerRef}
               {...provided.droppableProps}
               style={{
-                display: 'flex', flexDirection: 'column', gap: '2px', padding: '6px',
+                display: 'flex', flexDirection: 'column', gap: '4px', padding: '10px',
                 minHeight: '36px',
-                backgroundColor: snapshot.isDraggingOver ? 'rgba(122,162,247,0.05)' : 'transparent',
+                backgroundColor: snapshot.isDraggingOver ? 'rgba(122,162,247,0.05)' : 'rgba(0, 0, 0, 0.15)',
                 transition: 'background 0.15s',
+                borderTop: '1px solid var(--border-glass)'
               }}
             >
               {items.length === 0 && !snapshot.isDraggingOver && (
-                <div style={{ color: '#565f89', fontSize: '12px', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: '12px', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
                   Empty — drag items here or use the buttons above.
                 </div>
               )}
@@ -691,23 +696,26 @@ function NoteItemRow({
     const isAnyEditing = !!isEditingText || !!isEditingContent;
   
     return (
-      <div id={id} style={{ borderRadius: '6px', overflow: 'hidden', marginBottom: '2px' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          padding: '8px 12px',
-          backgroundColor: hovered ? '#292e42' : 'transparent',
-          borderRadius: '6px', transition: 'background 0.15s ease',
-          borderLeft: (isFocused && !isAnyEditing) ? '3px solid #7dcfff' : '3px solid transparent'
-        }}>
+      <div id={id} style={{ borderRadius: '8px', overflow: 'hidden', marginBottom: '2px' }}>
+        <div 
+          className="interactive-element"
+          style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+            padding: '10px 14px',
+            backgroundColor: hovered ? 'rgba(122, 162, 247, 0.1)' : 'transparent',
+            borderRadius: '8px', transition: 'background 0.15s ease',
+            borderLeft: (isFocused && !isAnyEditing) ? '3px solid var(--accent-cyan)' : '3px solid transparent'
+          }}
+        >
         <span
           {...dragHandle}
-          style={{ color: '#3b4261', cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: hovered ? 1 : 0 }}
+          style={{ color: 'var(--text-dim)', cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0, opacity: hovered ? 1 : 0 }}
         >
           <IconGrip size={13} />
         </span>
 
          {isSaving ? (
-           <span style={{ color: '#7aa2f7', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+           <span style={{ color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
              <IconLoader size={16} />
            </span>
          ) : itemType === 'checkbox' ? (
@@ -715,18 +723,18 @@ function NoteItemRow({
              className="btn-hover"
              onClick={onToggleCheck}
              style={{ 
-               width: '18px', 
-               height: '18px', 
-               borderRadius: '4px', 
-               border: isChecked ? '1px solid #7aa2f7' : '1px solid #3b4261',
-               backgroundColor: isChecked ? '#7aa2f7' : 'transparent',
+               width: '20px', 
+               height: '20px', 
+               borderRadius: '6px', 
+               border: isChecked ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+               backgroundColor: isChecked ? 'var(--accent-blue)' : 'rgba(30, 32, 48, 0.6)',
                display: 'flex',
                alignItems: 'center',
                justifyContent: 'center',
                cursor: 'pointer',
                flexShrink: 0,
-               transition: 'all 0.2s ease',
-               boxShadow: isChecked ? '0 0 8px rgba(122, 162, 247, 0.4)' : 'none'
+               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+               boxShadow: isChecked ? 'var(--aurora-glow)' : 'none'
              }}
            >
              {isChecked && <IconCheck size={12} color="#1a1b26" />}
@@ -736,12 +744,16 @@ function NoteItemRow({
              className="btn-hover"
              onClick={onToggleNote} 
              style={{ 
-               color: isNoteExpanded ? '#7dcfff' : '#bb9af7', 
+               color: isNoteExpanded ? 'var(--accent-cyan)' : 'var(--accent-purple)', 
                cursor: 'pointer', 
                flexShrink: 0, 
                display: 'flex', 
                alignItems: 'center',
-               transition: 'all 0.2s ease'
+               transition: 'all 0.2s ease',
+               background: isNoteExpanded ? 'rgba(125, 207, 255, 0.1)' : 'rgba(187, 154, 247, 0.1)',
+               padding: '6px',
+               borderRadius: '6px',
+               border: isNoteExpanded ? '1px solid rgba(125, 207, 255, 0.2)' : '1px solid rgba(187, 154, 247, 0.2)'
              }}
            >
              <IconFileText size={16} />
@@ -761,7 +773,7 @@ function NoteItemRow({
                e.stopPropagation();
                if (e.key === 'Enter') {
                  e.preventDefault();
-                 onEnterConfirm?.(); // set the flag BEFORE blur so container ignores next Enter
+                 onEnterConfirm?.(); 
                  e.currentTarget.blur();
                } else if (e.key === 'Escape') {
                  e.preventDefault();
@@ -769,7 +781,7 @@ function NoteItemRow({
                  e.currentTarget.blur();
                }
              }}
-            style={{ flex: 1, background: '#1a1b26', border: '1px solid #7aa2f7', borderRadius: '4px', color: '#c8d3f5', padding: '4px 8px', fontSize: '13px', outline: 'none' }}
+            style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--accent-blue)', borderRadius: '6px', color: 'var(--text-main)', padding: '6px 12px', fontSize: '13px', outline: 'none', boxShadow: '0 0 10px rgba(122, 162, 247, 0.2)' }}
           />
         ) : (
           <span
@@ -777,19 +789,20 @@ function NoteItemRow({
             onClick={itemType === 'note' ? onToggleNote : undefined}
             style={{
               flex: 1, fontSize: '13px',
-              color: (itemType === 'checkbox' && isChecked) ? '#565f89' : '#c8d3f5',
+              color: (itemType === 'checkbox' && isChecked) ? 'var(--text-dim)' : 'var(--text-main)',
               textDecoration: (itemType === 'checkbox' && isChecked) ? 'line-through' : 'none',
               cursor: itemType === 'note' ? 'pointer' : 'default',
               userSelect: 'none',
-              fontWeight: (isFocused || (itemType === 'note' && isNoteExpanded)) ? '600' : '400',
-              transition: 'all 0.2s ease'
+              fontWeight: (isFocused || (itemType === 'note' && isNoteExpanded)) ? '700' : '500',
+              transition: 'all 0.2s ease',
+              opacity: (itemType === 'checkbox' && isChecked) ? 0.6 : 1
             }}
           >
             {item.text}
           </span>
         )}
 
-        <div style={{ display: 'flex', gap: '6px', opacity: hovered ? 1 : 0, transition: 'opacity 0.2s' }}>
+        <div style={{ display: 'flex', gap: '8px', opacity: hovered ? 1 : 0, transition: 'opacity 0.2s' }}>
           <button 
             className="btn-hover"
             onClick={(e) => {
@@ -799,17 +812,17 @@ function NoteItemRow({
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               });
-            }} 
-            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: copied ? '#9ece6a' : '#7aa2f7', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }} 
-            title="Copy"
+            }}
+            style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', color: copied ? 'var(--accent-green)' : 'var(--text-dim)', border: '1px solid rgba(255, 255, 255, 0.1)', width: '28px', height: '28px', padding: 0, borderRadius: '6px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
+            title="Copy Content"
           >
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
           </button>
           <button 
             className="btn-hover"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }} 
-            style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', color: '#f7768e', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }} 
-            title="Delete"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            style={{ backgroundColor: 'rgba(247, 118, 142, 0.05)', color: 'var(--accent-red)', border: '1px solid rgba(247, 118, 142, 0.1)', width: '28px', height: '28px', padding: 0, borderRadius: '6px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
+            title="Delete Item"
           >
             <IconTrash size={14} />
           </button>
@@ -817,33 +830,31 @@ function NoteItemRow({
       </div>
 
       {itemType === 'note' && isNoteExpanded && (
-        <div style={{ padding: '4px 12px 12px 40px' }}>
+        <div style={{ padding: '4px 10px 12px 42px', animation: 'fadeIn 0.2s ease' }}>
           <textarea
             id={`note-content-${item.id}`}
-            value={isEditingContent ? editContentValue : (item.content || '')}
-            onFocus={onFocusContent}
+            value={editContentValue ?? item.content ?? ''}
             onChange={(e) => onChangeContent(e.target.value)}
+            onFocus={onFocusContent}
             onBlur={onBlurContent}
-            placeholder="Write your note here..."
-            rows={5}
-            onKeyDown={(e) => {
-              // Kill the event at the native level — no window listener will ever see this
-              e.nativeEvent.stopImmediatePropagation();
-              e.stopPropagation();
-              // Escape cancels editing without saving
-              if (e.key === 'Escape') {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
+            placeholder="Add some details..."
             style={{
-              width: '100%', backgroundColor: 'rgba(26, 27, 38, 0.5)',
-              border: '1px solid #3b4261', borderRadius: '8px',
-              color: '#c8d3f5', fontSize: '13px', padding: '12px',
-              resize: 'vertical', outline: 'none', fontFamily: 'inherit',
-              lineHeight: '1.6', boxSizing: 'border-box',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+              width: '100%',
+              minHeight: '120px',
+              background: 'rgba(26, 27, 38, 0.6)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '8px',
+              color: 'var(--text-main)',
+              padding: '12px',
+              fontSize: '13px',
+              resize: 'vertical',
+              outline: 'none',
+              transition: 'all 0.3s ease',
+              lineHeight: '1.6',
+              fontFamily: 'inherit'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(122, 162, 247, 0.4)'}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-glass)'}
           />
         </div>
       )}

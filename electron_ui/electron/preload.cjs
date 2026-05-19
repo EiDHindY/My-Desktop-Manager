@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchDesktops: () => ipcRenderer.invoke('fetch-desktops'),
   listTemplates: () => ipcRenderer.invoke('list-templates'),
   fetchChromeProfiles: () => ipcRenderer.invoke('fetch-chrome-profiles'),
-  nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params)
+  listIcons: () => ipcRenderer.invoke('list-icons'),
+  nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
+  registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts)
 });

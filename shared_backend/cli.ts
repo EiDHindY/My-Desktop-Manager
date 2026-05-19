@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { fetchDesktops } from './helpers/desktop_utils';
 import { runCommand, launchAppsForDesktop } from './helpers/kwin_utils';
-import { updateLabel } from './helpers/label_cache';
+import { updateLabel, updateIcon, updateShortcut } from './helpers/label_cache';
 import { 
     handleCreateLiveDesktop, 
     handleRemoveLiveFolder,
@@ -17,7 +17,9 @@ import {
     handleCreateTemplate,
     handleImportScriptToTemplate,
     handleDeleteTemplate,
-    handleDeleteTemplateTask
+    handleDeleteTemplateTask,
+    handleSetTemplateTaskIcon,
+    handleSetTemplateTaskShortcut
 } from './helpers/command_handlers';
 import { saveSnapshot, applyTemplate } from './helpers/session_manager';
 
@@ -61,6 +63,18 @@ if (command.startsWith('RENAME:')) {
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${pureId}" "${nameOnly.replace(/"/g, '\\"')}"`);
         updateLabel(pureId, fresh);
     }
+} else if (command.startsWith('SET_ICON:')) {
+    const parts = command.substring(9).split(':');
+    const id = parts[0];
+    const iconsStr = parts.slice(1).join(':') || null;
+    const pureId = id.split("___")[0];
+    updateIcon(pureId, iconsStr);
+} else if (command.startsWith('SET_SHORTCUT:')) {
+    const parts = command.substring(13).split(':');
+    const id = parts[0];
+    const shortcutStr = parts.slice(1).join(':') || null;
+    const pureId = id.split("___")[0];
+    updateShortcut(pureId, shortcutStr);
 } else if (command.startsWith('CREATE_LIVE_DESKTOP:')) {
     const parts = command.substring(20).split(':');
     const folderName = parts[0];
@@ -89,6 +103,18 @@ if (command.startsWith('RENAME:')) {
 } else if (command.startsWith('DELETE_TEMPLATE_TASK:')) {
     const parts = command.substring(21).split(":");
     handleDeleteTemplateTask(parts[0], parts[1]);
+} else if (command.startsWith('SET_TEMPLATE_TASK_ICON:')) {
+    const parts = command.substring(23).split(":");
+    const filename = parts[0];
+    const taskId = parts[1];
+    const iconsStr = parts.slice(2).join(":") || null;
+    handleSetTemplateTaskIcon(filename, taskId, iconsStr);
+} else if (command.startsWith('SET_TEMPLATE_TASK_SHORTCUT:')) {
+    const parts = command.substring(27).split(":");
+    const filename = parts[0];
+    const taskId = parts[1];
+    const shortcut = parts.slice(2).join(":") || null;
+    handleSetTemplateTaskShortcut(filename, taskId, shortcut);
 } else if (command.startsWith('SUMMON:')) {
     const pureId = command.substring(7).split("___")[0];
     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
@@ -96,11 +122,24 @@ if (command.startsWith('RENAME:')) {
     // Also execute any startup apps associated with this desktop
     launchAppsForDesktop(pureId);
 } else if (command.startsWith('CLOSE_WINDOWS:')) {
-    const parts = command.substring(14).split("___");
-    const kwinIdx = parts.length > 1 ? (parseInt(parts[1]) + 1).toString() : null;
-    if (kwinIdx) {
+    let target = command.substring(14).split("___")[0];
+    let finalIdx: string | null = null;
+
+    // Resolve UUID to index if needed
+    if (target && target.length > 5) {
+        const d = currentDesktops.find(desk => desk.uuid === target);
+        if (d) {
+            finalIdx = (d.position + 1).toString();
+        }
+    } else if (target) {
+        // If it's already a number, assume it was a 0-based position and increment it
+        finalIdx = (parseInt(target) + 1).toString();
+    }
+    
+    if (finalIdx) {
+        console.log(`Closing windows on 1-based desktop index: ${finalIdx}`);
         const { closeWindowsOnDesktop } = require('./helpers/kwin_utils');
-        closeWindowsOnDesktop(kwinIdx);
+        closeWindowsOnDesktop(finalIdx);
     }
 } else if (command.startsWith('DEPLOY_')) {
     handleDeploy(command, sessionPath, currentDesktops, currentUuid);
@@ -109,7 +148,7 @@ if (command.startsWith('RENAME:')) {
 } else if (command === 'CLEAR_ALL') {
     handleClearAll(currentDesktops, currentUuid, sessionPath);
 } else if (command.startsWith('CLEAR:')) {
-    handleClear(command, sessionPath, desktopMap, []);
+    handleClear(command, sessionPath, desktopMap, [], currentDesktops);
 } else if (command === 'ADD_FOLDER') {
     // Usually triggered to create a "New Folder" and we use prompt for the name.
     // However, if the command has a parameter: ADD_FOLDER:MyName

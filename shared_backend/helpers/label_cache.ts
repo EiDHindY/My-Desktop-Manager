@@ -9,12 +9,22 @@ const labelsPath = join(labelsDir, 'labels.json');
 export interface DesktopLabel {
     name: string;
     priority: string;
+    icons?: string[];
+    shortcut?: string;
 }
 
 export function getLabelCache(): Record<string, DesktopLabel> {
     if (!existsSync(labelsPath)) return {};
     try {
-        return JSON.parse(readFileSync(labelsPath, 'utf-8'));
+        const data = JSON.parse(readFileSync(labelsPath, 'utf-8'));
+        // Migrate old 'icon' to 'icons' if found
+        Object.keys(data).forEach(uuid => {
+            if (data[uuid].icon && !data[uuid].icons) {
+                data[uuid].icons = [data[uuid].icon];
+                delete data[uuid].icon;
+            }
+        });
+        return data;
     } catch (e) {
         return {};
     }
@@ -44,6 +54,26 @@ export function updateLabel(uuid: string, rawLabel: string) {
 
     const existing = cache[uuid] || { name: "", priority: "None" };
     cache[uuid] = { ...existing, name, priority };
+    saveLabelCache(cache);
+}
+
+export function updateIcon(uuid: string, iconsStr: string | null) {
+    const cache = getLabelCache();
+    const existing = cache[uuid] || { name: "", priority: "None" };
+    const icons = iconsStr ? iconsStr.split(',').filter(i => i.trim() !== '') : [];
+    cache[uuid] = { ...existing, icons };
+    saveLabelCache(cache);
+}
+
+export function updateShortcut(uuid: string, shortcut: string | null) {
+    const cache = getLabelCache();
+    const existing = cache[uuid] || { name: "", priority: "None" };
+    if (shortcut) {
+        cache[uuid] = { ...existing, shortcut };
+    } else {
+        delete existing.shortcut;
+        cache[uuid] = existing;
+    }
     saveLabelCache(cache);
 }
 

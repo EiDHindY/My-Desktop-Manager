@@ -6,6 +6,7 @@ export interface IElectronAPI {
   fetchDesktops: () => Promise<any>;
   listTemplates: () => Promise<any[]>;
   fetchChromeProfiles: () => Promise<any[]>;
+  listIcons: () => Promise<string[]>;
   nativeAction: (action: string, params?: any) => Promise<any>;
 }
 

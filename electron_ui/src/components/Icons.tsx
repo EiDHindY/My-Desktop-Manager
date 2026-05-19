@@ -271,3 +271,37 @@ export const IconAntigravity = ({ size = 16, color = "currentColor" }) => (
     <path d="M12 7c2.5 0 4.5 2 4.5 4.5S14.5 16 12 16s-4.5-2-4.5-4.5S9.5 7 12 7z" strokeDasharray="2 2"/>
   </svg>
 );
+
+export const IconKeyboard = ({ size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+    <path d="M6 8h.01"></path>
+    <path d="M10 8h.01"></path>
+    <path d="M14 8h.01"></path>
+    <path d="M18 8h.01"></path>
+    <path d="M8 12h.01"></path>
+    <path d="M12 12h.01"></path>
+    <path d="M16 12h.01"></path>
+    <path d="M7 16h10"></path>
+  </svg>
+);
+
+export const ManualIcon = ({ icon, size = 16, className = "" }: { icon: string | string[] | null | undefined, size?: number, className?: string }) => {
+  if (!icon) return null;
+  const icons = Array.isArray(icon) ? icon : [icon];
+  if (icons.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} className={className}>
+      {icons.map((ic, i) => (
+        <img 
+          key={`${ic}-${i}`}
+          src={`local-icon://${ic}`} 
+          alt={ic} 
+          style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }} 
+        />
+      ))}
+    </div>
+  );
+};
+

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, protocol, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -93,17 +93,31 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Register custom protocol for local icons
+  try {
+    protocol.registerFileProtocol('local-icon', (request, callback) => {
+      const url = decodeURIComponent(request.url.replace('local-icon://', ''));
+      const appPath = app.getAppPath();
+      const iconsDir = path.join(appPath, '..', 'icons');
+      return callback(path.join(iconsDir, url));
+    });
+  } catch (error) {
+    console.error('Failed to register protocol', error);
+  }
+  
   // Removes default menu to free up Ctrl+Q for React
   Menu.setApplicationMenu(null);
 
   createWindow();
+});
+
+
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
-});
 
 app.on('will-quit', () => {
   try { fsSync.unlinkSync(PID_FILE); } catch (e) {}
@@ -124,6 +138,33 @@ ipcMain.handle('execute-command', async (event, command) => {
       resolve({ ok: !error, stdout, stderr });
     });
   });
+});
+
+// Manage global shortcuts for desktops
+ipcMain.handle('register-shortcuts', (event, shortcuts) => {
+  globalShortcut.unregisterAll(); // Clear previous shortcuts
+  
+  if (!shortcuts || !Array.isArray(shortcuts)) return [];
+  
+  const failures = [];
+  
+  shortcuts.forEach(({ shortcut, uuid }) => {
+    if (shortcut && uuid) {
+      try {
+        const success = globalShortcut.register(shortcut, () => {
+          exec(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
+        });
+        if (!success) {
+          failures.push(uuid);
+          console.warn(`Failed to register shortcut ${shortcut} for desktop ${uuid}`);
+        }
+      } catch (err) {
+        console.error(`Failed to register shortcut ${shortcut}:`, err);
+        failures.push(uuid);
+      }
+    }
+  });
+  return failures;
 });
 
 // Provide data to the React UI (ASYNCHRONOUS)
@@ -214,6 +255,8 @@ ipcMain.handle('fetch-desktops', async () => {
     const appMap = {};
     let cacheUpdated = false;
 
+    const desktopIcons = {};
+    const desktopShortcuts = {};
     while ((match = regex.exec(output)) !== null) {
       const pos = parseInt(match[1]);
       const uuid = match[2];
@@ -246,20 +289,57 @@ ipcMain.handle('fetch-desktops', async () => {
         }
       }
 
+      // Migrate legacy single icon to icons array
+      if (cached && cached.icon && !cached.icons) {
+        cached.icons = [cached.icon];
+        delete cached.icon;
+        cacheUpdated = true;
+      }
+
       desktops[uuid] = name;
       priorities[uuid] = priority;
       counts[uuid] = windowCountsByUuid[uuid] || 0;
       appMap[uuid] = appIconsByUuid[uuid] || [];
+      desktopIcons[uuid] = (cached && cached.icons) ? cached.icons : [];
+      desktopShortcuts[uuid] = (cached && cached.shortcut) ? cached.shortcut : null;
     }
 
     if (cacheUpdated) {
       await fs.writeFile(labelsPath, JSON.stringify(labelCache, null, 2));
     }
     
-    return { names: desktops, priorities: priorities, counts: counts, apps: appMap, current: currentOutput };
+    return { 
+      names: desktops, 
+      priorities: priorities, 
+      counts: counts, 
+      apps: appMap, 
+      icons: desktopIcons, 
+      shortcuts: desktopShortcuts,
+      current: currentOutput 
+    };
   } catch (error) {
     console.error('Error fetching desktops:', error);
     return { names: {}, priorities: {}, counts: {}, apps: {}, current: null };
+  }
+});
+
+ipcMain.handle('list-icons', async () => {
+  const appPath = app.getAppPath();
+  const iconsDir = path.join(appPath, '..', 'icons');
+  console.log('[ICONS] Searching in:', iconsDir);
+  try {
+    if (!fsSync.existsSync(iconsDir)) {
+      console.error('[ICONS] Directory does NOT exist:', iconsDir);
+      return [];
+    }
+    const files = await fs.readdir(iconsDir);
+    console.log('[ICONS] Found files:', files);
+    const filtered = files.filter(f => f.match(/\.(png|jpe?g|svg|webp)$/i));
+    console.log('[ICONS] Filtered icons:', filtered);
+    return filtered;
+  } catch (error) {
+    console.error('[ICONS] Error reading icons:', error);
+    return [];
   }
 });
 

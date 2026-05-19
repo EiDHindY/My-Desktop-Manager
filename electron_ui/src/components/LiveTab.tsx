@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
 import PromptModal from './PromptModal';
 import { 
   IconTerminal,
@@ -25,16 +25,21 @@ import {
   IconTrash,
   IconChevronRight,
   IconGhost,
-  IconPlus
+  IconPlus,
+  IconLoader,
+  IconKeyboard,
+  ManualIcon
 } from './Icons';
+import IconPicker from './IconPicker';
 
 /*
-const _AppIcon = ({ appClass, size = 12 }: { appClass: string, size?: number }) => {
-  ...
-};
+const _AppIcon = ...
 */
 
-export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+
+
+
+export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -79,6 +84,20 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [hoveredDesktop, setHoveredDesktop] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [deletingDesktops, setDeletingDesktops] = useState<string[]>([]);
+
+  const [showIconPicker, setShowIconPicker] = useState<string | null>(null);
+
+  useEffect(() => {
+
+  }, []);
+
+  const handleSetIcons = (icons: string[]) => {
+    if (showIconPicker) {
+      const iconsStr = icons.join(',');
+      executeMenuCommand(`SET_ICON:${showIconPicker}:${iconsStr}`);
+    }
+  };
 
   const folders = { ...(sessionData?.folders || {}) };
   
@@ -442,7 +461,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
         </div>
 
         {isExpanded && (
-          <div style={{ padding: '4px 0 8px 0', marginLeft: '12px' }}>
+          <div style={{ padding: '4px 12px 8px 12px' }}>
             <Droppable droppableId={folderName} type="DESKTOP" isDropDisabled={!!query}>
               {(providedDroppable) => (
                 <div 
@@ -483,24 +502,31 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                               onClick={() => handleSwitchDesktop(desktopId)}
                               onMouseEnter={() => setHoveredDesktop(desktopId)}
                               onMouseLeave={() => setHoveredDesktop(null)}
-                              style={{ 
-                                background: snapshot.isDragging ? '#24283b' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent')),
-                                boxSizing: 'border-box',
-                                color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
-                                fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
-                                transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
-                                transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
-                                paddingLeft: '24px',
-                                zIndex: snapshot.isDragging ? 9999 : 1,
-                                boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : 'none',
-                                width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : 'auto',
-                                ...(providedDesktop.draggableProps.style || {})
-                              }}
+                                style={{ 
+                                  background: snapshot.isDragging ? '#24283b' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.12)' : 'transparent')),
+                                  boxSizing: 'border-box',
+                                  color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
+                                  fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
+                                  transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
+                                  transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
+                                  border: isActive ? '1px solid rgba(125, 207, 255, 0.1)' : (isSelected ? '1px solid rgba(187, 154, 247, 0.4)' : '1px solid transparent'),
+                                  paddingLeft: '24px',
+                                  zIndex: snapshot.isDragging ? 9999 : (isSelected ? 2 : 1),
+                                  boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isSelected && !isActive ? '0 0 15px rgba(187, 154, 247, 0.15)' : 'none'),
+                                  width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : '100%',
+                                  ...(providedDesktop.draggableProps.style || {})
+                                }}
                             >
                               {isActive && <div className="active-pillar" style={{ top: '15%', bottom: '15%' }} />}
-                              <span style={{ marginRight: '10px', color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89')), flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isHovered || hasWindows || isActive ? 1 : 0.6 }}>
-                                <IconMonitor size={14} />
-                              </span>
+                                <div style={{ marginRight: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isHovered || hasWindows || isActive ? 1 : 0.6, minWidth: '16px', justifyContent: 'center' }}>
+                                  {deletingDesktops.includes(desktopId) ? (
+                                    <IconLoader size={14} color="var(--accent-red)" />
+                                  ) : (desktopIcons[pureId] && (Array.isArray(desktopIcons[pureId]) ? (desktopIcons[pureId] as string[]).length > 0 : !!desktopIcons[pureId])) ? (
+                                    <ManualIcon icon={desktopIcons[pureId]!} size={16} />
+                                  ) : (
+                                    <IconMonitor size={14} color={isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89'))} />
+                                  )}
+                                </div>
                               {priority !== 'None' && priority?.toUpperCase() !== 'ANCHOR' && (
                                 <div style={{ 
                                   width: '8px', 
@@ -560,6 +586,51 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                                   <IconPencil size={14} />
                                 </div>
 
+                                <div 
+                                  className="btn-hover"
+                                  onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'Global Shortcut (e.g. Control+Alt+1)', defaultValue: desktopShortcuts[pureId] || '', command: `SET_SHORTCUT:${desktopId}` }); }}
+                                  style={{ 
+                                    backgroundColor: desktopShortcuts[pureId] ? 'rgba(122, 162, 247, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                                    color: shortcutErrors.includes(pureId) ? 'var(--accent-red)' : (desktopShortcuts[pureId] ? 'var(--accent-blue)' : '#9aa5ce'), 
+                                    width: '24px', 
+                                    height: '24px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center',
+                                    border: shortcutErrors.includes(pureId) ? '1px solid rgba(247, 118, 142, 0.4)' : (desktopShortcuts[pureId] ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
+                                  }}
+                                  title={shortcutErrors.includes(pureId) ? `FAILED: ${desktopShortcuts[pureId]}` : (desktopShortcuts[pureId] ? `Hotkey: ${desktopShortcuts[pureId]}` : "Set Hotkey")}
+                                >
+                                  <IconKeyboard size={14} />
+                                </div>
+
+                                {desktopShortcuts[pureId] && (
+                                  <div 
+                                    className="btn-hover"
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      executeMenuCommand(`SET_SHORTCUT:${desktopId}:`);
+                                    }}
+                                    style={{ 
+                                      backgroundColor: 'rgba(247, 118, 142, 0.1)', 
+                                      color: 'var(--accent-red)', 
+                                      width: '18px', 
+                                      height: '18px', 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      border: '1px solid rgba(247, 118, 142, 0.2)',
+                                      marginLeft: '-4px',
+                                      fontSize: '14px',
+                                      fontWeight: 'bold',
+                                      zIndex: 10
+                                    }}
+                                    title="Clear Hotkey"
+                                  >
+                                    ×
+                                  </div>
+                                )}
+
                                  {/* (Other buttons will remain in the hover group) */}
                               </div>
 
@@ -603,7 +674,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                           );
 
                           if (snapshot.isDragging) {
-                            return ReactDOM.createPortal(content, document.body);
+                            return createPortal(content, document.body);
                           }
                           return content;
                         }}
@@ -637,9 +708,9 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   };
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div style={{ width: '100%', height: '100%' }}>
-      <div style={{ padding: '10px' }}>
+    <div style={{ width: '100%', height: '100%', overflowY: 'auto' }} className="custom-scrollbar">
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div style={{ padding: '10px' }}>
         <Droppable droppableId="board" type="FOLDER">
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps}>
@@ -650,7 +721,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                 const indent = level * 24;
 
                 return (
-                  <div key={folderName} style={{ marginLeft: `${indent}px` }}>
+                  <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
                     {renderFolder(folderName, index, true, displayName)}
                   </div>
                 );
@@ -664,7 +735,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
         {folders['root'] && renderFolder('root', 999, false)}
       </div>
 
-      {contextMenu && ReactDOM.createPortal(
+      {contextMenu && createPortal(
         <div 
           className="context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -709,23 +780,23 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                     return;
                   }
 
-                  if (window.confirm(`Are you sure you want to delete this desktop?`)) {
+                   if (window.confirm(`Are you sure you want to delete this desktop?`)) {
                     // EMERGENCY FLARE: Send a notification immediately
                     await window.electronAPI.executeCommand(`notify-send "Desktop Manager" "Deletion started for: ${targetId}"`);
                     
                     console.log(`Starting deletion for ${targetId} in folder ${targetFolder}`);
                     
-                    // OPTIMISTIC UPDATE: Remove it from the local UI immediately
-                    if (setSessionData && sessionData && targetFolder) {
-                      const newFolders = { ...sessionData.folders };
-                      if (newFolders[targetFolder]) {
-                        newFolders[targetFolder] = newFolders[targetFolder].filter((id: string) => id !== targetId);
-                        setSessionData({ ...sessionData, folders: newFolders });
-                      }
-                    }
+                    // Mark as deleting for visual feedback
+                    setDeletingDesktops(prev => [...prev, targetId]);
+                    setContextMenu(null); // Close menu immediately
                     
-                    // Trigger the actual backend command
-                    executeMenuCommand(`CLEAR:${targetId}`);
+                    try {
+                      // Trigger the actual backend command (WAIT for it to finish so we know it's gone from backend)
+                      await executeMenuCommand(`CLEAR:${targetId}`);
+                    } finally {
+                      // Clean up state (if it fails, we still want to stop showing loader)
+                      setDeletingDesktops(prev => prev.filter(id => id !== targetId));
+                    }
                   }
                 } catch (err: any) {
                   window.alert(`CRITICAL ERROR during delete: ${err.message}`);
@@ -733,6 +804,13 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                 }
               }} style={{ color: '#f7768e' }}>
                 <IconTrash size={14} /> Delete Desktop
+              </div>
+              <div className="menu-divider" style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.05)', margin: '4px 0' }} />
+              <div className="menu-item" onClick={() => { setContextMenu(null); setShowIconPicker(contextMenu.id); }}>
+                <IconRocket size={14} /> Change Icon
+              </div>
+              <div className="menu-item" onClick={() => executeMenuCommand(`SET_ICON:${contextMenu.id}:`)} style={{ color: '#565f89' }}>
+                <IconUndo size={14} /> Reset Icon
               </div>
             </>
           )}
@@ -751,7 +829,30 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
           onCancel={() => setPromptConfig(null)}
         />
       )}
-      </div>
-    </DragDropContext>
+
+      {/* MODALS & PORTALS */}
+      {showIconPicker && (
+        <IconPicker 
+          title="Select Desktop Icons"
+          currentIcons={(() => {
+            const pureId = showIconPicker.split('___')[0];
+            const iconData = desktopIcons[pureId];
+            return Array.isArray(iconData) ? iconData : (iconData ? [iconData] : []);
+          })()}
+          onToggle={(icon) => {
+            const pureId = showIconPicker.split('___')[0];
+            const iconData = desktopIcons[pureId];
+            const current = Array.isArray(iconData) ? iconData : (iconData ? [iconData] : []);
+            const next = current.includes(icon) 
+              ? current.filter(i => i !== icon) 
+              : [...current, icon];
+            handleSetIcons(next);
+          }}
+          onClear={() => handleSetIcons([])}
+          onClose={() => setShowIconPicker(null)}
+        />
+      )}
+      </DragDropContext>
+    </div>
   );
 }

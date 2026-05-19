@@ -91,45 +91,51 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
 
   return (
     <div style={{ 
-      padding: '10px 12px', 
+      padding: '16px 20px', 
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px',
-      animation: 'fadeIn 0.2s ease'
-    }}>
+      gap: '12px',
+      animation: 'fadeInScale 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+      overflowY: 'auto',
+      height: '100%'
+    }} className="custom-scrollbar">
       {filtered.map((profile, index) => {
         const isSelected = index === selectedIndex;
         return (
           <div 
             key={profile.id}
             onClick={() => launchProfile(profile.id)}
+            className={`unified-glass-card interactive-element ${isSelected ? 'lifted-card' : ''}`}
             style={{
-              backgroundColor: isSelected ? '#24283b' : '#1f2335',
-              border: isSelected ? '1px solid #7aa2f7' : '1px solid #3b4261',
-              borderRadius: '8px',
-              padding: '8px 16px',
+              backgroundColor: isSelected ? 'rgba(122, 162, 247, 0.1)' : 'rgba(30, 32, 48, 0.45)',
+              border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+              padding: '12px 16px',
               display: 'flex',
               alignItems: 'center',
               gap: '16px',
-              height: '60px',
               cursor: 'pointer',
-              transition: 'all 0.15s ease',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               position: 'relative',
-              transform: isSelected ? 'translateX(4px)' : 'translateX(0)',
+              transform: isSelected ? 'translateX(4px)' : 'none',
+              boxShadow: isSelected ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(122, 162, 247, 0.1)' : 'none',
+              borderLeft: isSelected ? '4px solid var(--accent-blue)' : '4px solid transparent',
             }}
             onMouseEnter={() => setSelectedIndex(index)}
           >
+          {isSelected && <div className="active-pillar" />}
+          
           <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '8px',
-            backgroundColor: '#292e42',
+            width: '42px',
+            height: '42px',
+            borderRadius: '10px',
+            backgroundColor: 'rgba(41, 46, 66, 0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
-            border: '1px solid #3b4261',
+            border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
             flexShrink: 0,
+            boxShadow: isSelected ? '0 0 10px rgba(122, 162, 247, 0.2)' : 'none'
           }}>
             <img 
               src={getProfileImage(profile) || ''} 
@@ -144,44 +150,53 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
           
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ 
-              color: '#c8d3f5', 
-              fontWeight: '600', 
+              color: isSelected ? 'var(--accent-cyan)' : 'var(--text-main)', 
+              fontWeight: '700', 
               fontSize: '15px', 
               whiteSpace: 'nowrap', 
               overflow: 'hidden', 
               textOverflow: 'ellipsis',
-              marginBottom: '2px'
+              marginBottom: '2px',
+              transition: 'color 0.2s'
             }}>
               {profile.name}
             </div>
             <div style={{ 
-              color: '#9499b8', 
+              color: 'var(--text-dim)', 
               fontSize: '13px', 
               whiteSpace: 'nowrap', 
               overflow: 'hidden', 
               textOverflow: 'ellipsis',
-              opacity: 0.9
+              opacity: isSelected ? 1 : 0.8,
+              transition: 'opacity 0.2s'
             }}>
               {profile.email}
             </div>
           </div>
 
           <div className="launch-icon" style={{ 
-            opacity: isSelected ? 1 : 0.2, 
-            transition: 'opacity 0.2s ease',
+            opacity: isSelected ? 1 : 0.3, 
+            transition: 'all 0.3s ease',
             display: 'flex',
             alignItems: 'center',
+            background: isSelected ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
+            padding: '8px',
+            borderRadius: '8px',
+            transform: isSelected ? 'scale(1.1)' : 'scale(1)',
           }}>
-            <IconRocket size={14} color="#7aa2f7" />
+            <IconRocket size={16} color={isSelected ? 'var(--accent-blue)' : 'var(--text-dim)'} />
           </div>
         </div>
       )})}
       
       {filtered.length === 0 && (
         <div style={{ 
-          padding: '40px 20px', 
+          padding: '60px 20px', 
           textAlign: 'center', 
-          color: '#565f89',
+          color: 'var(--text-dim)',
+          background: 'rgba(30, 32, 48, 0.3)',
+          borderRadius: '12px',
+          border: '1px dashed var(--border-glass)'
         }}>
           No profiles found matching "{searchQuery}"
         </div>
