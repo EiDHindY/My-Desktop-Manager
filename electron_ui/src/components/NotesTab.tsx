@@ -404,8 +404,9 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
         }
       }}
       className="custom-scrollbar"
-      style={{ outline: 'none', height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '16px', gap: '16px', scrollBehavior: 'smooth' }} 
+      style={{ outline: 'none', height: '100%', overflowY: 'auto', padding: '16px', scrollBehavior: 'smooth' }} 
     >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <DragDropContext
           onDragStart={() => { isDragging.current = true; }}
           onDragEnd={onDragEnd}
@@ -495,6 +496,7 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
         )}
       </DragDropContext>
     </div>
+  </div>
   );
 }
 

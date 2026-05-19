@@ -39,7 +39,7 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch, isSplitLayout = false }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void, isSplitLayout?: boolean }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -353,7 +353,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       <div 
         ref={providedDraggable?.innerRef} 
         {...providedDraggable?.draggableProps} 
-        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : ""}`}
+        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : (folderName !== 'root' ? "dimmed-folder" : "")}`}
         style={{ 
           ...(providedDraggable?.draggableProps.style || {})
         }}
@@ -368,9 +368,9 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             style={{ 
               display: 'flex',
               padding: '10px 14px',
-              background: hasCurrent ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent'),
+              background: isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent',
               alignItems: 'center',
-              color: hasCurrent ? '#7dcfff' : '#c8d3f5',
+              color: '#c8d3f5',
               fontWeight: '600',
               fontSize: '15px',
               position: 'relative',
@@ -378,7 +378,6 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
               borderBottom: isExpanded ? '1px solid rgba(255, 255, 255, 0.03)' : '1px solid transparent'
             }}
           >
-          {hasCurrent && <div className="active-pillar" style={{ top: '20%', bottom: '20%' }} />}
           <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
             {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#565f89" />)}
           </span>
@@ -387,7 +386,11 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             userSelect: 'none', 
             fontSize: '1.1rem', 
             fontWeight: '600',
-            letterSpacing: '0.01em'
+            letterSpacing: '0.01em',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+            minWidth: 0
           }}>{label}</span>
           
           {hoveredFolder === folderName && (
@@ -707,33 +710,83 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     );
   };
 
+  const nonRootFolders = folderNames.filter(f => f !== 'root');
+  const isSplit = isSplitLayout && nonRootFolders.length >= 2;
+  const topGridFolders = isSplit ? nonRootFolders.slice(0, 2) : [];
+  const listFolders = isSplit ? nonRootFolders.slice(2) : nonRootFolders;
+
   return (
     <div style={{ width: '100%', height: '100%', overflowY: 'auto' }} className="custom-scrollbar">
       <DragDropContext onDragEnd={onDragEnd}>
         <div style={{ padding: '10px' }}>
-        <Droppable droppableId="board" type="FOLDER">
-          {(provided) => (
-            <div ref={provided.innerRef} {...provided.droppableProps}>
-              {folderNames.filter(f => f !== 'root').map((folderName, index) => {
-                const parts = folderName.split('/');
-                const displayName = parts[parts.length - 1];
-                const level = parts.length - 1;
-                const indent = level * 24;
+          
+          {/* Conditional Layout Rendering */}
+          {isSplit ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Top Grid for first 2 folders (Pm Main & Communication) */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', 
+                gap: '12px'
+              }}>
+                {topGridFolders.map((folderName, index) => {
+                  const parts = folderName.split('/');
+                  const displayName = parts[parts.length - 1];
+                  return (
+                    <div key={folderName}>
+                      {renderFolder(folderName, index, false, displayName)}
+                    </div>
+                  );
+                })}
+              </div>
 
-                return (
-                  <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
-                    {renderFolder(folderName, index, true, displayName)}
-                  </div>
-                );
-              })}
-              {provided.placeholder}
+              {/* List for subsequent folders */}
+              {listFolders.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {listFolders.map((folderName, index) => {
+                    const parts = folderName.split('/');
+                    const displayName = parts[parts.length - 1];
+                    const level = parts.length - 1;
+                    const indent = level * 24;
+
+                    return (
+                      <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
+                        {renderFolder(folderName, index + 2, false, displayName)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Droppable droppableId="board" type="FOLDER">
+              {(provided) => (
+                <div ref={provided.innerRef} {...provided.droppableProps}>
+                  {nonRootFolders.map((folderName, index) => {
+                    const parts = folderName.split('/');
+                    const displayName = parts[parts.length - 1];
+                    const level = parts.length - 1;
+                    const indent = level * 24;
+
+                    return (
+                      <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
+                        {renderFolder(folderName, index, true, displayName)}
+                      </div>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          )}
+          
+          {/* Render Root statically below */}
+          {folders['root'] && (
+            <div style={{ marginTop: isSplit ? '16px' : '0' }}>
+              {renderFolder('root', 999, false)}
             </div>
           )}
-        </Droppable>
-        
-        {/* Render Root statically below the droppable */}
-        {folders['root'] && renderFolder('root', 999, false)}
-      </div>
+        </div>
 
       {contextMenu && createPortal(
         <div 

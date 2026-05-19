@@ -136,8 +136,18 @@ body {
 }
 
 .unified-glass-card.has-current {
-  border-color: rgba(125, 207, 255, 0.25);
-  box-shadow: 0 0 15px rgba(125, 207, 255, 0.1);
+  border-color: #7dcfff !important;
+  box-shadow: 0 0 30px rgba(125, 207, 255, 0.6), inset 0 0 15px rgba(125, 207, 255, 0.2) !important;
+}
+
+.unified-glass-card.dimmed-folder {
+  opacity: 0.45;
+  filter: grayscale(15%);
+}
+
+.unified-glass-card.dimmed-folder:hover {
+  opacity: 1 !important;
+  filter: none !important;
 }
 
 .lifted-card {

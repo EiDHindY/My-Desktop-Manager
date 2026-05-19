@@ -5,7 +5,7 @@ import NotesTab from './components/NotesTab'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 
-import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText } from './components/Icons'
+import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid } from './components/Icons'
 import './App.css'
 
 function App() {
@@ -25,6 +25,19 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [lastActionTime, setLastActionTime] = useState(0)
   const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string} | null>(null)
+  const [isSplitLayout, setIsSplitLayout] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('desktopManager_liveSplitLayout');
+      return saved === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('desktopManager_liveSplitLayout', isSplitLayout ? 'true' : 'false');
+  }, [isSplitLayout]);
+
   const searchInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadData = (ignoreThrottle = false) => {
@@ -225,27 +238,87 @@ function App() {
         gap: '24px',
         backdropFilter: 'blur(10px)'
       }}>
-        <div style={{ flex: 1, maxWidth: '220px', position: 'relative' }}>
-          <input 
-            ref={searchInputRef}
-            type="text" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search or Command..." 
-            style={{ 
-              width: '100%', 
-              padding: '10px 14px', 
-              borderRadius: '10px', 
-              backgroundColor: 'rgba(26, 27, 38, 0.5)', 
-              border: '1px solid var(--border-glass)', 
-              color: 'var(--text-main)', 
-              outline: 'none', 
-              fontSize: '14px',
-              transition: 'all 0.3s ease',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            className="search-input-hover"
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '220px', position: 'relative' }}>
+            <input 
+              ref={searchInputRef}
+              type="text" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search or Command..." 
+              style={{ 
+                width: '100%', 
+                padding: '10px 14px', 
+                borderRadius: '10px', 
+                backgroundColor: 'rgba(26, 27, 38, 0.5)', 
+                border: '1px solid var(--border-glass)', 
+                color: 'var(--text-main)', 
+                outline: 'none', 
+                fontSize: '14px',
+                transition: 'all 0.3s ease',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)',
+                boxSizing: 'border-box'
+              }}
+              className="search-input-hover"
+            />
+          </div>
+
+          {activeTab === 'live' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: 'rgba(26, 27, 38, 0.3)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '10px',
+              padding: '2px',
+              gap: '2px',
+              height: '38px',
+              boxSizing: 'border-box'
+            }}>
+              <button
+                onClick={() => setIsSplitLayout(false)}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: !isSplitLayout ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
+                  color: !isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  padding: 0
+                }}
+                title="Switch to List View"
+                className="btn-hover"
+              >
+                <IconList size={18} />
+              </button>
+              <button
+                onClick={() => setIsSplitLayout(true)}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: isSplitLayout ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
+                  color: isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  padding: 0
+                }}
+                title="Switch to Dashboard View"
+                className="btn-hover"
+              >
+                <IconLayoutGrid size={18} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Stats Summary */}
@@ -451,6 +524,7 @@ function App() {
                   setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
                   onAction={() => setLastActionTime(Date.now())}
                   onSwitch={handleSwitch}
+                  isSplitLayout={isSplitLayout}
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
