@@ -113,7 +113,15 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     }
   });
 
-  const query = searchQuery.toLowerCase();
+  // Two-segment scoped search: "com inb" = folder:"com" + desktop:"inb"
+  // A space in the query acts as a scope separator.
+  const rawQuery = searchQuery.toLowerCase();
+  const hasScope = rawQuery.includes(' ');
+  const spaceIdx = rawQuery.indexOf(' ');
+  const folderQuery = hasScope ? rawQuery.slice(0, spaceIdx) : rawQuery;
+  const desktopQuery = hasScope ? rawQuery.slice(spaceIdx + 1) : rawQuery;
+  // Keep backward-compatible alias for code that used `query`
+  const query = rawQuery;
   
   // Use saved order if available, otherwise fallback to alphabetical
   let folderNames = Object.keys(folders).filter(f => f !== 'root');
@@ -133,34 +141,54 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   const visibleItems: { type: 'folder' | 'desktop', id: string, folderName?: string }[] = [];
   folderNames.forEach(folderName => {
     const desktops = folders[folderName] || [];
-    const matchingDesktops = desktops.filter((id: string) => {
-      const pureId = id.split("___")[0];
-      const name = desktopNames[pureId] || "";
-      return name.toLowerCase().includes(query);
-    });
-    const folderMatches = folderName.toLowerCase().includes(query);
 
-    if (query && !folderMatches && matchingDesktops.length === 0) return;
+    if (hasScope) {
+      // === SCOPED MODE: folder must match folderQuery ===
+      const folderMatches = folderQuery === '' || folderName.toLowerCase().includes(folderQuery);
+      if (!folderMatches) return; // hide folders that don't match the folder segment
 
-    visibleItems.push({ type: 'folder', id: folderName });
-    
-    if (expandedFolders.includes(folderName) || query) {
-      const sorted = folderName === 'root' 
-        ? [...matchingDesktops].sort((a, b) => {
-            const pA = a.split('___')[0]; const pB = b.split('___')[0];
-            const cA = windowCounts[pA] || 0; const cB = windowCounts[pB] || 0;
-            if (cA > 0 && cB === 0) return -1;
-            if (cA === 0 && cB > 0) return 1;
-            const nA = (desktopNames[pA] || "").toLowerCase(); const nB = (desktopNames[pB] || "").toLowerCase();
-            const eA = !nA || nA === "empty"; const eB = !nB || nB === "empty";
-            if (!eA && eB) return -1; if (eA && !eB) return 1;
-            return 0;
-          })
-        : (query ? matchingDesktops : desktops);
-      
-      sorted.forEach((dId: string) => {
+      const matchingDesktops = desktops.filter((id: string) => {
+        if (desktopQuery === '') return true;
+        const pureId = id.split('___')[0];
+        const name = desktopNames[pureId] || '';
+        return name.toLowerCase().includes(desktopQuery);
+      });
+
+      visibleItems.push({ type: 'folder', id: folderName });
+      matchingDesktops.forEach((dId: string) => {
         visibleItems.push({ type: 'desktop', id: dId, folderName });
       });
+    } else {
+      // === NORMAL MODE (no space typed yet) ===
+      const matchingDesktops = desktops.filter((id: string) => {
+        const pureId = id.split('___')[0];
+        const name = desktopNames[pureId] || '';
+        return name.toLowerCase().includes(folderQuery);
+      });
+      const folderMatches = folderName.toLowerCase().includes(folderQuery);
+
+      if (folderQuery && !folderMatches && matchingDesktops.length === 0) return;
+
+      visibleItems.push({ type: 'folder', id: folderName });
+
+      if (expandedFolders.includes(folderName) || folderQuery) {
+        const sorted = folderName === 'root'
+          ? [...matchingDesktops].sort((a, b) => {
+              const pA = a.split('___')[0]; const pB = b.split('___')[0];
+              const cA = windowCounts[pA] || 0; const cB = windowCounts[pB] || 0;
+              if (cA > 0 && cB === 0) return -1;
+              if (cA === 0 && cB > 0) return 1;
+              const nA = (desktopNames[pA] || '').toLowerCase(); const nB = (desktopNames[pB] || '').toLowerCase();
+              const eA = !nA || nA === 'empty'; const eB = !nB || nB === 'empty';
+              if (!eA && eB) return -1; if (eA && !eB) return 1;
+              return 0;
+            })
+          : (folderQuery ? matchingDesktops : desktops);
+
+        sorted.forEach((dId: string) => {
+          visibleItems.push({ type: 'desktop', id: dId, folderName });
+        });
+      }
     }
   });
 
@@ -317,18 +345,40 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   const renderFolder = (folderName: string, index: number, isDraggable: boolean, displayName?: string) => {
     const label = displayName || folderName;
     const desktops = folders[folderName] || [];
-    
-    const matchingDesktops = desktops.filter((id: string) => {
-      const pureId = id.split("___")[0];
-      const name = desktopNames[pureId] || "";
-      return name.toLowerCase().includes(query);
-    });
 
-    const folderMatches = folderName.toLowerCase().includes(query);
-    const displayDesktops = (query && !folderMatches) ? matchingDesktops : desktops;
-    const isExpanded = expandedFolders.includes(folderName) || query;
-    
-    const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split("___")[0]] || 0) > 0).length;
+    let matchingDesktops: string[];
+    let displayDesktops: string[];
+    let isExpanded: boolean;
+
+    if (hasScope) {
+      // === SCOPED MODE: folder already pre-filtered in visibleItems ===
+      const folderMatches = folderQuery === '' || folderName.toLowerCase().includes(folderQuery);
+      if (!folderMatches) return null;
+
+      matchingDesktops = desktops.filter((id: string) => {
+        if (desktopQuery === '') return true;
+        const pureId = id.split('___')[0];
+        const name = desktopNames[pureId] || '';
+        return name.toLowerCase().includes(desktopQuery);
+      });
+      displayDesktops = matchingDesktops;
+      isExpanded = true; // Always expand in scoped mode
+    } else {
+      // === NORMAL MODE ===
+      matchingDesktops = desktops.filter((id: string) => {
+        const pureId = id.split('___')[0];
+        const name = desktopNames[pureId] || '';
+        return name.toLowerCase().includes(folderQuery);
+      });
+
+      const folderMatches = folderName.toLowerCase().includes(folderQuery);
+      displayDesktops = (folderQuery && !folderMatches) ? matchingDesktops : desktops;
+      isExpanded = expandedFolders.includes(folderName) || !!folderQuery;
+
+      if (folderQuery && !folderMatches && matchingDesktops.length === 0) return null;
+    }
+
+    const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split('___')[0]] || 0) > 0).length;
     const folderEmpty = displayDesktops.length - folderActive;
     
     const sortedDesktops = [...displayDesktops].sort((a, b) => {
@@ -344,7 +394,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       return 0; // Maintain manual/natural order for everything else
     });
 
-    if (query && !folderMatches && matchingDesktops.length === 0) return null;
+    if (!hasScope && folderQuery && !folderName.toLowerCase().includes(folderQuery) && matchingDesktops.length === 0) return null;
 
     const hasCurrent = sortedDesktops.some((id: string) => id.split("___")[0] === currentDesktop);
     const isSelected = visibleItems[selectedIndex]?.id === folderName;
@@ -353,7 +403,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       <div 
         ref={providedDraggable?.innerRef} 
         {...providedDraggable?.draggableProps} 
-        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : (folderName !== 'root' ? "dimmed-folder" : "")}`}
+        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : (folderName !== 'root' && !searchQuery ? "dimmed-folder" : "")}`}
         style={{ 
           ...(providedDraggable?.draggableProps.style || {})
         }}

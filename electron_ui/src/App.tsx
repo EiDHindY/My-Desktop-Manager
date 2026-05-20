@@ -205,6 +205,7 @@ function App() {
     }
     
     setCurrentDesktop(pureTargetId) // New target becomes current
+    setSearchQuery('') // Clear search so the default live page is clean next time
   }
 
   const totalActive = Object.values(windowCounts || {}).filter(c => c > 0).length;
