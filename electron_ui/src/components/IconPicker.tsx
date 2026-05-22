@@ -39,7 +39,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
             onClick={onClear}
             style={{ borderStyle: 'dashed', opacity: currentIcons.length > 0 ? 1 : 0.5 }}
           >
-            <div style={{ fontSize: '10px', color: '#565f89', fontWeight: 'bold' }}>Clear All</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 'bold' }}>Clear All</div>
           </div>
           {availableIcons.map(icon => {
             const isSelected = currentIcons.includes(icon);
@@ -51,7 +51,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                 style={{
                   position: 'relative',
                   border: isSelected ? '1px solid var(--accent-blue)' : '1px solid transparent',
-                  background: isSelected ? 'rgba(122, 162, 247, 0.1)' : 'transparent',
+                  background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
                   borderRadius: '8px',
                   padding: '8px',
                   display: 'flex',

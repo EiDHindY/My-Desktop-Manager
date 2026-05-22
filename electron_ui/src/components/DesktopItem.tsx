@@ -65,16 +65,16 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
             onMouseEnter={() => onHover(desktopId)}
             onMouseLeave={() => onHover(null)}
             style={{ 
-              background: snapshot.isDragging ? '#24283b' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.12)' : 'transparent')),
+              background: snapshot.isDragging ? 'var(--bg-secondary)' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(139, 92, 246, 0.12)' : 'transparent')),
               boxSizing: 'border-box',
-              color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
+              color: isActive ? 'var(--accent-cyan)' : (isReturn ? 'var(--accent-purple)' : (hasWindows ? 'var(--accent-blue)' : 'var(--text-main)')),
               fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
               transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
               transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
-              border: isActive ? '1px solid rgba(125, 207, 255, 0.1)' : (isSelected ? '1px solid rgba(187, 154, 247, 0.4)' : '1px solid transparent'),
+              border: isActive ? '1px solid rgba(14, 165, 233, 0.1)' : (isSelected ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid transparent'),
               paddingLeft: '24px',
               zIndex: snapshot.isDragging ? 9999 : (isSelected ? 2 : 1),
-              boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isSelected && !isActive ? '0 0 15px rgba(187, 154, 247, 0.15)' : 'none'),
+              boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isSelected && !isActive ? '0 0 15px rgba(139, 92, 246, 0.15)' : 'none'),
               width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : '100%',
               ...(providedDesktop.draggableProps.style || {})
             }}
@@ -86,7 +86,7 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
               ) : (icons && icons.length > 0) ? (
                 <ManualIcon icon={icons[0]} size={16} />
               ) : (
-                <IconMonitor size={14} color={isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89'))} />
+                <IconMonitor size={14} color={isActive ? 'var(--accent-cyan)' : (isReturn ? 'var(--accent-purple)' : (hasWindows ? 'var(--accent-blue)' : 'var(--text-dim)'))} />
               )}
             </div>
             {priority !== 'None' && priority?.toUpperCase() !== 'ANCHOR' && (
@@ -114,14 +114,14 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                   className="btn-hover"
                   onClick={(e) => { e.stopPropagation(); onExecuteCommand(`SUMMON:${desktopId}`); }}
                   style={{ 
-                    backgroundColor: 'rgba(187, 154, 247, 0.15)', 
-                    color: '#bb9af7', 
+                    backgroundColor: 'rgba(139, 92, 246, 0.15)', 
+                    color: 'var(--accent-purple)', 
                     width: '24px', 
                     height: '24px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '1px solid rgba(187, 154, 247, 0.3)'
+                    border: '1px solid rgba(139, 92, 246, 0.3)'
                   }}
                   title="Summon"
                 >
@@ -134,7 +134,7 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                 onClick={(e) => { e.stopPropagation(); onPrompt('Rename Desktop', displayName, `RENAME:${desktopId}`); }}
                 style={{ 
                   backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                  color: '#9aa5ce', 
+                  color: 'var(--text-main)', 
                   width: '24px', 
                   height: '24px', 
                   display: 'flex', 
@@ -151,14 +151,14 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                 className="btn-hover"
                 onClick={(e) => { e.stopPropagation(); onPrompt('Global Shortcut (e.g. Control+Alt+1)', shortcut || '', `SET_SHORTCUT:${desktopId}`); }}
                 style={{ 
-                  backgroundColor: shortcut ? 'rgba(122, 162, 247, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
-                  color: hasShortcutError ? 'var(--accent-red)' : (shortcut ? 'var(--accent-blue)' : '#9aa5ce'), 
+                  backgroundColor: shortcut ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                  color: hasShortcutError ? 'var(--accent-red)' : (shortcut ? 'var(--accent-blue)' : 'var(--text-main)'), 
                   width: '24px', 
                   height: '24px', 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
-                  border: hasShortcutError ? '1px solid rgba(247, 118, 142, 0.4)' : (shortcut ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
+                  border: hasShortcutError ? '1px solid rgba(239, 68, 68, 0.4)' : (shortcut ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
                 }}
                 title={hasShortcutError ? `FAILED: ${shortcut}` : (shortcut ? `Hotkey: ${shortcut}` : "Set Hotkey")}
               >
@@ -173,14 +173,14 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                     onExecuteCommand(`SET_SHORTCUT:${desktopId}:`);
                   }}
                   style={{ 
-                    backgroundColor: 'rgba(247, 118, 142, 0.1)', 
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)', 
                     color: 'var(--accent-red)', 
                     width: '18px', 
                     height: '18px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '1px solid rgba(247, 118, 142, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
                     marginLeft: '-4px',
                     fontSize: '14px',
                     fontWeight: 'bold',
@@ -199,8 +199,8 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                   className="btn-hover"
                   onClick={(e) => { e.stopPropagation(); onExecuteCommand(`GOTO_RETURN:${pureId}`); }}
                   style={{ 
-                    backgroundColor: 'rgba(187, 154, 247, 0.1)', 
-                    color: '#bb9af7', 
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)', 
+                    color: 'var(--accent-purple)', 
                     padding: '0 8px', 
                     height: '24px', 
                     fontSize: '11px',
@@ -208,7 +208,7 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
-                    border: '1px solid rgba(187, 154, 247, 0.2)',
+                    border: '1px solid rgba(139, 92, 246, 0.2)',
                     borderRadius: '6px'
                   }}
                   title="Return to this desktop"
@@ -219,7 +219,7 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
               )}
               
               {isSelected && !isActive && (
-                <span className="active-badge" style={{ backgroundColor: 'rgba(125, 207, 255, 0.1)', color: '#7dcfff' }}>Selected</span>
+                <span className="active-badge" style={{ backgroundColor: 'rgba(14, 165, 233, 0.1)', color: 'var(--accent-cyan)' }}>Selected</span>
               )}
               
               {isActive && <span className="active-badge">CURRENT</span>}

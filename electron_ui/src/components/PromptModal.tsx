@@ -101,7 +101,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
             width: '100%',
             padding: '14px',
             borderRadius: '12px',
-            backgroundColor: 'rgba(26, 27, 38, 0.6)',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
             border: '2px solid var(--border-glass)',
             color: 'var(--text-main)',
             outline: 'none',
@@ -123,7 +123,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
                 className="interactive-element"
                 style={{
                   padding: '12px',
-                  backgroundColor: 'rgba(30, 32, 48, 0.4)',
+                  backgroundColor: 'rgba(30, 41, 59, 0.4)',
                   color: btn.color,
                   border: `1px solid ${btn.color}33`,
                   borderRadius: '10px',
@@ -142,7 +142,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
                   e.currentTarget.style.boxShadow = `0 0 15px ${btn.color}22`;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(30, 32, 48, 0.4)';
+                  e.currentTarget.style.backgroundColor = 'rgba(30, 41, 59, 0.4)';
                   e.currentTarget.style.borderColor = `${btn.color}33`;
                   e.currentTarget.style.boxShadow = 'none';
                 }}
@@ -161,7 +161,7 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
             style={{
               flex: 1,
               padding: '12px',
-              backgroundColor: 'rgba(30, 32, 48, 0.5)',
+              backgroundColor: 'rgba(30, 41, 59, 0.5)',
               color: 'var(--text-dim)',
               border: '1px solid var(--border-glass)',
               borderRadius: '10px',
@@ -179,13 +179,13 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
               flex: 1,
               padding: '12px',
               backgroundColor: 'var(--accent-blue)',
-              color: '#1a1b26',
+              color: 'var(--bg-primary)',
               border: 'none',
               borderRadius: '10px',
               cursor: 'pointer',
               fontSize: '15px',
               fontWeight: '800',
-              boxShadow: '0 4px 15px rgba(122, 162, 247, 0.3)'
+              boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)'
             }}
           >
             {isDesktopOp ? 'Set Generic' : 'Submit'}

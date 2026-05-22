@@ -419,7 +419,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             style={{ 
               display: 'flex',
               padding: '10px 14px',
-              background: isSelected ? 'rgba(187, 154, 247, 0.08)' : 'transparent',
+              background: isSelected ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
               alignItems: 'center',
               color: '#c8d3f5',
               fontWeight: '600',
@@ -430,7 +430,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             }}
           >
           <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
-            {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="#565f89" /> : (isExpanded ? <IconFolderOpen color="#7aa2f7" /> : <IconFolder color="#565f89" />)}
+            {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="var(--text-dim)" /> : (isExpanded ? <IconFolderOpen color="var(--accent-blue)" /> : <IconFolder color="var(--text-dim)" />)}
           </span>
           <span style={{ 
             flex: 1, 
@@ -449,8 +449,8 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'New Desktop Name', defaultValue: 'New Desktop', command: `CREATE_LIVE_DESKTOP:${folderName}` }); }}
               style={{ 
-                backgroundColor: '#7aa2f7', 
-                color: '#1a1b26', 
+                backgroundColor: 'var(--accent-blue)', 
+                color: 'var(--bg-primary)', 
                 borderRadius: '4px', 
                 width: '24px', 
                 height: '24px', 
@@ -470,8 +470,8 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); handleDeployAll(folderName); }}
               style={{ 
-                backgroundColor: '#bb9af7', 
-                color: '#1a1b26', 
+                backgroundColor: 'var(--accent-purple)', 
+                color: 'var(--bg-primary)', 
                 borderRadius: '4px', 
                 width: '24px', 
                 height: '24px', 
@@ -507,9 +507,9 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             </div>
           )}
 
-          <div style={{ fontSize: '11px', color: '#565f89', flexShrink: 0 }}>
-            {folderActive > 0 && <span style={{ color: '#7dcfff', marginRight: '5px', fontWeight: 'bold' }}>{folderActive} active</span>}
-            {folderActive > 0 && folderEmpty > 0 && <span style={{ color: '#414868', marginRight: '5px' }}>/</span>}
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', flexShrink: 0 }}>
+            {folderActive > 0 && <span style={{ color: 'var(--accent-cyan)', marginRight: '5px', fontWeight: 'bold' }}>{folderActive} active</span>}
+            {folderActive > 0 && folderEmpty > 0 && <span style={{ color: 'var(--border-glass)', marginRight: '5px' }}>/</span>}
             {folderEmpty > 0 && <span>{folderEmpty} empty</span>}
           </div>
         </div>
@@ -573,7 +573,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                   })}
                   {providedDroppable.placeholder}
                   {desktops.length === 0 && !query && (
-                    <div style={{ padding: '20px', color: '#565f89', fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', opacity: 0.5 }}>
+                    <div style={{ padding: '20px', color: 'var(--text-dim)', fontSize: '13px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', opacity: 0.5 }}>
                       <IconGhost size={24} />
                       <span>Empty neighborhood</span>
                     </div>
@@ -698,10 +698,10 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
           ) : (
             <>
               <div className="menu-item" onClick={() => executeMenuCommand(`SUMMON:${contextMenu.id}`)}>
-                <IconZap size={14} color="#bb9af7" /> Summon
+                <IconZap size={14} color="var(--accent-purple)" /> Summon
               </div>
               <div className="menu-item" onClick={() => executeMenuCommand(`CLOSE_WINDOWS:${contextMenu.id}`)}>
-                <IconTrash size={14} color="#f7768e" /> Close Windows
+                <IconTrash size={14} color="var(--accent-red)" /> Close Windows
               </div>
               <div className="menu-item" onClick={() => executeMenuCommand(`UNGROUP_DESKTOP:${contextMenu.folderName}:${contextMenu.id}`)}>
                 <IconChevronRight size={14} /> Ungroup
@@ -742,14 +742,14 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                   window.alert(`CRITICAL ERROR during delete: ${err.message}`);
                   console.error(err);
                 }
-              }} style={{ color: '#f7768e' }}>
+              }} style={{ color: 'var(--accent-red)' }}>
                 <IconTrash size={14} /> Delete Desktop
               </div>
               <div className="menu-divider" style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.05)', margin: '4px 0' }} />
               <div className="menu-item" onClick={() => { setContextMenu(null); setShowIconPicker(contextMenu.id); }}>
                 <IconRocket size={14} /> Change Icon
               </div>
-              <div className="menu-item" onClick={() => executeMenuCommand(`SET_ICON:${contextMenu.id}:`)} style={{ color: '#565f89' }}>
+              <div className="menu-item" onClick={() => executeMenuCommand(`SET_ICON:${contextMenu.id}:`)} style={{ color: 'var(--text-dim)' }}>
                 <IconUndo size={14} /> Reset Icon
               </div>
             </>

@@ -81,7 +81,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
   };
 
   if (loading) return (
-    <div style={{ padding: '40px', textAlign: 'center', color: '#565f89' }}>
+    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-dim)' }}>
       <div style={{ marginBottom: '12px' }}>
         <IconChrome size={32} color="#3b4261" />
       </div>
@@ -107,7 +107,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
             onClick={() => launchProfile(profile.id)}
             className={`unified-glass-card interactive-element ${isSelected ? 'lifted-card' : ''}`}
             style={{
-              backgroundColor: isSelected ? 'rgba(122, 162, 247, 0.1)' : 'rgba(30, 32, 48, 0.45)',
+              backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(30, 41, 59, 0.45)',
               border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
               padding: '12px 16px',
               display: 'flex',
@@ -117,7 +117,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               position: 'relative',
               transform: isSelected ? 'translateX(4px)' : 'none',
-              boxShadow: isSelected ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(122, 162, 247, 0.1)' : 'none',
+              boxShadow: isSelected ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(59, 130, 246, 0.1)' : 'none',
               borderLeft: isSelected ? '4px solid var(--accent-blue)' : '4px solid transparent',
             }}
             onMouseEnter={() => setSelectedIndex(index)}
@@ -128,14 +128,14 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
             width: '42px',
             height: '42px',
             borderRadius: '10px',
-            backgroundColor: 'rgba(41, 46, 66, 0.6)',
+            backgroundColor: 'rgba(51, 65, 85, 0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
             border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
             flexShrink: 0,
-            boxShadow: isSelected ? '0 0 10px rgba(122, 162, 247, 0.2)' : 'none'
+            boxShadow: isSelected ? '0 0 10px rgba(59, 130, 246, 0.2)' : 'none'
           }}>
             <img 
               src={getProfileImage(profile) || ''} 
@@ -179,7 +179,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
             transition: 'all 0.3s ease',
             display: 'flex',
             alignItems: 'center',
-            background: isSelected ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
+            background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
             padding: '8px',
             borderRadius: '8px',
             transform: isSelected ? 'scale(1.1)' : 'scale(1)',
@@ -194,7 +194,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
           padding: '60px 20px', 
           textAlign: 'center', 
           color: 'var(--text-dim)',
-          background: 'rgba(30, 32, 48, 0.3)',
+          background: 'rgba(30, 41, 59, 0.3)',
           borderRadius: '12px',
           border: '1px dashed var(--border-glass)'
         }}>
