@@ -89,7 +89,54 @@ function App() {
         // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment
         if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 1500) return;
 
-        const newData = { session: sessionData, notes: notesData };
+        // Auto-migrate legacy notes format (version 2 hierarchy) to the new flat structure
+        let finalNotesData = notesData;
+        if (notesData && notesData.hierarchy && !notesData.folders) {
+          const newFolders: Record<string, any[]> = {};
+          const newOrder: string[] = [];
+          const newNames: Record<string, string> = {};
+          const newExpanded: string[] = notesData.expanded_folders || ['root'];
+
+          notesData.hierarchy.forEach((folder: any) => {
+            const fKey = folder.name; // e.g., "pm_177..."
+            newOrder.push(fKey);
+            
+            // Extract human readable name from ID (e.g. pm_1778527461732 -> pm)
+            let displayName = fKey;
+            if (displayName !== 'root') {
+              const match = displayName.match(/^(.*)_\d{13}$/);
+              if (match) displayName = match[1];
+            }
+            newNames[fKey] = displayName;
+            
+            newFolders[fKey] = (folder.children || []).map((child: any) => ({
+              id: child.id,
+              type: child.type === 'note' ? 'note' : 'checkbox',
+              text: child.text || child.name || 'Untitled',
+              checked: child.checked || false,
+              content: child.details || ''
+            }));
+          });
+
+          if (!newFolders['root']) {
+            newFolders['root'] = [];
+            newOrder.push('root');
+            newNames['root'] = 'General';
+          }
+
+          finalNotesData = {
+            folders: newFolders,
+            folder_order: newOrder,
+            folder_names: newNames,
+            expanded_folders: newExpanded
+          };
+          
+          // Auto-save migrated format
+          // @ts-ignore
+          window.electronAPI.writeJSON('notes.json', finalNotesData);
+        }
+
+        const newData = { session: sessionData, notes: finalNotesData };
         dataRef.current = newData;
         setData(newData)
         setDesktopNames(desktopInfo?.names || {})

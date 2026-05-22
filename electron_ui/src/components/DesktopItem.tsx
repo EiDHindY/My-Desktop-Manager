@@ -84,7 +84,11 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
               {isDeleting ? (
                 <IconLoader size={14} color="var(--accent-red)" />
               ) : (icons && icons.length > 0) ? (
-                <ManualIcon icon={icons[0]} size={16} />
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {icons.map((ic, i) => (
+                    <ManualIcon key={i} icon={ic} size={16} />
+                  ))}
+                </div>
               ) : (
                 <IconMonitor size={14} color={isActive ? 'var(--accent-cyan)' : (isReturn ? 'var(--accent-purple)' : (hasWindows ? 'var(--accent-blue)' : 'var(--text-dim)'))} />
               )}

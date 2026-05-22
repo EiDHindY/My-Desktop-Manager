@@ -471,25 +471,39 @@ class SwitcherMenu(QWidget):
 
     def save_notes(self):
         if self._is_populating: return
-        data = {"folders": {}, "folder_order": [], "expanded": []}
+        
+        def extract_node(item):
+            uid = item.data(0, Qt.UserRole)
+            if uid == "FOLDER":
+                children = []
+                for i in range(item.childCount()):
+                    child_data = extract_node(item.child(i))
+                    if child_data: children.append(child_data)
+                return {
+                    "id": item.data(0, Qt.UserRole + 3) or str(uuid.uuid4()),
+                    "type": "folder",
+                    "name": item.data(0, Qt.UserRole + 1),
+                    "expanded": item.isExpanded(),
+                    "children": children
+                }
+            else:
+                if not uid: return None # detail item
+                return {
+                    "id": uid,
+                    "type": "task",
+                    "text": item.data(0, Qt.UserRole + 1),
+                    "checked": item.checkState(0) == Qt.Checked,
+                    "details": item.data(0, Qt.UserRole + 2) or ""
+                }
+
+        hierarchy = []
         root = self.notes_tree.invisibleRootItem()
         for i in range(root.childCount()):
-            f = root.child(i)
-            name = f.data(0, Qt.UserRole + 1)
-            data["folder_order"].append(name)
-            task_list = []
-            for j in range(f.childCount()):
-                task_item = f.child(j)
-                task_list.append({
-                    "id": task_item.data(0, Qt.UserRole),
-                    "text": task_item.data(0, Qt.UserRole + 1),
-                    "checked": task_item.checkState(0) == Qt.Checked,
-                    "details": task_item.data(0, Qt.UserRole + 2) or ""
-                })
-                if task_item.isExpanded():
-                    data["expanded"].append(task_item.data(0, Qt.UserRole))
-            data["folders"][name] = task_list
-            if f.isExpanded(): data["expanded"].append(name)
+            node_data = extract_node(root.child(i))
+            if node_data:
+                hierarchy.append(node_data)
+                
+        data = {"hierarchy": hierarchy, "version": 2}
         self.data_manager.save_notes(data)
         self.notes_data = data
 
@@ -554,13 +568,18 @@ class SwitcherMenu(QWidget):
         elif self.tabs.currentIndex() == 2: # Notes tab
             name, ok = QInputDialog.getText(self, "New Notes Folder", "Folder name:", text="")
             if ok and name.strip():
-                self.notes_data.setdefault("folders", {})
-                self.notes_data.setdefault("folder_order", [])
-                if name.strip() not in self.notes_data["folders"]:
-                    self.notes_data["folders"][name.strip()] = []
-                    self.notes_data["folder_order"].append(name.strip())
-                    self.data_manager.save_notes(self.notes_data)
-                    self.populate_notes()
+                from PyQt5.QtGui import QIcon, QFont, QBrush, QColor
+                new_folder = QTreeWidgetItem()
+                new_folder.setText(0, name.strip())
+                new_folder.setData(0, Qt.UserRole, "FOLDER")
+                new_folder.setData(0, Qt.UserRole + 1, name.strip())
+                new_folder.setData(0, Qt.UserRole + 3, str(uuid.uuid4()))
+                new_folder.setIcon(0, QIcon.fromTheme("folder"))
+                new_folder.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                new_folder.setForeground(0, QBrush(QColor("#bb9af7")))
+                new_folder.setFlags(new_folder.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
+                self.notes_tree.addTopLevelItem(new_folder)
+                self.save_notes()
         else: # Live tab
             name, ok = QInputDialog.getText(self, "New Live Group", "Folder name:", text="")
             if ok and name.strip():
@@ -603,21 +622,35 @@ class SwitcherMenu(QWidget):
         self.note_input.clear()
         
         selected = self.notes_tree.currentItem()
-        target_folder = "root"
+        target_item = None
         if selected:
-            target_folder = selected.data(0, Qt.UserRole + 1) if selected.data(0, Qt.UserRole) == "FOLDER" else selected.parent().data(0, Qt.UserRole + 1)
+            target_item = selected if selected.data(0, Qt.UserRole) == "FOLDER" else selected.parent()
         
-        self.notes_data.setdefault("folders", {})
-        self.notes_data.setdefault("folder_order", [])
+        self.save_notes()
         
-        if target_folder not in self.notes_data["folders"]:
-            self.notes_data["folders"][target_folder] = []
-            
-        self.notes_data["folders"][target_folder].append({
+        new_task = {
             "id": str(uuid.uuid4()),
+            "type": "task",
             "text": text,
-            "checked": False
-        })
+            "checked": False,
+            "details": ""
+        }
+        
+        if target_item:
+            target_id = target_item.data(0, Qt.UserRole + 3)
+            def find_and_append(nodes, tid):
+                for n in nodes:
+                    if n.get("type") == "folder" and n.get("id") == tid:
+                        n.setdefault("children", []).append(new_task)
+                        return True
+                    elif n.get("type") == "folder":
+                        if find_and_append(n.get("children", []), tid):
+                            return True
+                return False
+            find_and_append(self.notes_data.get("hierarchy", []), target_id)
+        else:
+            self.notes_data.setdefault("hierarchy", []).append(new_task)
+            
         self.data_manager.save_notes(self.notes_data)
         self.populate_notes()
         
@@ -628,24 +661,32 @@ class SwitcherMenu(QWidget):
             self.save_notes()
             return
             
-        # Detect if checkbox was clicked by comparing with saved state
         was_checked = False
         found = False
-        for tasks in self.notes_data.get("folders", {}).values():
-            for t in tasks:
-                if t.get("id") == uid:
-                    was_checked = t.get("checked", False)
-                    found = True; break
-            if found: break
+        if "hierarchy" in self.notes_data:
+            def find_task(nodes, tid):
+                for n in nodes:
+                    if n.get("type") == "task" and n.get("id") == tid: return n
+                    elif n.get("type") == "folder":
+                        r = find_task(n.get("children", []), tid)
+                        if r: return r
+                return None
+            task = find_task(self.notes_data.get("hierarchy", []), uid)
+            if task: was_checked = task.get("checked", False)
+        else:
+            for tasks in self.notes_data.get("folders", {}).values():
+                for t in tasks:
+                    if t.get("id") == uid:
+                        was_checked = t.get("checked", False)
+                        found = True; break
+                if found: break
             
         is_checked = (item.checkState(0) == Qt.Checked)
         
         if is_checked != was_checked:
-            # Checkbox clicked — just save and update strike-through
             self.save_notes()
             self.populate_notes()
         else:
-            # Text clicked — toggle expansion
             item.setExpanded(not item.isExpanded())
             self.save_notes()
 
@@ -657,6 +698,7 @@ class SwitcherMenu(QWidget):
         
         if item.data(0, Qt.UserRole) == "FOLDER":
             rename_action = menu.addAction("Rename Folder")
+            add_sub_action = menu.addAction("Add Subfolder")
             delete_action = menu.addAction("Delete Folder")
             action = menu.exec_(self.notes_tree.viewport().mapToGlobal(pos))
             if action == rename_action:
@@ -665,10 +707,37 @@ class SwitcherMenu(QWidget):
                     item.setText(0, new_name.strip())
                     item.setData(0, Qt.UserRole + 1, new_name.strip())
                     self.save_notes()
+            elif action == add_sub_action:
+                depth = 0
+                p = item
+                while p:
+                    depth += 1
+                    p = p.parent()
+                if depth >= 5:
+                    subprocess.run(["notify-send", "Limit Reached", "Cannot nest folders deeper than 5 levels!"])
+                    return
+                new_name, ok = QInputDialog.getText(self, "New Subfolder", "Folder name:")
+                if ok and new_name.strip():
+                    from PyQt5.QtGui import QIcon, QFont, QBrush, QColor
+                    new_folder = QTreeWidgetItem()
+                    new_folder.setText(0, new_name.strip())
+                    new_folder.setData(0, Qt.UserRole, "FOLDER")
+                    new_folder.setData(0, Qt.UserRole + 1, new_name.strip())
+                    new_folder.setData(0, Qt.UserRole + 3, str(uuid.uuid4()))
+                    new_folder.setIcon(0, QIcon.fromTheme("folder"))
+                    new_folder.setFont(0, QFont("Inter", 10, QFont.DemiBold))
+                    new_folder.setForeground(0, QBrush(QColor("#bb9af7")))
+                    new_folder.setFlags(new_folder.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
+                    item.addChild(new_folder)
+                    item.setExpanded(True)
+                    self.save_notes()
             elif action == delete_action:
-                parent = item.parent() or self.notes_tree.invisibleRootItem()
-                parent.removeChild(item)
-                self.save_notes()
+                if item.childCount() > 0:
+                    subprocess.run(["notify-send", "Cannot Delete", "Folder is not empty!"])
+                else:
+                    parent = item.parent() or self.notes_tree.invisibleRootItem()
+                    parent.removeChild(item)
+                    self.save_notes()
         else:
             edit_action = menu.addAction("Edit Task")
             delete_action = menu.addAction("Delete Task")
@@ -717,40 +786,52 @@ class SwitcherMenu(QWidget):
             subprocess.run(["notify-send", "Back Error", str(e)])
 
     def _on_sigusr1(self, signum, frame):
+        print(f"[SIGNAL] SIGUSR1 received. Setting summon_flag = True.", flush=True)
         self.summon_flag = True
 
     def _check_summon(self):
         if getattr(self, 'summon_flag', False):
+            print(f"[SUMMON] _check_summon triggered. is_collapsed={getattr(self, 'is_collapsed', False)}", flush=True)
             self.summon_flag = False
-            if self.is_summoning: return
+            if self.is_summoning:
+                print("[SUMMON] Already summoning, skipping", flush=True)
+                return
             
             cursor_pos = QCursor.pos()
             if cursor_pos.x() == 0 and cursor_pos.y() == 0:
                 screen = QApplication.primaryScreen().geometry()
                 cursor_pos = QPoint(screen.width() // 2, screen.height() // 2)
             
+            self._summoning_via_signal = True
+            win_w = self.width() if self.width() > 0 else self.hud_width
+            win_h = self.height() if self.height() > 0 else self.height_current
+            
             if getattr(self, "is_collapsed", False) and hasattr(self, 'ball'):
-                self._summoning_via_signal = True
-                
-                # Move to cursor first (centered on ball size)
-                self.move(cursor_pos.x() - 20, cursor_pos.y() - 20)
-                
-                # Expand and Focus
-                if self.is_collapsed: self.toggle_collapse()
-                
-                self.show()
-                self.raise_()
-                self.activateWindow()
-                self.search_entry.setFocus()
+                print("[SUMMON] Collapsed: centering ball and expanding", flush=True)
+                target_x = cursor_pos.x() - 20
+                target_y = cursor_pos.y() - 20
+                self.move(target_x, target_y)
+                force_window_position(self.force_focus_title, target_x, target_y, 40, 40)
+                self.toggle_collapse()
             else:
-                # Already visible and expanded — just focus it, don't move it
-                # BUG-07 FIX: Set flag BEFORE activateWindow() so the WindowActivate
-                # handler knows this was triggered by SIGUSR1 (not by mouse hover).
-                self._summoning_via_signal = True
-                self.show()
-                self.raise_()
-                self.activateWindow()
-                self.search_entry.setFocus()
+                print(f"[SUMMON] Expanded: centering window at {cursor_pos.x()}, {cursor_pos.y()}", flush=True)
+                target_x = cursor_pos.x() - win_w // 2
+                target_y = cursor_pos.y() - win_h // 2
+                
+                # Constrain within screen boundaries
+                screen_geom = QApplication.primaryScreen().geometry()
+                target_x = max(0, min(target_x, screen_geom.width() - win_w))
+                target_y = max(0, min(target_y, screen_geom.height() - win_h))
+                
+                self.move(target_x, target_y)
+                force_window_position(self.force_focus_title, target_x, target_y, win_w, win_h)
+            
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            force_window_focus(self.force_focus_title)
+            self.search_entry.setFocus()
+            print("[SUMMON] Summon action completed.", flush=True)
                 # is_summoning stays False — no animation needed
                 
         if getattr(self, 'is_summoning', False):

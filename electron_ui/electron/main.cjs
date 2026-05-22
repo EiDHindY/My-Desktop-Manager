@@ -9,7 +9,7 @@ const execAsync = util.promisify(exec);
 
 // ─── APP NAME & ICON ───
 app.setName('Desktop Manager');
-const ICON_PATH = path.join(__dirname, 'icon.png');
+const ICON_PATH = path.join(__dirname, 'icon_final.png');
 
 // ─── PID FILE PATH ───
 const PID_FILE = '/tmp/desktop-manager.pid';

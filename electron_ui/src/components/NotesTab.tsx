@@ -34,6 +34,7 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [localData, setLocalData] = useState<NotesData | null>(notesData);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'notes' | 'checkboxes'>('checkboxes');
   const [editingItemId, _setEditingItemId] = useState<string | null>(null);
   const editingItemIdRef = useRef<string | null>(null);
   const editingContentRef = useRef<{ [key: string]: string }>({});
@@ -110,24 +111,40 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
     folderOrder.forEach(folderKey => {
       const folderName = getFolderName(folderKey).toLowerCase();
       const folderItems = folders[folderKey] || [];
-      const matchingItems = folderItems.filter(item => 
-        item.text.toLowerCase().includes(query) || 
-        (item.content || '').toLowerCase().includes(query)
-      );
+      
+      const filteredItems = folderItems.filter((item: NoteItem) => {
+        const matchesSearch = !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query);
+        let matchesFilter = true;
+        const itemType = item.type || 'note';
+        if (activeFilter === 'notes') matchesFilter = itemType === 'note';
+        else if (activeFilter === 'checkboxes') matchesFilter = itemType === 'checkbox';
+        return matchesSearch && matchesFilter;
+      });
+
       const folderMatches = folderName.includes(query);
 
-      if (query && !folderMatches && matchingItems.length === 0) return;
+      if ((query || activeFilter !== 'all') && !folderMatches && filteredItems.length === 0) return;
 
       items.push({ type: 'folder', id: folderKey, folderKey });
       if (query || expandedFolders.includes(folderKey)) {
-        const itemsToDisplay = query ? matchingItems : folderItems;
-        itemsToDisplay.forEach(item => {
+        filteredItems.forEach((item: NoteItem) => {
           items.push({ type: 'item', id: item.id, folderKey, item });
         });
       }
     });
     return items;
-  }, [folderOrder, expandedFolders, folders, query]);
+  }, [folderOrder, expandedFolders, folders, query, activeFilter, localChecked]);
+
+  const getFilteredItems = (folderItems: NoteItem[]) => {
+    return folderItems.filter((item: NoteItem) => {
+      const matchesSearch = !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query);
+      let matchesFilter = true;
+      const itemType = item.type || 'note';
+      if (activeFilter === 'notes') matchesFilter = itemType === 'note';
+      else if (activeFilter === 'checkboxes') matchesFilter = itemType === 'checkbox';
+      return matchesSearch && matchesFilter;
+    });
+  };
 
   // Auto-select first item when searching
   useEffect(() => {
@@ -407,6 +424,49 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
       style={{ outline: 'none', height: '100%', overflowY: 'auto', padding: '16px', scrollBehavior: 'smooth' }} 
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        
+        {/* Filter Bar */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '8px', 
+          padding: '4px',
+          backgroundColor: 'rgba(0, 0, 0, 0.15)',
+          borderRadius: '8px',
+          border: '1px solid var(--border-glass)',
+          alignItems: 'center',
+          overflowX: 'auto',
+          flexShrink: 0
+        }} className="custom-scrollbar hide-scroll">
+          {[
+            { id: 'checkboxes', label: 'Tasks', icon: <IconSquare size={14} /> },
+            { id: 'notes', label: 'Notes', icon: <IconFileText size={14} /> },
+            { id: 'all', label: 'All', icon: null }
+          ].map(filter => (
+            <button
+              key={filter.id}
+              onClick={() => setActiveFilter(filter.id as any)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: activeFilter === filter.id ? '1px solid var(--accent-cyan)' : '1px solid transparent',
+                backgroundColor: activeFilter === filter.id ? 'rgba(42, 161, 152, 0.15)' : 'transparent',
+                color: activeFilter === filter.id ? 'var(--accent-cyan)' : 'var(--text-dim)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: activeFilter === filter.id ? '700' : '500',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              className="btn-hover"
+            >
+              {filter.icon}
+              {filter.label}
+            </button>
+          ))}
+        </div>
         <DragDropContext
           onDragStart={() => { isDragging.current = true; }}
           onDragEnd={onDragEnd}
@@ -424,8 +484,8 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
                         <FolderBlock
                           folderKey={folderKey}
                           folderLabel={getFolderName(folderKey)}
-                          items={(folders[folderKey] || []).filter(item => !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query))}
-                          isExpanded={query || expandedFolders.includes(folderKey)}
+                          items={getFilteredItems(folders[folderKey] || [])}
+                          isExpanded={!!query || expandedFolders.includes(folderKey)}
                           isRoot={false}
                           dragHandle={drag.dragHandleProps}
                           hoveredFolder={hoveredFolder}
@@ -466,8 +526,8 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
           <FolderBlock
             folderKey="root"
             folderLabel="General"
-            items={(folders['root'] || []).filter(item => !query || item.text.toLowerCase().includes(query) || (item.content || '').toLowerCase().includes(query))}
-            isExpanded={query || expandedFolders.includes('root')}
+            items={getFilteredItems(folders['root'] || [])}
+            isExpanded={!!query || expandedFolders.includes('root')}
             isRoot
             hoveredFolder={hoveredFolder}
             hoveredItem={hoveredItem}
@@ -512,7 +572,7 @@ function FolderBlock({
     const isAnyEditing = !!editingItemId || Object.keys(editingContent).length > 0;
     const pendingCount = items.filter((i: any) => {
       const isChecked = localChecked[i.id] ?? i.checked ?? false;
-      return (i.type === 'checkbox' || !i.type) && !isChecked;
+      return i.type === 'checkbox' && !isChecked;
     }).length;
   
     return (
@@ -692,7 +752,7 @@ function NoteItemRow({
    isSaving,
  }: any) {
   const [copied, setCopied] = useState(false);
-  const itemType = item.type || 'checkbox';
+  const itemType = item.type || 'note';
   const isChecked = localChecked[item.id] ?? item.checked ?? false;
 
     const isAnyEditing = !!isEditingText || !!isEditingContent;

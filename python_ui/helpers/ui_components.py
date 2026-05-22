@@ -117,9 +117,15 @@ class FolderTreeWidget(QTreeWidget):
         if dragged is None: return event.ignore()
         target = self.itemAt(event.pos())
         drop_indicator = self.dropIndicatorPosition()
+        
+        main_window = self.parent()
+        while main_window and not hasattr(main_window, 'tabs'):
+            main_window = main_window.parent()
+        is_notes = main_window and main_window.tabs.currentIndex() == 2
+        
         is_folder_drag = dragged.data(0, Qt.UserRole) == "FOLDER"
         
-        if is_folder_drag:
+        if is_folder_drag and not is_notes:
             if target is None: return event.ignore()
             target_folder = target if target.data(0, Qt.UserRole) == "FOLDER" else target.parent()
             if target_folder and target_folder.data(0, Qt.UserRole) == "FOLDER":
@@ -133,31 +139,65 @@ class FolderTreeWidget(QTreeWidget):
                     root.insertChild(new_idx, dragged)
                     self.setCurrentItem(dragged)
             event.ignore()
+            QTimer.singleShot(50, self._save_after_drop)
+            return
+
+        if target is None:
+            actual_parent = self.invisibleRootItem()
+            insert_idx = actual_parent.childCount()
         else:
-            if target is None: return event.ignore()
-            
-            old_parent = dragged.parent() or self.invisibleRootItem()
-            old_idx = old_parent.indexOfChild(dragged)
-            if old_idx < 0: return event.ignore()
-            
-            if target.data(0, Qt.UserRole) == "FOLDER":
-                taken = old_parent.takeChild(old_idx)
-                target.insertChild(0, taken)
-                target.setExpanded(True)
-                self.setCurrentItem(taken)
+            is_target_folder = target.data(0, Qt.UserRole) == "FOLDER"
+            if is_target_folder and drop_indicator == QAbstractItemView.OnItem:
+                actual_parent = target
+                insert_idx = 0
             else:
-                target_parent = target.parent() or self.invisibleRootItem()
-                taken = old_parent.takeChild(old_idx)
-                target_idx = target_parent.indexOfChild(target)
-                if old_parent == target_parent and old_idx < target_idx: 
-                    target_idx -= 1
-                if drop_indicator == QAbstractItemView.BelowItem: 
-                    target_idx += 1
-                target_parent.insertChild(target_idx, taken)
-                if target.parent():
-                    target_parent.setExpanded(True)
-                self.setCurrentItem(taken)
+                actual_parent = target.parent() or self.invisibleRootItem()
+                insert_idx = actual_parent.indexOfChild(target)
+                if drop_indicator == QAbstractItemView.BelowItem:
+                    insert_idx += 1
+
+        if is_notes and is_folder_drag:
+            depth = 0
+            p = actual_parent
+            while p != self.invisibleRootItem() and p is not None:
+                depth += 1
+                p = p.parent()
+            
+            def get_max_depth(item):
+                if item.childCount() == 0: return 1
+                return 1 + max((get_max_depth(item.child(i)) for i in range(item.childCount())), default=0)
+            
+            dragged_depth = get_max_depth(dragged)
+            if depth + dragged_depth > 5:
+                import subprocess
+                subprocess.run(["notify-send", "Limit Reached", "Cannot nest folders deeper than 5 levels!"])
+                event.ignore()
+                return
+                
+            p = actual_parent
+            while p != self.invisibleRootItem() and p is not None:
+                if p == dragged:
+                    event.ignore()
+                    return
+                p = p.parent()
+
+        old_parent = dragged.parent() or self.invisibleRootItem()
+        old_idx = old_parent.indexOfChild(dragged)
+        
+        if old_idx < 0:
             event.ignore()
+            return
+            
+        taken = old_parent.takeChild(old_idx)
+        
+        if old_parent == actual_parent and old_idx < insert_idx:
+            insert_idx -= 1
+            
+        actual_parent.insertChild(insert_idx, taken)
+        if actual_parent != self.invisibleRootItem():
+            actual_parent.setExpanded(True)
+        self.setCurrentItem(taken)
+        event.ignore()
         QTimer.singleShot(50, self._save_after_drop)
     
     def mouseMoveEvent(self, event):

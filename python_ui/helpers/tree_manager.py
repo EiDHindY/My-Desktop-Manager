@@ -163,146 +163,163 @@ def update_live_priorities(parent):
             item.setText(1, f"{'06' if is_active else '07'}_{item.text(0)}")
 
 def populate_notes_tree(parent):
-    from PyQt5.QtWidgets import QTextEdit, QSizePolicy
-    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QTextEdit, QSizePolicy, QPushButton, QApplication
+    from PyQt5.QtCore import QTimer, Qt
+    from PyQt5.QtGui import QFont, QColor, QBrush, QIcon
+    import uuid
     parent.notes_tree.clear()
     notes_data = parent.notes_data
     
-    folders = notes_data.get("folders", {})
-    if "root" not in folders:
-        folders["root"] = []
-    
-    folder_order = notes_data.get("folder_order", [])
-    if "root" not in folder_order:
-        folder_order.append("root")
-        
-    expanded = notes_data.get("expanded", [])
-    if "root" not in expanded:
-        expanded.append("root")
-    
-    # Collect widgets to set after tree is rendered
     deferred_widgets = []
-    
-    for folder_name in folder_order:
+
+    def build_task_item(task, parent_item):
+        titem = QTreeWidgetItem()
+        titem.setText(0, task.get("text", ""))
+        titem.setData(0, Qt.UserRole, task.get("id"))
+        titem.setData(0, Qt.UserRole + 1, task.get("text"))
+        
+        titem.setFlags(titem.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
+        titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
+        titem.setCheckState(0, Qt.Checked if task.get("checked") else Qt.Unchecked)
+        
+        if task.get("checked"):
+            font = titem.font(0)
+            font.setStrikeOut(True)
+            titem.setFont(0, font)
+            titem.setForeground(0, QBrush(QColor("#565f89")))
+        else:
+            titem.setForeground(0, QBrush(QColor("#c8d3f5")))
+        
+        detail_item = QTreeWidgetItem()
+        detail_item.setFlags(Qt.ItemIsEnabled)
+        titem.addChild(detail_item)
+        
+        text_edit = QTextEdit()
+        text_edit.setPlaceholderText("Add details...")
+        details_text = task.get("details", "") or ""
+        text_edit.setPlainText(details_text)
+        titem.setData(0, Qt.UserRole + 2, details_text)
+        
+        text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #222436;
+                color: #a9b1d6;
+                border: 1px solid #3b4261;
+                border-radius: 6px;
+                font-family: 'Inter';
+                font-size: 11px;
+                padding: 6px 28px 6px 8px;
+                margin: 2px 4px 4px 4px;
+            }
+            QTextEdit:focus {
+                border: 1px solid #565f89;
+            }
+        """)
+        text_edit.setFixedHeight(70)
+        text_edit.setCursor(Qt.IBeamCursor)
+        
+        def on_text_changed(t=titem, te=text_edit):
+            t.setData(0, Qt.UserRole + 2, te.toPlainText())
+            parent.save_notes()
+            
+        text_edit.textChanged.connect(on_text_changed)
+        
+        copy_btn = QPushButton(text_edit)
+        copy_btn.setIcon(QIcon.fromTheme("edit-copy"))
+        copy_btn.setFixedSize(22, 22)
+        copy_btn.setCursor(Qt.PointingHandCursor)
+        copy_btn.setToolTip("Copy to clipboard")
+        copy_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(59, 66, 97, 180);
+                border: none;
+                border-radius: 4px;
+                padding: 3px;
+            }
+            QPushButton:hover {
+                background-color: #82aaff;
+            }
+        """)
+        
+        def update_btn_pos(event, te=text_edit, btn=copy_btn):
+            from PyQt5.QtWidgets import QTextEdit
+            QTextEdit.resizeEvent(te, event)
+            btn.move(te.width() - 30, 6)
+        
+        text_edit.resizeEvent = update_btn_pos
+        
+        def do_copy(checked=False, te=text_edit, btn=copy_btn):
+            clipboard = QApplication.clipboard()
+            clipboard.setText(te.toPlainText())
+            btn.setIcon(QIcon.fromTheme("emblem-success"))
+            QTimer.singleShot(1000, lambda: btn.setIcon(QIcon.fromTheme("edit-copy")))
+        
+        copy_btn.clicked.connect(do_copy)
+        
+        if parent_item: parent_item.addChild(titem)
+        else: parent.notes_tree.addTopLevelItem(titem)
+        
+        deferred_widgets.append((detail_item, text_edit))
+
+    def build_folder_item(folder_data, parent_item):
         fitem = QTreeWidgetItem()
-        fitem.setText(0, folder_name)
-        fitem.setData(0, Qt.UserRole + 1, folder_name)
-        is_expanded = folder_name in expanded
+        name = folder_data.get("name", "Folder")
+        fitem.setText(0, name)
+        fitem.setData(0, Qt.UserRole + 1, name)
+        fitem.setData(0, Qt.UserRole + 3, folder_data.get("id", str(uuid.uuid4())))
+        is_expanded = folder_data.get("expanded", False)
         fitem.setIcon(0, QIcon.fromTheme("folder-open" if is_expanded else "folder"))
         fitem.setFont(0, QFont("Inter", 10, QFont.DemiBold))
         fitem.setForeground(0, QBrush(QColor("#bb9af7")))
         fitem.setData(0, Qt.UserRole, "FOLDER")
         fitem.setFlags(fitem.flags() | Qt.ItemIsDropEnabled | Qt.ItemIsDragEnabled)
-        parent.notes_tree.addTopLevelItem(fitem)
+        
+        if parent_item: parent_item.addChild(fitem)
+        else: parent.notes_tree.addTopLevelItem(fitem)
+        
         fitem.setExpanded(is_expanded)
         
-        tasks = folders.get(folder_name, [])
-        for task in tasks:
-            titem = QTreeWidgetItem()
-            titem.setText(0, task.get("text", ""))
-            titem.setData(0, Qt.UserRole, task.get("id"))
-            titem.setData(0, Qt.UserRole + 1, task.get("text"))
-            
-            titem.setFlags(titem.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
-            titem.setFlags(titem.flags() & ~Qt.ItemIsDropEnabled)
-            titem.setCheckState(0, Qt.Checked if task.get("checked") else Qt.Unchecked)
-            
-            if task.get("checked"):
-                font = titem.font(0)
-                font.setStrikeOut(True)
-                titem.setFont(0, font)
-                titem.setForeground(0, QBrush(QColor("#565f89")))
-            else:
-                titem.setForeground(0, QBrush(QColor("#c8d3f5")))
-            
-            # Build the detail sub-item FIRST (before adding titem to the tree)
-            # so Qt knows from the start that titem has children and shows the arrow.
-            detail_item = QTreeWidgetItem()
-            detail_item.setFlags(Qt.ItemIsEnabled)
-            titem.addChild(detail_item)  # child added before titem enters the tree
-            
-            # Build the text edit widget
-            text_edit = QTextEdit()
-            text_edit.setPlaceholderText("Add details...")
-            details_text = task.get("details", "") or ""
-            text_edit.setPlainText(details_text)
-            titem.setData(0, Qt.UserRole + 2, details_text)
-            
-            text_edit.setStyleSheet("""
-                QTextEdit {
-                    background-color: #222436;
-                    color: #a9b1d6;
-                    border: 1px solid #3b4261;
-                    border-radius: 6px;
-                    font-family: 'Inter';
-                    font-size: 11px;
-                    padding: 6px 28px 6px 8px;
-                    margin: 2px 4px 4px 4px;
-                }
-                QTextEdit:focus {
-                    border: 1px solid #565f89;
-                }
-            """)
-            text_edit.setFixedHeight(70)
-            text_edit.setCursor(Qt.IBeamCursor)
-            
-            def on_text_changed(t=titem, te=text_edit):
-                t.setData(0, Qt.UserRole + 2, te.toPlainText())
-                parent.save_notes()
-                
-            text_edit.textChanged.connect(on_text_changed)
-            
-            # Copy Button
-            copy_btn = QPushButton(text_edit)
-            copy_btn.setIcon(QIcon.fromTheme("edit-copy"))
-            copy_btn.setFixedSize(22, 22)
-            copy_btn.setCursor(Qt.PointingHandCursor)
-            copy_btn.setToolTip("Copy to clipboard")
-            copy_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(59, 66, 97, 180);
-                    border: none;
-                    border-radius: 4px;
-                    padding: 3px;
-                }
-                QPushButton:hover {
-                    background-color: #82aaff;
-                }
-            """)
-            
-            # Position button in top right and update on resize
-            def update_btn_pos(event, te=text_edit, btn=copy_btn):
-                from PyQt5.QtWidgets import QTextEdit
-                QTextEdit.resizeEvent(te, event)
-                btn.move(te.width() - 30, 6)
-            
-            text_edit.resizeEvent = update_btn_pos
-            
-            def do_copy(checked=False, te=text_edit, btn=copy_btn):
-                clipboard = QApplication.clipboard()
-                clipboard.setText(te.toPlainText())
-                btn.setIcon(QIcon.fromTheme("emblem-success"))
-                QTimer.singleShot(1000, lambda: btn.setIcon(QIcon.fromTheme("edit-copy")))
-            
-            copy_btn.clicked.connect(do_copy)
-            
-            # NOW add titem to the tree — Qt sees it already has 1 child, shows arrow
-            fitem.addChild(titem)
-            
-            # Defer widget assignment — setItemWidget needs item to be in the tree first
-            deferred_widgets.append((detail_item, text_edit))
-            
-            # Restore expanded state
-            if task.get("id") in expanded:
-                titem.setExpanded(True)
+        for child in folder_data.get("children", []):
+            if child.get("type") == "folder":
+                build_folder_item(child, fitem)
+            elif child.get("type") == "task":
+                build_task_item(child, fitem)
 
+    if "hierarchy" in notes_data:
+        for item_data in notes_data["hierarchy"]:
+            if item_data.get("type") == "folder":
+                build_folder_item(item_data, None)
+            elif item_data.get("type") == "task":
+                build_task_item(item_data, None)
+    else:
+        folders = notes_data.get("folders", {})
+        if "root" not in folders: folders["root"] = []
+        folder_order = notes_data.get("folder_order", [])
+        if "root" not in folder_order: folder_order.append("root")
+        expanded = notes_data.get("expanded", [])
+        if "root" not in expanded: expanded.append("root")
+        
+        for folder_name in folder_order:
+            folder_data = {
+                "id": str(uuid.uuid4()),
+                "name": folder_name,
+                "type": "folder",
+                "expanded": folder_name in expanded,
+                "children": []
+            }
+            for task in folders.get(folder_name, []):
+                folder_data["children"].append({
+                    "id": task.get("id"),
+                    "text": task.get("text", ""),
+                    "type": "task",
+                    "checked": task.get("checked", False),
+                    "details": task.get("details", "")
+                })
+            build_folder_item(folder_data, None)
 
-    # Apply all widgets after the tree has been fully rendered
     def _apply_widgets():
         for di, te in deferred_widgets:
             parent.notes_tree.setItemWidget(di, 0, te)
-        # BUG-08 FIX: Save after widgets are re-applied to ensure the
-        # final state (structure + widget data) is persisted.
         parent.save_notes()
     
     QTimer.singleShot(0, _apply_widgets)

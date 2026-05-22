@@ -201,12 +201,12 @@ def force_window_focus(title):
 
 def force_window_position(title, x, y, win_width, win_height):
     try:
+        import tempfile
+        import os
         pid = os.getpid()
-        # Native KWin scripting is the most reliable way in Plasma 6 (Wayland/XWayland)
-        # It allows setting 'onAllDesktops' and 'keepAbove' directly in the compositor.
         script = (
             f'workspace.windowList().forEach(function(w) {{ '
-            f'  if (w.pid == {pid}) {{ '
+            f'  if (w.pid == {pid} || w.caption == "{title}") {{ '
             f'    w.onAllDesktops = true; '
             f'    w.keepAbove = true; '
             f'    w.skipTaskbar = true; '
@@ -214,11 +214,23 @@ def force_window_position(title, x, y, win_width, win_height):
             f'  }} '
             f'}});'
         )
-        # Load the script, run it, and then stop it to clean up the script object
+        fd, temp_path = tempfile.mkstemp(suffix=".js")
+        with os.fdopen(fd, 'w') as f:
+            f.write(script)
+            
         cmd = (
-            f'path=$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "{script}"); '
-            f'qdbus-qt6 org.kde.KWin $path org.kde.kwin.Scripting.run; '
-            f'qdbus-qt6 org.kde.KWin $path org.kde.kwin.Scripting.stop;'
+            f'id=$(qdbus-qt6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "{temp_path}"); '
+            f'if [ -n "$id" ]; then '
+            f'  qdbus-qt6 org.kde.KWin /Scripting/Script$id org.kde.kwin.Script.run; '
+            f'  qdbus-qt6 org.kde.KWin /Scripting/Script$id org.kde.kwin.Script.stop; '
+            f'fi; '
+            f'rm -f "{temp_path}"'
         )
-        subprocess.run(["bash", "-c", cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except: pass
+        res = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"[KWIN ERROR] code: {res.returncode}\nstderr: {res.stderr}\nstdout: {res.stdout}", flush=True)
+        else:
+            print(f"[KWIN SUCCESS] Positioned window to {x}, {y}", flush=True)
+    except Exception as e:
+        print(f"[KWIN EXCEPTION] {e}", flush=True)
+
