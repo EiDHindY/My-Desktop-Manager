@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readJSON: (filename) => ipcRenderer.invoke('read-json', filename),
   writeJSON: (filename, data) => ipcRenderer.invoke('write-json', filename, data),
   moveDesktop: (fullId, targetFolder, targetIndex) => ipcRenderer.invoke('move-desktop', fullId, targetFolder, targetIndex),
-  fetchDesktops: () => ipcRenderer.invoke('fetch-desktops'),
+  fetchDesktops: (scanWindows) => ipcRenderer.invoke('fetch-desktops', scanWindows),
   listTemplates: () => ipcRenderer.invoke('list-templates'),
   fetchChromeProfiles: () => ipcRenderer.invoke('fetch-chrome-profiles'),
   listIcons: () => ipcRenderer.invoke('list-icons'),

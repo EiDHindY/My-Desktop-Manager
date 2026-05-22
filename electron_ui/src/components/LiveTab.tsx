@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
 import PromptModal from './PromptModal';
+import DesktopItem from './DesktopItem';
 import { 
   IconTerminal,
   IconNotion,
@@ -533,205 +534,41 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                     const isHovered = hoveredDesktop === desktopId;
                     const priority = desktopPriorities[pureId] || 'None';
                     const priorityColor = getPriorityColor(priority);
-                    
-                    // Determine desktop state classes
-                    let stateClass = "desktop-item ";
-                    if (isActive) stateClass += "active ";
-                    if (hasWindows) stateClass += "busy ";
-                    if (!hasWindows && !isActive && !isReturn) stateClass += "empty ";
-
                     const hasScriptAttached = sessionData?.startup_apps?.[pureId] && sessionData.startup_apps[pureId].length > 0;
-                    
+                    const isDeleting = deletingDesktops.includes(desktopId);
+                    const icons = (desktopIcons[pureId] && (Array.isArray(desktopIcons[pureId]) ? desktopIcons[pureId] as string[] : [desktopIcons[pureId] as string])) || [];
+                    const shortcut = desktopShortcuts[pureId] || null;
+                    const hasShortcutError = shortcutErrors.includes(pureId);
+
                     return (
-                      <Draggable draggableId={desktopId} index={dIndex} key={desktopId} isDragDisabled={!!query}>
-                        {(providedDesktop, snapshot) => {
-                          const content = (
-                            <div 
-                              ref={providedDesktop.innerRef}
-                              {...providedDesktop.draggableProps}
-                              {...providedDesktop.dragHandleProps}
-                              className={`${stateClass} interactive-element ${isHovered && !snapshot.isDragging ? 'hover-lift' : ''}`}
-                              onContextMenu={(e) => handleContextMenu(e, 'desktop', desktopId, folderName)}
-                              onClick={() => handleSwitchDesktop(desktopId)}
-                              onMouseEnter={() => setHoveredDesktop(desktopId)}
-                              onMouseLeave={() => setHoveredDesktop(null)}
-                                style={{ 
-                                  background: snapshot.isDragging ? '#24283b' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(187, 154, 247, 0.12)' : 'transparent')),
-                                  boxSizing: 'border-box',
-                                  color: isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#9aa5ce')),
-                                  fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
-                                  transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
-                                  transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
-                                  border: isActive ? '1px solid rgba(125, 207, 255, 0.1)' : (isSelected ? '1px solid rgba(187, 154, 247, 0.4)' : '1px solid transparent'),
-                                  paddingLeft: '24px',
-                                  zIndex: snapshot.isDragging ? 9999 : (isSelected ? 2 : 1),
-                                  boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isSelected && !isActive ? '0 0 15px rgba(187, 154, 247, 0.15)' : 'none'),
-                                  width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : '100%',
-                                  ...(providedDesktop.draggableProps.style || {})
-                                }}
-                            >
-                              {isActive && <div className="active-pillar" style={{ top: '15%', bottom: '15%' }} />}
-                                <div style={{ marginRight: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isHovered || hasWindows || isActive ? 1 : 0.6, minWidth: '16px', justifyContent: 'center' }}>
-                                  {deletingDesktops.includes(desktopId) ? (
-                                    <IconLoader size={14} color="var(--accent-red)" />
-                                  ) : (desktopIcons[pureId] && (Array.isArray(desktopIcons[pureId]) ? (desktopIcons[pureId] as string[]).length > 0 : !!desktopIcons[pureId])) ? (
-                                    <ManualIcon icon={desktopIcons[pureId]!} size={16} />
-                                  ) : (
-                                    <IconMonitor size={14} color={isActive ? '#7dcfff' : (isReturn ? '#bb9af7' : (hasWindows ? '#7aa2f7' : '#565f89'))} />
-                                  )}
-                                </div>
-                              {priority !== 'None' && priority?.toUpperCase() !== 'ANCHOR' && (
-                                <div style={{ 
-                                  width: '8px', 
-                                  height: '8px', 
-                                  borderRadius: '50%', 
-                                  backgroundColor: priorityColor, 
-                                  marginRight: '10px',
-                                  boxShadow: `0 0 10px ${priorityColor}88`,
-                                  flexShrink: 0
-                                }} />
-                              )}
-                              <span style={{ 
-                                flex: 1, 
-                                whiteSpace: 'nowrap', 
-                                overflow: 'hidden', 
-                                textOverflow: 'ellipsis',
-                                color: isHovered && priority !== 'None' ? priorityColor : 'inherit'
-                              }}>{displayName}</span>
-                              
-                              {/* 3. Action Buttons (Appear on hover) */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease', flexShrink: 0 }}>
-                                {hasScriptAttached && (
-                                  <div 
-                                    className="btn-hover"
-                                    onClick={(e) => { e.stopPropagation(); executeMenuCommand(`SUMMON:${desktopId}`); }}
-                                    style={{ 
-                                      backgroundColor: 'rgba(187, 154, 247, 0.15)', 
-                                      color: '#bb9af7', 
-                                      width: '24px', 
-                                      height: '24px', 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      justifyContent: 'center',
-                                      border: '1px solid rgba(187, 154, 247, 0.3)'
-                                    }}
-                                    title="Summon"
-                                  >
-                                    <IconZap size={14} />
-                                  </div>
-                                )}
-                                
-                                <div 
-                                  className="btn-hover"
-                                  onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'Rename Desktop', defaultValue: desktopNames[pureId] || '', command: `RENAME:${desktopId}` }); }}
-                                  style={{ 
-                                    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                                    color: '#9aa5ce', 
-                                    width: '24px', 
-                                    height: '24px', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center',
-                                    border: '1px solid rgba(255, 255, 255, 0.1)'
-                                  }}
-                                  title="Rename"
-                                >
-                                  <IconPencil size={14} />
-                                </div>
-
-                                <div 
-                                  className="btn-hover"
-                                  onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'Global Shortcut (e.g. Control+Alt+1)', defaultValue: desktopShortcuts[pureId] || '', command: `SET_SHORTCUT:${desktopId}` }); }}
-                                  style={{ 
-                                    backgroundColor: desktopShortcuts[pureId] ? 'rgba(122, 162, 247, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
-                                    color: shortcutErrors.includes(pureId) ? 'var(--accent-red)' : (desktopShortcuts[pureId] ? 'var(--accent-blue)' : '#9aa5ce'), 
-                                    width: '24px', 
-                                    height: '24px', 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'center',
-                                    border: shortcutErrors.includes(pureId) ? '1px solid rgba(247, 118, 142, 0.4)' : (desktopShortcuts[pureId] ? '1px solid rgba(122, 162, 247, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
-                                  }}
-                                  title={shortcutErrors.includes(pureId) ? `FAILED: ${desktopShortcuts[pureId]}` : (desktopShortcuts[pureId] ? `Hotkey: ${desktopShortcuts[pureId]}` : "Set Hotkey")}
-                                >
-                                  <IconKeyboard size={14} />
-                                </div>
-
-                                {desktopShortcuts[pureId] && (
-                                  <div 
-                                    className="btn-hover"
-                                    onClick={(e) => { 
-                                      e.stopPropagation(); 
-                                      executeMenuCommand(`SET_SHORTCUT:${desktopId}:`);
-                                    }}
-                                    style={{ 
-                                      backgroundColor: 'rgba(247, 118, 142, 0.1)', 
-                                      color: 'var(--accent-red)', 
-                                      width: '18px', 
-                                      height: '18px', 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      justifyContent: 'center',
-                                      border: '1px solid rgba(247, 118, 142, 0.2)',
-                                      marginLeft: '-4px',
-                                      fontSize: '14px',
-                                      fontWeight: 'bold',
-                                      zIndex: 10
-                                    }}
-                                    title="Clear Hotkey"
-                                  >
-                                    ×
-                                  </div>
-                                )}
-
-                                 {/* (Other buttons will remain in the hover group) */}
-                              </div>
-
-                              {/* 4. Badges & Fixed Actions */}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', flexShrink: 0 }}>
-                                {isReturn && !isActive && (
-                                  <div 
-                                    className="btn-hover"
-                                    onClick={(e) => { e.stopPropagation(); executeMenuCommand(`GOTO_RETURN:${pureId}`); }}
-                                    style={{ 
-                                      backgroundColor: 'rgba(187, 154, 247, 0.1)', 
-                                      color: '#bb9af7', 
-                                      padding: '0 8px', 
-                                      height: '24px', 
-                                      fontSize: '11px',
-                                      fontWeight: '600',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      border: '1px solid rgba(187, 154, 247, 0.2)',
-                                      borderRadius: '6px'
-                                    }}
-                                    title="Return to this desktop"
-                                  >
-                                    <IconUndo size={12} />
-                                    <span>Return</span>
-                                  </div>
-                                )}
-                                
-                                {isSelected && !isActive && (
-                                  <span className="active-badge" style={{ backgroundColor: 'rgba(125, 207, 255, 0.1)', color: '#7dcfff' }}>Selected</span>
-                                )}
-                                
-                                {isActive && <span className="active-badge">CURRENT</span>}
-
-                                {winCount > 0 && !isActive && (
-                                  <span className="window-badge" style={{ margin: 0 }}>{winCount}w</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-
-                          if (snapshot.isDragging) {
-                            return createPortal(content, document.body);
-                          }
-                          return content;
-                        }}
-                      </Draggable>
+                      <DesktopItem
+                        key={desktopId}
+                        desktopId={desktopId}
+                        pureId={pureId}
+                        dIndex={dIndex}
+                        query={query}
+                        displayName={displayName}
+                        isActive={isActive}
+                        isReturn={isReturn}
+                        winCount={winCount}
+                        hasWindows={hasWindows}
+                        isSelected={isSelected}
+                        isHovered={isHovered}
+                        priority={priority}
+                        priorityColor={priorityColor}
+                        hasScriptAttached={hasScriptAttached}
+                        isDeleting={isDeleting}
+                        icons={icons}
+                        shortcut={shortcut}
+                        hasShortcutError={hasShortcutError}
+                        folderName={folderName}
+                        onContextMenu={handleContextMenu}
+                        onSwitch={handleSwitchDesktop}
+                        onHover={setHoveredDesktop}
+                        onExecuteCommand={executeMenuCommand}
+                        onPrompt={(title, defaultVal, command) => setPromptConfig({ title, defaultValue: defaultVal, command })}
+                        onShowIconPicker={setShowIconPicker}
+                      />
                     );
                   })}
                   {providedDroppable.placeholder}

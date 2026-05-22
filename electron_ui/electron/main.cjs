@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
 
@@ -178,7 +178,10 @@ ipcMain.handle('read-json', async (event, filename) => {
   }
 });
 
-ipcMain.handle('fetch-desktops', async () => {
+// Scan lock: prevents concurrent kdotool scans from stacking
+let windowScanInProgress = false;
+
+ipcMain.handle('fetch-desktops', async (event, scanWindows = true) => {
   try {
     // Run current desktop and desktop list in parallel
     const [currentRes, desktopsRes] = await Promise.all([
@@ -188,63 +191,62 @@ ipcMain.handle('fetch-desktops', async () => {
 
     const currentOutput = currentRes.stdout.trim();
     const output = desktopsRes.stdout;
-    console.log("QDBUS DESKTOPS OUTPUT:", output);
 
-    // Load labels.json cache for persistent names
+    // Load labels.json cache for persistent names (Optimized with memory caching)
     const labelsPath = path.join(os.homedir(), '.config', 'desktop-manager', 'labels.json');
-    let labelCache = {};
+    if (!global.labelCacheData) {
+      global.labelCacheData = {};
+      global.labelCacheMtime = 0;
+    }
+    
+    let labelCache = global.labelCacheData;
     try {
-      const labelsData = await fs.readFile(labelsPath, 'utf-8');
-      labelCache = JSON.parse(labelsData);
-    } catch (e) {}
-
-    // ─── IMPROVED WINDOW DETECTION (WAYLAND NATIVE) ───
-    const windowCountsByUuid = {};
-    const appIconsByUuid = {};
-
-    try {
-      const searchRes = await execAsync("kdotool search --class '.*' 2>/dev/null");
-      const windowIds = searchRes.stdout.split('\n').filter(id => id.trim().length > 0);
-
-      const windowInfos = await Promise.all(
-        windowIds.map(async (id) => {
-          try {
-            const infoRes = await execAsync(`qdbus-qt6 --literal org.kde.KWin /KWin org.kde.KWin.getWindowInfo "${id}"`);
-            const info = infoRes.stdout;
-
-            const typeMatch = info.match(/"type" = \[Variant\(int\): (\d+)\]/);
-            const skipTaskbarMatch = info.match(/"skipTaskbar" = \[Variant\(bool\): (true|false)\]/);
-            
-            if (typeMatch && typeMatch[1] === '0' && skipTaskbarMatch && skipTaskbarMatch[1] === 'false') {
-              const classMatch = info.match(/"resourceClass" = \[Variant\(QString\): "([^"]+)"\]/);
-              const desktopsMatch = info.match(/"desktops" = \[Variant\(QStringList\): \{([^}]*)\}\]/);
-
-              if (classMatch) {
-                const wclass = classMatch[1];
-                const desktopUuids = desktopsMatch && desktopsMatch[1] 
-                  ? desktopsMatch[1].split(',').map(u => u.trim().replace(/"/g, '')) 
-                  : [];
-                
-                return { wclass, desktopUuids };
-              }
-            }
-          } catch (e) {}
-          return null;
-        })
-      );
-
-      windowInfos.forEach(info => {
-        if (!info) return;
-        info.desktopUuids.forEach(uuid => {
-          windowCountsByUuid[uuid] = (windowCountsByUuid[uuid] || 0) + 1;
-          if (!appIconsByUuid[uuid]) appIconsByUuid[uuid] = [];
-          if (!appIconsByUuid[uuid].includes(info.wclass)) {
-            appIconsByUuid[uuid].push(info.wclass);
-          }
-        });
-      });
+      const stats = await fs.stat(labelsPath);
+      if (stats.mtimeMs > global.labelCacheMtime) {
+        const labelsData = await fs.readFile(labelsPath, 'utf-8');
+        labelCache = JSON.parse(labelsData);
+        global.labelCacheData = labelCache;
+        global.labelCacheMtime = stats.mtimeMs;
+      }
     } catch (e) {
-      console.error("Window detection failed:", e);
+      // File might not exist yet
+    }
+
+    // ─── LIGHTWEIGHT WINDOW DETECTION (Live tab only, lock-guarded) ───
+    // Only runs when scanWindows=true (Live tab active) and no scan is already in progress.
+    // Uses a single bash subprocess with kdotool get_desktop_for_window (cheap integer returns).
+    const activeKdotoolIndices = new Set();
+
+    if (scanWindows && !windowScanInProgress) {
+      windowScanInProgress = true;
+      try {
+        const winScanScript = `
+for id in $(kdotool search --class '.*' 2>/dev/null); do
+  idx=$(kdotool get_desktop_for_window "$id" 2>/dev/null)
+  [[ "$idx" =~ ^[0-9]+$ ]] && [[ "$idx" -gt 0 ]] && echo "$idx"
+done 2>/dev/null | sort -u
+`;
+        const idxOutput = await new Promise((resolve) => {
+          const child = spawn('bash', [], { stdio: ['pipe', 'pipe', 'pipe'] });
+          let out = '';
+          child.stdout.on('data', d => { out += d; });
+          child.on('close', () => resolve(out));
+          child.on('error', () => resolve(''));
+          const timer = setTimeout(() => { try { child.kill(); } catch (_) {} resolve(out); }, 6000);
+          child.on('close', () => clearTimeout(timer));
+          child.stdin.write(winScanScript);
+          child.stdin.end();
+        });
+
+        idxOutput.split('\n').forEach(line => {
+          const idx = parseInt(line.trim());
+          if (!isNaN(idx) && idx > 0) activeKdotoolIndices.add(idx);
+        });
+      } catch (e) {
+        console.error('Window scan failed:', e);
+      } finally {
+        windowScanInProgress = false;
+      }
     }
 
     const regex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
@@ -298,8 +300,9 @@ ipcMain.handle('fetch-desktops', async () => {
 
       desktops[uuid] = name;
       priorities[uuid] = priority;
-      counts[uuid] = windowCountsByUuid[uuid] || 0;
-      appMap[uuid] = appIconsByUuid[uuid] || [];
+      // pos is 0-based from qdbus; kdotool uses 1-based indices
+      counts[uuid] = activeKdotoolIndices.has(pos + 1) ? 1 : 0;
+      appMap[uuid] = []; // app class scanning removed for performance
       desktopIcons[uuid] = (cached && cached.icons) ? cached.icons : [];
       desktopShortcuts[uuid] = (cached && cached.shortcut) ? cached.shortcut : null;
     }

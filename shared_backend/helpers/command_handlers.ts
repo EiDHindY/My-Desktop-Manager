@@ -588,10 +588,13 @@ export function handleImportScriptToTemplate(filename: string, scriptPath: strin
             const scriptName = basename(scriptPath);
             const taskId = Date.now().toString(); // Simple unique ID
             
+            const isScript = scriptPath.endsWith('.sh');
+            const cmd = isScript ? `bash '${scriptPath}'` : `'${scriptPath}'`;
+            
             data.tasks.push({
                 id: taskId,
                 name: scriptName.replace(/\.sh$/, ''),
-                script: scriptPath
+                script: cmd
             });
             
             writeFileSync(templatePath, JSON.stringify(data, null, 2));
