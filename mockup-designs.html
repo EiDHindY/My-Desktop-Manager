@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desktop Manager - Theme Options</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            transition: background 0.3s, color 0.3s; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 40px;
+        }
+
+        /* 1: Slate Pro */
+        [data-theme="slate"] {
+            --bg-body: #020617; --bg-panel: #0f172a; --bg-card: #1e293b;
+            --border: #334155; --text-main: #f8fafc; --text-dim: #94a3b8;
+            --accent: #3b82f6; --accent-bg: rgba(59, 130, 246, 0.15);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); --radius: 8px;
+        }
+
+        /* 2: Linear Dark */
+        [data-theme="linear"] {
+            --bg-body: #000000; --bg-panel: #0a0a0a; --bg-card: #141414;
+            --border: #262626; --text-main: #ededed; --text-dim: #878787;
+            --accent: #5e6ad2; --accent-bg: rgba(94, 106, 210, 0.15);
+            --shadow: 0 0 0 1px rgba(255,255,255,0.05); --radius: 6px;
+        }
+
+        /* 3: Vercel Contrast */
+        [data-theme="vercel"] {
+            --bg-body: #000000; --bg-panel: #000000; --bg-card: #111111;
+            --border: #333333; --text-main: #ffffff; --text-dim: #888888;
+            --accent: #0070f3; --accent-bg: rgba(0, 112, 243, 0.1);
+            --shadow: 0 0 0 1px #333; --radius: 5px;
+        }
+
+        /* 4: MacOS Glass */
+        [data-theme="macos"] {
+            --bg-body: #1c1c1e; --bg-panel: rgba(44, 44, 46, 0.7); --bg-card: rgba(58, 58, 60, 0.7);
+            --border: rgba(255, 255, 255, 0.1); --text-main: #ffffff; --text-dim: #ebebf599;
+            --accent: #0a84ff; --accent-bg: #0a84ff;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.3); --radius: 12px;
+        }
+
+        /* 5: Nord (Arctic, Calm, Soft Blue-Grey) */
+        [data-theme="nord"] {
+            --bg-body: #242933; --bg-panel: #2e3440; --bg-card: #3b4252;
+            --border: #4c566a; --text-main: #eceff4; --text-dim: #d8dee9;
+            --accent: #88c0d0; --accent-bg: rgba(136, 192, 208, 0.15);
+            --shadow: 0 4px 10px rgba(0,0,0,0.2); --radius: 6px;
+        }
+
+        /* 6: Gruvbox Dark (Warm, Earthy, Retro) */
+        [data-theme="gruvbox"] {
+            --bg-body: #1d2021; --bg-panel: #282828; --bg-card: #3c3836;
+            --border: #504945; --text-main: #ebdbb2; --text-dim: #a89984;
+            --accent: #fabd2f; --accent-bg: rgba(250, 189, 47, 0.15);
+            --shadow: 0 4px 6px rgba(0,0,0,0.3); --radius: 4px;
+        }
+
+        /* 7: Solarized Dark (Teal/Beige, Lowest Eye Strain) */
+        [data-theme="solarized"] {
+            --bg-body: #00212b; --bg-panel: #002b36; --bg-card: #073642;
+            --border: #586e75; --text-main: #93a1a1; --text-dim: #839496;
+            --accent: #2aa198; --accent-bg: rgba(42, 161, 152, 0.15);
+            --shadow: 0 4px 15px rgba(0,0,0,0.2); --radius: 4px;
+        }
+
+        /* 8: Rosé Pine (Soothing, Soft pastels on dark) */
+        [data-theme="rosepine"] {
+            --bg-body: #171520; --bg-panel: #191724; --bg-card: #1f1d2e;
+            --border: #26233a; --text-main: #e0def4; --text-dim: #908caa;
+            --accent: #c4a7e7; --accent-bg: rgba(196, 167, 231, 0.15);
+            --shadow: 0 8px 20px rgba(0,0,0,0.2); --radius: 10px;
+        }
+
+        /* 9: Github Dimmed (Soft grey, highly readable) */
+        [data-theme="github"] {
+            --bg-body: #1c2128; --bg-panel: #22272e; --bg-card: #2d333b;
+            --border: #444c56; --text-main: #adbac7; --text-dim: #768390;
+            --accent: #539bf5; --accent-bg: rgba(83, 155, 245, 0.15);
+            --shadow: 0 0 0 1px #444c56; --radius: 6px;
+        }
+
+        body { background-color: var(--bg-body); color: var(--text-main); }
+        
+        .header-title { margin-bottom: 30px; text-align: center; }
+        .header-title h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+        .header-title p { color: var(--text-dim); font-size: 14px; max-width: 600px; margin: 0 auto; line-height: 1.5; }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 40px;
+            background: var(--bg-panel);
+            padding: 16px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            width: 100%;
+            max-width: 850px;
+        }
+        
+        .controls-grid button { 
+            padding: 12px; 
+            background: var(--bg-card); 
+            color: var(--text-dim); 
+            border: 1px solid var(--border); 
+            border-radius: calc(var(--radius) / 2); 
+            cursor: pointer; 
+            transition: 0.2s; 
+            font-weight: 500;
+            font-size: 13px;
+        }
+        
+        .controls-grid button:hover { color: var(--text-main); border-color: var(--text-dim); }
+        .controls-grid button.active { 
+            background: var(--accent-bg); 
+            color: var(--text-main); 
+            border-color: var(--accent);
+        }
+        [data-theme="macos"] .controls-grid button.active { color: var(--accent); }
+
+        .app-window {
+            width: 100%;
+            max-width: 850px;
+            height: 450px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+        }
+
+        .header { display: flex; padding: 16px 20px; border-bottom: 1px solid var(--border); gap: 24px; }
+        .tab { color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer; padding: 6px 12px; border-radius: calc(var(--radius) / 2); letter-spacing: 0.5px; }
+        .tab.active { color: var(--text-main); background: var(--accent-bg); }
+        [data-theme="macos"] .tab.active { color: #fff; }
+
+        .content { display: flex; flex: 1; padding: 24px; gap: 24px; }
+        .desktop-list { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+
+        .desktop-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--bg-card); border: 1px solid var(--border);
+            padding: 14px 16px; border-radius: var(--radius); transition: 0.2s;
+        }
+        .desktop-item:hover { border-color: var(--text-dim); }
+        .desktop-item.active-item { border-color: var(--accent); background: var(--accent-bg); }
+        [data-theme="macos"] .desktop-item.active-item { background: rgba(10, 132, 255, 0.15); }
+
+        .desktop-info { display: flex; align-items: center; gap: 14px; }
+        .icon { 
+            width: 36px; height: 36px; border-radius: calc(var(--radius)/1.5); 
+            background: var(--bg-panel); border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: center; font-size: 18px;
+        }
+        .active-item .icon { color: var(--accent); border-color: var(--accent); }
+        
+        .desktop-name { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+        .desktop-status { font-size: 12px; color: var(--text-dim); }
+        .active-item .desktop-status { color: var(--accent); opacity: 0.9; }
+        
+        .badges { display: flex; gap: 8px; }
+        .badge { 
+            font-size: 11px; font-weight: 500; padding: 4px 8px; 
+            border-radius: 4px; background: var(--bg-panel); 
+            border: 1px solid var(--border); color: var(--text-dim); 
+        }
+        .active-item .badge { color: var(--text-main); border-color: var(--accent); background: transparent; }
+
+    </style>
+</head>
+<body data-theme="nord">
+
+    <div class="header-title">
+        <h1>Eye-Friendly UX/UI Themes</h1>
+        <p>I've added themes specifically known for reducing eye strain during long coding sessions. Click through the options below to find the most comfortable palette for you.</p>
+    </div>
+
+    <div class="controls-grid">
+        <button onclick="setTheme('slate', this)">1. Slate Pro</button>
+        <button onclick="setTheme('linear', this)">2. Linear Minimal</button>
+        <button onclick="setTheme('vercel', this)">3. Vercel Contrast</button>
+        <button onclick="setTheme('macos', this)">4. MacOS Glass</button>
+        
+        <!-- New Soft / Easy on the eye themes -->
+        <button class="active" onclick="setTheme('nord', this)">5. Nord (Soft Arctic)</button>
+        <button onclick="setTheme('gruvbox', this)">6. Gruvbox (Warm Earthy)</button>
+        <button onclick="setTheme('solarized', this)">7. Solarized (Lowest Strain)</button>
+        <button onclick="setTheme('rosepine', this)">8. Rosé Pine (Soothing Pastels)</button>
+        <button onclick="setTheme('github', this)">9. Github Dimmed</button>
+    </div>
+
+    <div class="app-window">
+        <div class="header">
+            <div class="tab active">LIVE</div>
+            <div class="tab">NOTES</div>
+            <div class="tab">TEMPS</div>
+            <div class="tab">CHROME</div>
+        </div>
+        <div class="content">
+            <div class="desktop-list">
+                <div class="desktop-item active-item">
+                    <div class="desktop-info">
+                        <div class="icon">💻</div>
+                        <div>
+                            <div class="desktop-name">Desktop 1</div>
+                            <div class="desktop-status">Active now</div>
+                        </div>
+                    </div>
+                    <div class="badges">
+                        <div class="badge">Chrome (3)</div>
+                        <div class="badge">VS Code</div>
+                    </div>
+                </div>
+
+                <div class="desktop-item">
+                    <div class="desktop-info">
+                        <div class="icon">🎵</div>
+                        <div>
+                            <div class="desktop-name">Desktop 2</div>
+                            <div class="desktop-status">Idle</div>
+                        </div>
+                    </div>
+                    <div class="badges">
+                        <div class="badge">Spotify</div>
+                    </div>
+                </div>
+                
+                <div class="desktop-item" style="opacity: 0.5">
+                    <div class="desktop-info">
+                        <div class="icon" style="opacity: 0.5">➕</div>
+                        <div>
+                            <div class="desktop-name">Desktop 3</div>
+                            <div class="desktop-status">Empty</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setTheme(theme, btn) {
+            document.body.setAttribute('data-theme', theme);
+            document.querySelectorAll('.controls-grid button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+    </script>
+</body>
+</html>

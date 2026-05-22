@@ -51,7 +51,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                 style={{
                   position: 'relative',
                   border: isSelected ? '1px solid var(--accent-blue)' : '1px solid transparent',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                  background: isSelected ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
                   borderRadius: '8px',
                   padding: '8px',
                   display: 'flex',

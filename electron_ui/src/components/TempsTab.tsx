@@ -144,7 +144,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
   return (
     <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', overflowY: 'auto', height: '100%', scrollBehavior: 'smooth' }}>
       {filteredTemplates.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', background: 'rgba(30, 41, 59, 0.3)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-dim)', background: 'rgba(7, 54, 66, 0.3)', borderRadius: '12px', border: '1px dashed var(--border-glass)' }}>
           {query ? 'No matching scripts or templates found' : 'No templates found in ~/.config/desktop-manager/templates'}
         </div>
       ) : (
@@ -160,8 +160,8 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                 className={`unified-glass-card ${isTemplateFocused ? 'lifted-card' : ''}`}
                 style={{
                   border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                  background: isTemplateFocused ? 'rgba(59, 130, 246, 0.08)' : 'rgba(30, 41, 59, 0.45)',
-                  boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(59, 130, 246, 0.1)' : 'none'
+                  background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
+                  boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
                 }}
               >
                 {isTemplateFocused && (
@@ -188,7 +188,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                     padding: '10px 14px',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    background: isTemplateFocused ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
+                    background: isTemplateFocused ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
                     borderTopLeftRadius: '11px',
                     borderTopRightRadius: '11px',
                   }}
@@ -198,7 +198,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                       width: '28px', 
                       height: '28px', 
                       borderRadius: '6px', 
-                      background: 'rgba(59, 130, 246, 0.1)', 
+                      background: 'rgba(38, 139, 210, 0.1)', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
@@ -234,7 +234,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                           }
                         }}
                         disabled={loadingTasks[`import-script-${temp.filename}`]}
-                        style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', color: 'var(--accent-green)', border: '1px solid rgba(34, 197, 94, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                        style={{ backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', border: '1px solid rgba(133, 153, 0, 0.2)', width: '24px', height: '24px', padding: 0 }}
                         title="Add Script"
                       >
                         {loadingTasks[`import-script-${temp.filename}`] ? <IconLoader size={12} /> : <IconFilePlus size={14} />}
@@ -253,7 +253,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                           }
                         }}
                         disabled={loadingTasks[`delete-temp-${temp.filename}`]}
-                        style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                        style={{ backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(220, 50, 47, 0.2)', width: '24px', height: '24px', padding: 0 }}
                         title="Delete Template"
                       >
                         {loadingTasks[`delete-temp-${temp.filename}`] ? <IconLoader size={12} /> : <IconTrash size={14} />}
@@ -267,7 +267,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                       style={{ 
                         background: 'var(--aurora-gradient)', 
                         color: 'var(--accent-cyan)', 
-                        border: '1px solid rgba(14, 165, 233, 0.3)', 
+                        border: '1px solid rgba(42, 161, 152, 0.3)', 
                         borderRadius: '6px', 
                         padding: '6px 12px', 
                         fontSize: '11px', 
@@ -275,7 +275,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
-                        boxShadow: isTemplateFocused ? '0 0 10px rgba(14, 165, 233, 0.2)' : 'none',
+                        boxShadow: isTemplateFocused ? '0 0 10px rgba(42, 161, 152, 0.2)' : 'none',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px'
                       }}
@@ -312,7 +312,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                             display: 'flex', 
                             alignItems: 'center', 
                             gap: '10px', 
-                            backgroundColor: isTaskFocused ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                            backgroundColor: isTaskFocused ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
                             padding: '6px 12px', 
                             borderRadius: '6px',
                             transition: 'all 0.15s ease',
@@ -329,7 +329,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                               width: '2px',
                               background: 'var(--accent-cyan)',
                               borderRadius: '0 2px 2px 0',
-                              boxShadow: '0 0 8px rgba(14, 165, 233, 0.4)',
+                              boxShadow: '0 0 8px rgba(42, 161, 152, 0.4)',
                             }} />
                           )}
                           <div style={{ color: isTaskFocused ? 'var(--accent-cyan)' : 'var(--text-dim)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '16px' }}>
@@ -369,7 +369,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                 }
                               }}
                               disabled={loadingTasks[`delete-task-${taskId}`]}
-                              style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                              style={{ backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(220, 50, 47, 0.2)', width: '24px', height: '24px', padding: 0 }}
                               title="Delete Script"
                             >
                               {loadingTasks[`delete-task-${taskId}`] ? <IconLoader size={12} /> : <IconTrash size={12} />}
@@ -381,7 +381,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                 setShowIconPicker({ filename: temp.filename, taskId: task.id });
                               }}
                               disabled={loadingTasks[`set-icon-${temp.filename}-${task.id}`]}
-                              style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--accent-purple, var(--accent-purple))', border: '1px solid rgba(139, 92, 246, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                              style={{ backgroundColor: 'rgba(108, 113, 196, 0.1)', color: 'var(--accent-purple, var(--accent-purple))', border: '1px solid rgba(108, 113, 196, 0.2)', width: '24px', height: '24px', padding: 0 }}
                               title="Set Icon"
                             >
                               {loadingTasks[`set-icon-${temp.filename}-${task.id}`] ? <IconLoader size={12} /> : <IconRocket size={12} />}
@@ -401,9 +401,9 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                 }
                               }}
                               style={{ 
-                                backgroundColor: task.shortcut ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                                backgroundColor: task.shortcut ? 'rgba(38, 139, 210, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
                                 color: task.shortcut ? 'var(--accent-blue)' : 'var(--text-dim)', 
-                                border: '1px solid rgba(59, 130, 246, 0.2)', 
+                                border: '1px solid rgba(38, 139, 210, 0.2)', 
                                 width: '24px', 
                                 height: '24px', 
                                 padding: 0 
@@ -420,9 +420,9 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                               }}
                               disabled={loadingTasks[`${temp.name}-${task.id}`]}
                               style={{ 
-                                backgroundColor: isTaskFocused ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                                backgroundColor: isTaskFocused ? 'rgba(38, 139, 210, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
                                 color: 'var(--accent-blue)', 
-                                border: '1px solid rgba(59, 130, 246, 0.2)', 
+                                border: '1px solid rgba(38, 139, 210, 0.2)', 
                                 borderRadius: '4px', 
                                 padding: '3px 10px', 
                                 fontSize: '10px', 

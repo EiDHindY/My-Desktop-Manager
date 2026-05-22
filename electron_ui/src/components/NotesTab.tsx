@@ -521,9 +521,9 @@ function FolderBlock({
         style={{ 
           border: (isFocused && !isAnyEditing) ? '1px solid var(--accent-blue)' : (isExpanded ? '1px solid var(--border-glass)' : '1px solid var(--border-glass)'), 
           overflow: 'hidden', 
-          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(59, 130, 246, 0.08)' : (isExpanded ? 'rgba(30, 41, 59, 0.45)' : 'rgba(30, 41, 59, 0.3)'),
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(38, 139, 210, 0.08)' : (isExpanded ? 'rgba(7, 54, 66, 0.45)' : 'rgba(7, 54, 66, 0.3)'),
           transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: (isFocused && !isAnyEditing) ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(59, 130, 246, 0.1)' : 'none'
+          boxShadow: (isFocused && !isAnyEditing) ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
         }}
       >
       <div
@@ -539,7 +539,7 @@ function FolderBlock({
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '12px 16px', 
-          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
+          backgroundColor: (isFocused && !isAnyEditing) ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
           cursor: 'pointer', userSelect: 'none',
           transition: 'background 0.2s ease',
           borderLeft: (isFocused && !isAnyEditing) ? '4px solid var(--accent-blue)' : '4px solid transparent'
@@ -555,7 +555,7 @@ function FolderBlock({
             width: '28px', 
             height: '28px', 
             borderRadius: '6px', 
-            background: isExpanded ? 'rgba(59, 130, 246, 0.15)' : 'rgba(30, 41, 59, 0.5)', 
+            background: isExpanded ? 'rgba(38, 139, 210, 0.15)' : 'rgba(7, 54, 66, 0.5)', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
@@ -567,7 +567,7 @@ function FolderBlock({
           <span style={{ fontWeight: '700', color: isFocused ? 'var(--accent-cyan)' : 'var(--text-main)', fontSize: '14px' }}>{folderLabel}</span>
           {items.length > 0 && (
             <span style={{ 
-              backgroundColor: pendingCount > 0 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
+              backgroundColor: pendingCount > 0 ? 'rgba(38, 139, 210, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
               color: pendingCount > 0 ? 'var(--accent-blue)' : 'var(--text-dim)', 
               padding: '2px 8px', 
               borderRadius: '10px', 
@@ -575,7 +575,7 @@ function FolderBlock({
               fontWeight: '800',
               textTransform: 'uppercase',
               letterSpacing: '0.5px',
-              border: '1px solid rgba(59, 130, 246, 0.1)'
+              border: '1px solid rgba(38, 139, 210, 0.1)'
             }}>
               {pendingCount > 0 ? `${pendingCount} pending` : `${items.length} items`}
             </span>
@@ -585,7 +585,7 @@ function FolderBlock({
           <button
             className="btn-hover"
             onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey } })); }}
-            style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', cursor: 'pointer', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
+            style={{ backgroundColor: 'rgba(133, 153, 0, 0.1)', border: '1px solid rgba(133, 153, 0, 0.2)', cursor: 'pointer', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
             title="Add Checkbox"
           >
             <IconSquare size={14} />
@@ -593,7 +593,7 @@ function FolderBlock({
           <button
             className="btn-hover"
             onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey } })); }}
-            style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)', cursor: 'pointer', color: 'var(--accent-purple)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
+            style={{ backgroundColor: 'rgba(108, 113, 196, 0.1)', border: '1px solid rgba(108, 113, 196, 0.2)', cursor: 'pointer', color: 'var(--accent-purple)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
             title="Add Note"
           >
             <IconFileText size={14} />
@@ -602,7 +602,7 @@ function FolderBlock({
             <button
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); onDeleteFolder(folderKey); }}
-              style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
+              style={{ backgroundColor: 'rgba(220, 50, 47, 0.1)', border: '1px solid rgba(220, 50, 47, 0.2)', cursor: 'pointer', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', width: '26px', height: '26px', padding: 0, borderRadius: '6px', justifyContent: 'center' }}
               title="Delete Folder"
             >
               <IconTrash size={14} />
@@ -620,7 +620,7 @@ function FolderBlock({
               style={{
                 display: 'flex', flexDirection: 'column', gap: '4px', padding: '10px',
                 minHeight: '36px',
-                backgroundColor: snapshot.isDraggingOver ? 'rgba(59, 130, 246,0.05)' : 'rgba(0, 0, 0, 0.15)',
+                backgroundColor: snapshot.isDraggingOver ? 'rgba(38, 139, 210,0.05)' : 'rgba(0, 0, 0, 0.15)',
                 transition: 'background 0.15s',
                 borderTop: '1px solid var(--border-glass)'
               }}
@@ -704,7 +704,7 @@ function NoteItemRow({
           style={{
             display: 'flex', alignItems: 'center', gap: '12px',
             padding: '10px 14px',
-            backgroundColor: hovered ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+            backgroundColor: hovered ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
             borderRadius: '8px', transition: 'background 0.15s ease',
             borderLeft: (isFocused && !isAnyEditing) ? '3px solid var(--accent-cyan)' : '3px solid transparent'
           }}
@@ -729,7 +729,7 @@ function NoteItemRow({
                height: '20px', 
                borderRadius: '6px', 
                border: isChecked ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-               backgroundColor: isChecked ? 'var(--accent-blue)' : 'rgba(30, 41, 59, 0.6)',
+               backgroundColor: isChecked ? 'var(--accent-blue)' : 'rgba(7, 54, 66, 0.6)',
                display: 'flex',
                alignItems: 'center',
                justifyContent: 'center',
@@ -752,10 +752,10 @@ function NoteItemRow({
                display: 'flex', 
                alignItems: 'center',
                transition: 'all 0.2s ease',
-               background: isNoteExpanded ? 'rgba(14, 165, 233, 0.1)' : 'rgba(139, 92, 246, 0.1)',
+               background: isNoteExpanded ? 'rgba(42, 161, 152, 0.1)' : 'rgba(108, 113, 196, 0.1)',
                padding: '6px',
                borderRadius: '6px',
-               border: isNoteExpanded ? '1px solid rgba(14, 165, 233, 0.2)' : '1px solid rgba(139, 92, 246, 0.2)'
+               border: isNoteExpanded ? '1px solid rgba(42, 161, 152, 0.2)' : '1px solid rgba(108, 113, 196, 0.2)'
              }}
            >
              <IconFileText size={16} />
@@ -783,7 +783,7 @@ function NoteItemRow({
                  e.currentTarget.blur();
                }
              }}
-            style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--accent-blue)', borderRadius: '6px', color: 'var(--text-main)', padding: '6px 12px', fontSize: '13px', outline: 'none', boxShadow: '0 0 10px rgba(59, 130, 246, 0.2)' }}
+            style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--accent-blue)', borderRadius: '6px', color: 'var(--text-main)', padding: '6px 12px', fontSize: '13px', outline: 'none', boxShadow: '0 0 10px rgba(38, 139, 210, 0.2)' }}
           />
         ) : (
           <span
@@ -823,7 +823,7 @@ function NoteItemRow({
           <button 
             className="btn-hover"
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', color: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.1)', width: '28px', height: '28px', padding: 0, borderRadius: '6px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
+            style={{ backgroundColor: 'rgba(220, 50, 47, 0.05)', color: 'var(--accent-red)', border: '1px solid rgba(220, 50, 47, 0.1)', width: '28px', height: '28px', padding: 0, borderRadius: '6px', justifyContent: 'center', display: 'flex', alignItems: 'center' }}
             title="Delete Item"
           >
             <IconTrash size={14} />
@@ -843,7 +843,7 @@ function NoteItemRow({
             style={{
               width: '100%',
               minHeight: '120px',
-              background: 'rgba(15, 23, 42, 0.6)',
+              background: 'rgba(0, 33, 43, 0.6)',
               border: '1px solid var(--border-glass)',
               borderRadius: '8px',
               color: 'var(--text-main)',
@@ -855,7 +855,7 @@ function NoteItemRow({
               lineHeight: '1.6',
               fontFamily: 'inherit'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)'}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(38, 139, 210, 0.4)'}
             onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-glass)'}
           />
         </div>

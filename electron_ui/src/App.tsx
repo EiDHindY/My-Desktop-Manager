@@ -255,14 +255,14 @@ function App() {
     <div style={{ 
       color: 'var(--text-main)', 
       fontFamily: 'Outfit, sans-serif',
-      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      backgroundColor: 'rgba(0, 33, 43, 0.85)',
       height: '100vh',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
       borderRadius: '12px',
       border: isFocused ? '2px solid var(--accent-blue)' : '2px solid var(--border-glass)',
-      boxShadow: isFocused ? '0 10px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(59, 130, 246, 0.3)' : '0 10px 40px rgba(0,0,0,0.4)',
+      boxShadow: isFocused ? '0 10px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(38, 139, 210, 0.3)' : '0 10px 40px rgba(0,0,0,0.4)',
       overflow: 'hidden',
       transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
       backdropFilter: 'blur(20px)'
@@ -270,7 +270,7 @@ function App() {
       {/* Search Bar & Stats */}
       <div style={{ 
         padding: '12px 16px', 
-        backgroundColor: 'rgba(30, 41, 59, 0.6)', 
+        backgroundColor: 'rgba(7, 54, 66, 0.6)', 
         borderBottom: '1px solid var(--border-glass)', 
         display: 'flex', 
         alignItems: 'center', 
@@ -290,7 +290,7 @@ function App() {
                 width: '100%', 
                 padding: '10px 14px', 
                 borderRadius: '10px', 
-                backgroundColor: 'rgba(15, 23, 42, 0.5)', 
+                backgroundColor: 'rgba(0, 33, 43, 0.5)', 
                 border: '1px solid var(--border-glass)', 
                 color: 'var(--text-main)', 
                 outline: 'none', 
@@ -307,7 +307,7 @@ function App() {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'rgba(15, 23, 42, 0.3)',
+              backgroundColor: 'rgba(0, 33, 43, 0.3)',
               border: '1px solid var(--border-glass)',
               borderRadius: '10px',
               padding: '2px',
@@ -322,7 +322,7 @@ function App() {
                   height: '32px',
                   borderRadius: '8px',
                   border: 'none',
-                  backgroundColor: !isSplitLayout ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  backgroundColor: !isSplitLayout ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
                   color: !isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
                   display: 'flex',
                   alignItems: 'center',
@@ -343,7 +343,7 @@ function App() {
                   height: '32px',
                   borderRadius: '8px',
                   border: 'none',
-                  backgroundColor: isSplitLayout ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  backgroundColor: isSplitLayout ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
                   color: isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
                   display: 'flex',
                   alignItems: 'center',
@@ -367,10 +367,10 @@ function App() {
             display: 'flex', 
             alignItems: 'center', 
             gap: '6px', 
-            backgroundColor: 'rgba(14, 165, 233, 0.1)', 
+            backgroundColor: 'rgba(42, 161, 152, 0.1)', 
             padding: '4px 10px', 
             borderRadius: '20px',
-            border: '1px solid rgba(14, 165, 233, 0.2)'
+            border: '1px solid rgba(42, 161, 152, 0.2)'
           }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)', boxShadow: '0 0 8px var(--accent-cyan)' }}></span>
             <span style={{ color: 'var(--accent-cyan)', fontWeight: '800' }}>{totalActive}</span>
@@ -380,7 +380,7 @@ function App() {
             display: 'flex', 
             alignItems: 'center', 
             gap: '6px', 
-            backgroundColor: 'rgba(30, 41, 59, 0.4)', 
+            backgroundColor: 'rgba(7, 54, 66, 0.4)', 
             padding: '4px 10px', 
             borderRadius: '20px',
             border: '1px solid var(--border-glass)'
@@ -400,7 +400,7 @@ function App() {
           justifyContent: 'space-between',
           padding: '0 12px', 
           borderBottom: '1px solid var(--border-glass)', 
-          backgroundColor: 'rgba(30, 41, 59, 0.4)',
+          backgroundColor: 'rgba(7, 54, 66, 0.4)',
           height: '40px'
         }}>
           {/* Tabs */}
@@ -413,7 +413,7 @@ function App() {
                   style={{ 
                     padding: '5px 12px', 
                     color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-dim)',
-                    backgroundColor: activeTab === tab ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                    backgroundColor: activeTab === tab ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
                     borderRadius: '6px',
                     fontWeight: '800',
                     fontSize: '11px',
@@ -421,7 +421,7 @@ function App() {
                     letterSpacing: '0.5px',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer',
-                    border: activeTab === tab ? '1px solid rgba(59, 130, 246, 0.2)' : '1px solid transparent'
+                    border: activeTab === tab ? '1px solid rgba(38, 139, 210, 0.2)' : '1px solid transparent'
                   }}
               >{tab}</div>
             ))}
@@ -434,7 +434,7 @@ function App() {
                 <button 
                   className="btn-hover"
                   onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Create New Template Folder"
                 >
                   <IconPlus size={16} />
@@ -451,7 +451,7 @@ function App() {
                       setLastActionTime(Date.now());
                     }
                   }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   title="Import Folder"
                 >
                   <IconImport size={13} /> Import
@@ -462,7 +462,7 @@ function App() {
                     // @ts-ignore
                     await window.electronAPI.executeCommand(`xdg-open "/home/dod/.local/bin/Scripts/"`);
                   }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   title="Open Scripts Directory"
                 >
                   <IconTerminal size={13} /> Scripts
@@ -473,7 +473,7 @@ function App() {
                 <button
                   className="btn-hover"
                   onClick={() => setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="New Folder"
                 >
                   <IconPlus size={16} />
@@ -482,7 +482,7 @@ function App() {
                 <button
                   className="btn-hover"
                   onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey: 'root' } }))}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(34, 197, 94, 0.2)', backgroundColor: 'rgba(34, 197, 94, 0.1)', color: 'var(--accent-green)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
                   title="Add Checkbox"
                 >
                   <IconSquare size={13} /> Checkbox
@@ -490,7 +490,7 @@ function App() {
                 <button
                   className="btn-hover"
                   onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey: 'root' } }))}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(139, 92, 246, 0.2)', backgroundColor: 'rgba(139, 92, 246, 0.1)', color: 'var(--accent-purple)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(108, 113, 196, 0.2)', backgroundColor: 'rgba(108, 113, 196, 0.1)', color: 'var(--accent-purple)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
                   title="Add Note"
                 >
                   <IconFileText size={13} /> Note
@@ -503,7 +503,7 @@ function App() {
                   onClick={() => {
                     setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'ADD_FOLDER' });
                   }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Add Folder"
                 >
                   <IconPlus size={16} />
@@ -516,7 +516,7 @@ function App() {
                     await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
                     setLastActionTime(Date.now());
                   }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
                   title="Clean Empty"
                 >
                   <IconWipe size={14} /> Clean
@@ -530,7 +530,7 @@ function App() {
                       setLastActionTime(Date.now());
                     }
                   }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.3)', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-red)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
                   title="Clear All"
                 >
                   <IconTrash size={14} /> Clear
@@ -543,7 +543,7 @@ function App() {
         <div className="main-content-area" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-              <div style={{ width: '40px', height: '40px', border: '3px solid rgba(59, 130, 246, 0.1)', borderTop: '3px solid var(--accent-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              <div style={{ width: '40px', height: '40px', border: '3px solid rgba(38, 139, 210, 0.1)', borderTop: '3px solid var(--accent-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
               <span style={{ color: 'var(--text-dim)', fontWeight: '600', letterSpacing: '1px' }}>SYNCHRONIZING WORKSPACE...</span>
             </div>
           ) : (
@@ -624,7 +624,7 @@ function App() {
         .search-input-hover:focus {
           border-color: var(--accent-blue) !important;
           box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05) !important;
-          background-color: rgba(15, 23, 42, 0.8) !important;
+          background-color: rgba(0, 33, 43, 0.8) !important;
         }
       `}</style>
     </div>

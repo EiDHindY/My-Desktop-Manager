@@ -1,26 +1,26 @@
 :root {
-  /* Slate/Modern Minimalist Dark Theme */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-glass: rgba(15, 23, 42, 0.85);
-  --border-glass: rgba(51, 65, 85, 0.7);
-  --text-main: #f8fafc;
-  --text-dim: #94a3b8;
-  --accent-blue: #3b82f6;
-  --accent-cyan: #0ea5e9;
-  --accent-purple: #8b5cf6;
-  --accent-red: #ef4444;
-  --accent-green: #22c55e;
+  /* Solarized Dark Theme */
+  --bg-primary: #002b36;
+  --bg-secondary: #073642;
+  --bg-glass: rgba(0, 43, 54, 0.85);
+  --border-glass: rgba(88, 110, 117, 0.7);
+  --text-main: #93a1a1;
+  --text-dim: #839496;
+  --accent-blue: #268bd2;
+  --accent-cyan: #2aa198;
+  --accent-purple: #6c71c4;
+  --accent-red: #dc322f;
+  --accent-green: #859900;
   
   --glow-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   --glass-blur: blur(12px);
   
   /* Refined, non-distracting gradients */
-  --aurora-gradient: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%);
+  --aurora-gradient: linear-gradient(90deg, rgba(38, 139, 210, 0.1) 0%, transparent 100%);
   --aurora-pillar: var(--accent-blue);
   --aurora-glow: none;
   
-  --bg-app: #020617; /* Very dark background for main container */
+  --bg-app: #00212b; /* Very dark background for main container */
   --bg-app-glow: none;
 }
 
@@ -76,13 +76,13 @@ body {
 }
 
 .desktop-item.active {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(38, 139, 210, 0.15);
+  border-color: rgba(38, 139, 210, 0.3);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .window-badge {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(0, 33, 43, 0.6);
   color: var(--text-dim);
   padding: 2px 6px;
   border-radius: 4px;
@@ -94,7 +94,7 @@ body {
 
 .desktop-item.active .window-badge {
   color: var(--accent-blue);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(38, 139, 210, 0.3);
 }
 
 .active-pillar {
@@ -130,8 +130,8 @@ body {
 }
 
 .unified-glass-card.has-current {
-  border-color: rgba(59, 130, 246, 0.5) !important;
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(38, 139, 210, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(38, 139, 210, 0.2) !important;
 }
 
 .unified-glass-card.dimmed-folder {

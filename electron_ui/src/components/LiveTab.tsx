@@ -419,7 +419,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             style={{ 
               display: 'flex',
               padding: '10px 14px',
-              background: isSelected ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
+              background: isSelected ? 'rgba(108, 113, 196, 0.08)' : 'transparent',
               alignItems: 'center',
               color: '#c8d3f5',
               fontWeight: '600',
