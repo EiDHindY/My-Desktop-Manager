@@ -2,7 +2,8 @@
 
 # Project Directory
 PROJECT_DIR="/home/dod/projects/Desktop Manager"
-cd "$PROJECT_DIR"
+ELECTRON_BIN="$PROJECT_DIR/electron_ui/node_modules/.bin/electron"
+APP_DIR="$PROJECT_DIR/electron_ui"
 
 # Ensure common paths are in PATH
 export PATH=$PATH:/usr/local/bin:/usr/bin:/bin
@@ -14,8 +15,8 @@ if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null; the
     # App is already running in the background -> instantly signal it to show
     kill -USR2 $(cat "$PID_FILE")
 else
-    # App is completely closed -> launch it from scratch
-    npm run rocket > /dev/null 2>&1 &
+    # App is completely closed -> launch it directly (bypass npm for speed)
+    "$ELECTRON_BIN" "$APP_DIR" > /dev/null 2>&1 &
 fi
 
 exit 0

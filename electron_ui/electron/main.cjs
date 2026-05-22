@@ -108,6 +108,8 @@ app.whenReady().then(() => {
   // Removes default menu to free up Ctrl+Q for React
   Menu.setApplicationMenu(null);
 
+  setupDBusWatcher();
+
   createWindow();
 });
 
@@ -181,7 +183,7 @@ ipcMain.handle('read-json', async (event, filename) => {
 // Scan lock: prevents concurrent kdotool scans from stacking
 let windowScanInProgress = false;
 
-ipcMain.handle('fetch-desktops', async (event, scanWindows = true) => {
+async function performFetchDesktops(scanWindows = true) {
   try {
     // Run current desktop and desktop list in parallel
     const [currentRes, desktopsRes] = await Promise.all([
@@ -324,7 +326,47 @@ done 2>/dev/null | sort -u
     console.error('Error fetching desktops:', error);
     return { names: {}, priorities: {}, counts: {}, apps: {}, current: null };
   }
+}
+
+ipcMain.handle('fetch-desktops', async (event, scanWindows = true) => {
+  return await performFetchDesktops(scanWindows);
 });
+
+// Setup python dbus watcher
+let watcherChild = null;
+function setupDBusWatcher() {
+  if (watcherChild) return;
+  const scriptPath = path.join(__dirname, '..', '..', 'shared_backend', 'dbus_watcher.py');
+  watcherChild = spawn('python3', [scriptPath]);
+  
+  watcherChild.stdout.on('data', async (data) => {
+    try {
+      const str = data.toString().trim();
+      const lines = str.split('\\n');
+      for (const line of lines) {
+        if (!line) continue;
+        const event = JSON.parse(line);
+        console.log('[DBUS EVENT]', event.event);
+        // On any desktop event, instantly fetch and send to UI without window scanning
+        // (Window scanning will still happen periodically or on focus)
+        if (event.event !== 'ready') {
+          const newData = await performFetchDesktops(false);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('desktops-updated', newData);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[DBUS WATCHER ERROR PARSING]', e);
+    }
+  });
+
+  watcherChild.on('close', () => {
+    console.log('[DBUS WATCHER] closed. Restarting in 5s...');
+    watcherChild = null;
+    setTimeout(setupDBusWatcher, 5000);
+  });
+}
 
 ipcMain.handle('list-icons', async () => {
   const appPath = app.getAppPath();

@@ -10,5 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchChromeProfiles: () => ipcRenderer.invoke('fetch-chrome-profiles'),
   listIcons: () => ipcRenderer.invoke('list-icons'),
   nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
-  registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts)
+  registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts),
+  onDesktopsUpdated: (callback) => {
+    ipcRenderer.removeAllListeners('desktops-updated'); // prevent duplicate listeners
+    ipcRenderer.on('desktops-updated', (_event, data) => callback(data));
+  }
 });

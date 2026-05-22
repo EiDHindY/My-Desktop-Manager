@@ -52,6 +52,7 @@ function App() {
   }, [isSplitLayout]);
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
+  const [isFocused, setIsFocused] = useState(true);
 
   // Load templates separately — they rarely change, no need to fetch every 2.5s
   const loadTemplates = useCallback(async () => {
@@ -112,11 +113,30 @@ function App() {
   // Initial load on mount — load data + templates together
   useEffect(() => { loadData(true); loadTemplates(); }, [])
 
-  // Stable polling interval — uses ref so it never restarts on action
+  // D-Bus Event Listener & Focused Polling
   useEffect(() => {
-    const interval = setInterval(() => loadData(), 2500)
+    // @ts-ignore
+    if (window.electronAPI && window.electronAPI.onDesktopsUpdated) {
+      // @ts-ignore
+      window.electronAPI.onDesktopsUpdated((desktopInfo: any) => {
+        // SMART SYNC: If we just performed a local action, ignore the dbus echo for a moment
+        if (Date.now() - lastActionTimeRef.current < 1500) return;
+        
+        setDesktopNames(desktopInfo?.names || {})
+        setDesktopPriorities(desktopInfo?.priorities || {})
+        setWindowCounts(desktopInfo?.counts || {})
+        setDesktopApps(desktopInfo?.apps || {})
+        setDesktopIcons(desktopInfo?.icons || {})
+        setDesktopShortcuts(desktopInfo?.shortcuts || {})
+        setCurrentDesktop(desktopInfo?.current || null)
+      });
+    }
+
+    // Only poll (for window counts) when focused to save CPU
+    if (!isFocused) return;
+    const interval = setInterval(() => loadData(activeTabRef.current === 'live'), 2500)
     return () => clearInterval(interval)
-  }, [loadData])
+  }, [loadData, isFocused])
 
   // Register global shortcuts whenever desktopShortcuts changes
   useEffect(() => {
@@ -144,8 +164,6 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [lastActionTime])
-
-  const [isFocused, setIsFocused] = useState(true);
 
   useEffect(() => {
     let focusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -182,13 +200,13 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['live', 'temps', 'notes', 'chrome'];
+          const tabs = ['live', 'notes', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['live', 'temps', 'notes', 'chrome'];
+          const tabs = ['live', 'notes', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
@@ -387,7 +405,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['live', 'temps', 'notes', 'chrome'].map(tab => (
+            {['live', 'notes', 'temps', 'chrome'].map(tab => (
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
