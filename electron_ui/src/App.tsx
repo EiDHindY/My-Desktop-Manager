@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import LiveTab from './components/LiveTab'
 import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
@@ -22,8 +22,21 @@ function App() {
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('live')
+  // Ref so loadData can read current tab without being recreated
+  const activeTabRef = useRef('live')
+  const handleSetActiveTab = useCallback((tab: string) => {
+    activeTabRef.current = tab
+    setActiveTab(tab)
+  }, [])
   const [searchQuery, setSearchQuery] = useState('')
-  const [lastActionTime, setLastActionTime] = useState(0)
+  const [lastActionTime, _setLastActionTimeState] = useState(0)
+  // Keep a ref so the polling interval can read it without a stale closure
+  const lastActionTimeRef = useRef(0)
+  const setLastActionTime = useCallback((t: number) => {
+    lastActionTimeRef.current = t
+    _setLastActionTimeState(t)
+  }, [])
+  const dataRef = useRef<any>(null)
   const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string} | null>(null)
   const [isSplitLayout, setIsSplitLayout] = useState<boolean>(() => {
     try {
@@ -40,17 +53,26 @@ function App() {
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
 
-  const loadData = (ignoreThrottle = false) => {
+  // Load templates separately — they rarely change, no need to fetch every 2.5s
+  const loadTemplates = useCallback(async () => {
+    // @ts-ignore
+    if (window.electronAPI?.listTemplates) {
+      // @ts-ignore
+      const list = await window.electronAPI.listTemplates();
+      setTemplates(list || []);
+    }
+  }, [])
+
+  const loadData = useCallback((ignoreThrottle = false) => {
     // Skip polling if we just performed an action (to prevent UI flickering/revert)
-    if (!ignoreThrottle && Date.now() - lastActionTime < 3000) return;
+    if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 3000) return;
 
     // SMART POLLING: Only poll if the window is focused (reduces background CPU/IPC lag)
     // We only skip if we already have initial data loaded.
-    if (!ignoreThrottle && !document.hasFocus() && data) return;
+    if (!ignoreThrottle && !document.hasFocus() && dataRef.current) return;
 
     // @ts-ignore
     if (window.electronAPI && window.electronAPI.readJSON) {
-      console.log("Starting loadData (Promise.all)...");
       // @ts-ignore
       Promise.all([
         // @ts-ignore
@@ -58,19 +80,17 @@ function App() {
         // @ts-ignore
         window.electronAPI.readJSON('notes.json'),
         // @ts-ignore
-        window.electronAPI.fetchDesktops(),
-        // @ts-ignore
-        window.electronAPI.listTemplates(),
+        // Only run the expensive window scan when on the Live tab
+        window.electronAPI.fetchDesktops(activeTabRef.current === 'live'),
         // @ts-ignore
         window.electronAPI.readJSON('history.json')
-      ]).then(([sessionData, notesData, desktopInfo, templateList, historyData]) => {
-        console.log("Data received in frontend:", { sessionData, notesData, desktopInfo });
-        
-        // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment 
-        // to prevent the "state revert" flicker before the backend files have fully updated.
-        if (!ignoreThrottle && Date.now() - lastActionTime < 1500) return;
+      ]).then(([sessionData, notesData, desktopInfo, historyData]) => {
+        // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment
+        if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 1500) return;
 
-        setData({ session: sessionData, notes: notesData })
+        const newData = { session: sessionData, notes: notesData };
+        dataRef.current = newData;
+        setData(newData)
         setDesktopNames(desktopInfo?.names || {})
         setDesktopPriorities(desktopInfo?.priorities || {})
         setWindowCounts(desktopInfo?.counts || {})
@@ -79,7 +99,6 @@ function App() {
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
         setCurrentDesktop(desktopInfo?.current || null)
         setReturnDesktop(historyData?.last_uuid || null)
-        setTemplates(templateList || [])
         setLoading(false)
       }).catch(err => {
         console.error("Error in loadData Promise.all:", err);
@@ -88,14 +107,16 @@ function App() {
     } else {
       setLoading(false)
     }
-  }
+  }, [])
 
+  // Initial load on mount — load data + templates together
+  useEffect(() => { loadData(true); loadTemplates(); }, [])
+
+  // Stable polling interval — uses ref so it never restarts on action
   useEffect(() => {
-    loadData()
-    // Refresh data periodically to keep in sync with backend
-    const interval = setInterval(loadData, 2000)
+    const interval = setInterval(() => loadData(), 2500)
     return () => clearInterval(interval)
-  }, [lastActionTime])
+  }, [loadData])
 
   // Register global shortcuts whenever desktopShortcuts changes
   useEffect(() => {
@@ -127,21 +148,29 @@ function App() {
   const [isFocused, setIsFocused] = useState(true);
 
   useEffect(() => {
+    let focusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleFocus = () => {
       setIsFocused(true);
-      // Only auto-focus search if we aren't already editing something else
       if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         setTimeout(() => searchInputRef.current?.focus(), 10);
       }
+      // Debounce: wait 500ms after KDE brings the window forward before firing the
+      // window-scan subprocess. This prevents the scan from colliding with the
+      // compositor transition, which was the root cause of the freeze.
+      focusDebounceTimer = setTimeout(() => loadData(true), 500);
     };
-    const handleBlur = () => setIsFocused(false);
+    const handleBlur = () => {
+      setIsFocused(false);
+      if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
+    };
     window.addEventListener('focus', handleFocus);
     window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('blur', handleBlur);
+      if (focusDebounceTimer) clearTimeout(focusDebounceTimer);
     };
-  }, []);
+  }, [loadData]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -153,22 +182,14 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          setActiveTab(prev => {
-            if (prev === 'live') return 'temps';
-            if (prev === 'temps') return 'notes';
-            if (prev === 'notes') return 'chrome';
-            return 'live';
-          });
+          const tabs = ['live', 'temps', 'notes', 'chrome'];
+          handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          setActiveTab(prev => {
-            if (prev === 'live') return 'chrome';
-            if (prev === 'chrome') return 'notes';
-            if (prev === 'notes') return 'temps';
-            return 'live';
-          });
+          const tabs = ['live', 'temps', 'notes', 'chrome'];
+          handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
       }
@@ -369,7 +390,7 @@ function App() {
             {['live', 'temps', 'notes', 'chrome'].map(tab => (
                 <div 
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleSetActiveTab(tab)}
                 className="interactive-element"
                   style={{ 
                     padding: '5px 12px', 
@@ -528,7 +549,7 @@ function App() {
                   isSplitLayout={isSplitLayout}
                 />
               )}
-              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
+              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} />}
               {activeTab === 'notes' && <NotesTab notesData={data?.notes} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
