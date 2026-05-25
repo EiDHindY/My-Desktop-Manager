@@ -65,21 +65,21 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
             onMouseEnter={() => onHover(desktopId)}
             onMouseLeave={() => onHover(null)}
             style={{ 
-              background: snapshot.isDragging ? 'var(--bg-secondary)' : (isActive ? 'var(--aurora-gradient)' : (isSelected ? 'rgba(108, 113, 196, 0.12)' : 'transparent')),
+              background: snapshot.isDragging ? 'var(--bg-secondary)' : (isActive ? 'linear-gradient(90deg, rgba(38, 139, 210, 0.25) 0%, rgba(38, 139, 210, 0.05) 100%)' : (isSelected ? 'rgba(108, 113, 196, 0.12)' : 'transparent')),
               boxSizing: 'border-box',
               color: isActive ? 'var(--accent-cyan)' : (isReturn ? 'var(--accent-purple)' : (hasWindows ? 'var(--accent-blue)' : 'var(--text-main)')),
               fontWeight: isActive || isReturn || isSelected ? 'bold' : '500',
               transition: snapshot.isDragging ? 'none' : 'all 0.25s ease',
               transform: isActive && !snapshot.isDragging ? 'translateX(2px)' : 'none',
-              border: isActive ? '1px solid rgba(42, 161, 152, 0.1)' : (isSelected ? '1px solid rgba(108, 113, 196, 0.4)' : '1px solid transparent'),
+              border: isActive ? '1px solid rgba(38, 139, 210, 0.3)' : (isSelected ? '1px solid rgba(108, 113, 196, 0.4)' : '1px solid transparent'),
               paddingLeft: '24px',
-              zIndex: snapshot.isDragging ? 9999 : (isSelected ? 2 : 1),
-              boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isSelected && !isActive ? '0 0 15px rgba(108, 113, 196, 0.15)' : 'none'),
+              zIndex: snapshot.isDragging ? 9999 : (isActive ? 3 : (isSelected ? 2 : 1)),
+              boxShadow: snapshot.isDragging ? '0 20px 50px rgba(0,0,0,0.5)' : (isActive ? '0 4px 12px rgba(38, 139, 210, 0.2)' : (isSelected ? '0 0 15px rgba(108, 113, 196, 0.15)' : 'none')),
               width: snapshot.isDragging ? (((providedDesktop.draggableProps.style as any)?.width) || '280px') : '100%',
               ...(providedDesktop.draggableProps.style || {})
             }}
           >
-            {isActive && <div className="active-pillar" style={{ top: '15%', bottom: '15%' }} />}
+            {isActive && <div className="active-pillar" style={{ top: '15%', bottom: '15%', boxShadow: '0 0 10px var(--aurora-pillar)' }} />}
             <div style={{ marginRight: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isHovered || hasWindows || isActive ? 1 : 0.6, minWidth: '16px', justifyContent: 'center' }}>
               {isDeleting ? (
                 <IconLoader size={14} color="var(--accent-red)" />

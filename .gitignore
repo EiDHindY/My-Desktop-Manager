@@ -6,3 +6,4 @@ output.txt
 .venv/
 __pycache__/
 *.pyc
+cleaned_bak.json

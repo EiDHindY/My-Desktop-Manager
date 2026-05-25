@@ -19,6 +19,8 @@ function App() {
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
   const [returnDesktop, setReturnDesktop] = useState<string | null>(null)
+  const [visitHistory, setVisitHistory] = useState<string[]>([])
+  const prevDesktopRef = useRef<string | null>(null);
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('live')
@@ -147,6 +149,11 @@ function App() {
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
         setCurrentDesktop(desktopInfo?.current || null)
         setReturnDesktop(historyData?.last_uuid || null)
+        const historyList = historyData?.history || [];
+        setVisitHistory(historyList)
+        if (!prevDesktopRef.current && desktopInfo?.current) {
+           prevDesktopRef.current = desktopInfo.current;
+        }
         setLoading(false)
       }).catch(err => {
         console.error("Error in loadData Promise.all:", err);
@@ -279,17 +286,26 @@ function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [])
 
+  useEffect(() => {
+    if (currentDesktop) {
+      if (prevDesktopRef.current && prevDesktopRef.current !== currentDesktop) {
+        const prev = prevDesktopRef.current;
+        setVisitHistory(oldHist => {
+          const newHist = oldHist.filter(id => id !== prev && id !== currentDesktop);
+          newHist.push(prev);
+          // @ts-ignore
+          window.electronAPI.writeJSON('history.json', { last_uuid: prev, history: newHist });
+          setReturnDesktop(prev);
+          return newHist;
+        });
+      }
+      prevDesktopRef.current = currentDesktop;
+    }
+  }, [currentDesktop]);
+
   const handleSwitch = (targetId: string) => {
     setLastActionTime(Date.now())
     const pureTargetId = targetId.split('___')[0]
-    
-    // Persist return desktop to history.json so it's robust across polls/restarts
-    if (currentDesktop && currentDesktop !== pureTargetId) {
-      // @ts-ignore
-      window.electronAPI.writeJSON('history.json', { last_uuid: currentDesktop });
-      setReturnDesktop(currentDesktop)
-    }
-    
     setCurrentDesktop(pureTargetId) // New target becomes current
     setSearchQuery('') // Clear search so the default live page is clean next time
   }
