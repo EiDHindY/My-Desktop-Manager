@@ -17,6 +17,7 @@ interface NotesData {
   folders: Record<string, NoteItem[]>;
   folder_order?: string[];
   folder_names?: Record<string, string>;
+  folder_is_divider?: Record<string, boolean>;
   expanded_folders?: string[];
 }
 
@@ -189,7 +190,9 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
     const newOrder = folderOrder.filter(k => k !== folderKey);
     const newNames = { ...(data?.folder_names || {}) };
     delete newNames[folderKey];
-    const newData = { ...data, folders: newFolders, folder_order: newOrder, folder_names: newNames };
+    const newIsDivider = { ...(data?.folder_is_divider || {}) };
+    delete newIsDivider[folderKey];
+    const newData = { ...data, folders: newFolders, folder_order: newOrder, folder_names: newNames, folder_is_divider: newIsDivider };
     setLocalData(newData as NotesData);
     writeNotes(newData);
   };
@@ -484,6 +487,7 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
                         <FolderBlock
                           folderKey={folderKey}
                           folderLabel={getFolderName(folderKey)}
+                          isDivider={data?.folder_is_divider?.[folderKey] || false}
                           items={getFilteredItems(folders[folderKey] || [])}
                           isExpanded={!!query || expandedFolders.includes(folderKey)}
                           isRoot={false}
@@ -561,20 +565,66 @@ export default function NotesTab({ notesData, searchQuery = '', onAction }: { no
 }
 
 function FolderBlock({
-  folderKey, folderLabel, items = [], isExpanded, isRoot, dragHandle,
+  folderKey, folderLabel, isDivider, items = [], isExpanded, isRoot, dragHandle,
   hoveredFolder, hoveredItem, expandedNotes, localChecked,
   editingItemId, editingContent, isFocused, flatItems, selectedIndex,
   onToggleFolder, onToggleCheck, onDeleteItem, onDeleteFolder, onToggleNote,
    onSaveText, onSaveContent,
    setHoveredFolder, setHoveredItem, setEditingItemId, setEditingContent,
     savingIds = new Set(), onMarkFinishedEditing, isSearchActive,
- }: any) {
+  }: any) {
     const isAnyEditing = !!editingItemId || Object.keys(editingContent).length > 0;
     const pendingCount = items.filter((i: any) => {
       const isChecked = localChecked[i.id] ?? i.checked ?? false;
       return i.type === 'checkbox' && !isChecked;
     }).length;
   
+    if (isDivider) {
+      return (
+        <div
+          id={`flat-item-${selectedIndex}`}
+          className="interactive-element"
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '10px', 
+            padding: '8px 14px',
+            background: isFocused ? 'rgba(133, 153, 0, 0.1)' : 'transparent',
+            borderRadius: '11px',
+          }}
+        >
+          <div
+            {...dragHandle}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--accent-green)',
+              cursor: 'grab',
+              padding: '4px',
+              marginRight: '-4px'
+            }}
+          >
+            <IconGrip size={14} />
+          </div>
+          <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
+          <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '1px' }}>{folderLabel}</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
+          
+          <button 
+            className="btn-hover"
+            onClick={async (e) => { 
+              e.stopPropagation(); 
+              onDeleteFolder(folderKey);
+            }}
+            style={{ backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(220, 50, 47, 0.2)', width: '20px', height: '20px', padding: 0 }}
+            title="Delete Divider"
+          >
+            <IconTrash size={10} />
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div 
         className={`unified-glass-card ${isFocused && !isAnyEditing ? 'lifted-card' : ''}`}

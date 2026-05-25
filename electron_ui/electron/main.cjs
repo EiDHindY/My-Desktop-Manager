@@ -78,11 +78,12 @@ function createWindow() {
 
   // Check if we are running in dev mode
   if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://127.0.0.1:5173');
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  // mainWindow.webContents.openDevTools();
   mainWindow.show();
   mainWindow.focus();
 
@@ -389,25 +390,61 @@ ipcMain.handle('list-icons', async () => {
 });
 
 ipcMain.handle('list-templates', async () => {
-  const templatesDir = path.join(os.homedir(), '.config', 'desktop-manager', 'templates');
+  const libraryDir = path.join(os.homedir(), '.config', 'desktop-manager');
+  const templatesDir = path.join(libraryDir, 'templates');
+  const libraryPath = path.join(libraryDir, 'library.json');
   try {
+    let folderOrder = [];
+    try {
+      if (fsSync.existsSync(libraryPath)) {
+        const libData = JSON.parse(await fs.readFile(libraryPath, 'utf-8'));
+        folderOrder = libData.folder_order || [];
+      }
+    } catch(e) {}
+
     const files = await fs.readdir(templatesDir);
-    const templates = [];
+    let templates = [];
     for (const file of files) {
       if (file.endsWith('.json')) {
         try {
           const content = await fs.readFile(path.join(templatesDir, file), 'utf-8');
           const data = JSON.parse(content);
+          let parsedTasks = data.tasks || [];
+          
+          for (let t of parsedTasks) {
+            if (t.script) {
+              try {
+                const cleanPath = t.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
+                await fs.access(cleanPath, fsSync.constants.X_OK);
+                t.isExecutable = true;
+              } catch (e) {
+                t.isExecutable = false;
+              }
+            }
+          }
+
           templates.push({
-            name: file.replace('.json', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            name: data.name || file.replace('.json', '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
             filename: file,
-            tasks: data.tasks || []
+            tasks: parsedTasks,
+            isDivider: !!data.isDivider
           });
         } catch (e) {
           // Skip unparseable files
         }
       }
     }
+
+    // Sort according to folderOrder
+    templates.sort((a, b) => {
+      const idxA = folderOrder.indexOf(a.filename);
+      const idxB = folderOrder.indexOf(b.filename);
+      if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+
     return templates;
   } catch (error) {
     return [];

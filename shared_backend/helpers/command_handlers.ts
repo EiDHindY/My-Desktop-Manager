@@ -222,7 +222,7 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
     }
 }
 
-export function handleCreateTemplate(folderName: string) {
+export function handleCreateTemplate(folderName: string, isDivider: boolean = false) {
     try {
         const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
         const templatesDir = join(libraryDir, 'templates');
@@ -237,10 +237,13 @@ export function handleCreateTemplate(folderName: string) {
             return;
         }
 
-        const templateData = {
+        const templateData: any = {
             name: folderName,
             tasks: []
         };
+        if (isDivider) {
+            templateData.isDivider = true;
+        }
 
         writeFileSync(templatePath, JSON.stringify(templateData, null, 2));
         runCommand(`notify-send "Desktop Manager" "📁 Created new template '${folderName}'"`);
@@ -536,7 +539,22 @@ export function handleImportFolder(folderPath: string) {
             if (!existsSync(templatesDir)) {
                 mkdirSync(templatesDir, { recursive: true });
             }
-            writeFileSync(templatePath, JSON.stringify({ tasks: tasks }, null, 2));
+            const newFilename = `${folderName.toLowerCase().replace(/ /g, '_')}.json`;
+            writeFileSync(templatePath, JSON.stringify({ name: folderName, tasks: tasks }, null, 2));
+            
+            try {
+                const sessionPath = join(process.env.HOME || '', '.config', 'desktop-manager', 'library.json');
+                if (existsSync(sessionPath)) {
+                    const session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+                    if (session.folder_order && !session.folder_order.includes(newFilename)) {
+                        session.folder_order.push(newFilename);
+                        writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to update folder_order:", e);
+            }
+            
             runCommand(`notify-send "Desktop Manager" "✅ Imported '${folderName}' with ${tasks.length} scripts."`);
         } else {
             runCommand(`notify-send "Desktop Manager" "⚠️ No scripts found in '${folderName}'."`);

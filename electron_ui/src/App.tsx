@@ -502,6 +502,14 @@ function App() {
                 >
                   <IconPlus size={16} />
                 </button>
+                <button 
+                  className="btn-hover"
+                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'CREATE_TEMPLATE_DIVIDER' })}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Add Group Divider"
+                >
+                  <IconLayoutGrid size={16} />
+                </button>
                 <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button 
                   className="btn-hover"
@@ -512,6 +520,7 @@ function App() {
                       // @ts-ignore
                       await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
                       setLastActionTime(Date.now());
+                      loadTemplates();
                     }
                   }}
                   style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
@@ -540,6 +549,14 @@ function App() {
                   title="New Folder"
                 >
                   <IconPlus size={16} />
+                </button>
+                <button 
+                  className="btn-hover"
+                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'NOTES_ADD_DIVIDER' })}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Add Group Divider"
+                >
+                  <IconLayoutGrid size={16} />
                 </button>
                 <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button
@@ -644,7 +661,7 @@ function App() {
           title={promptConfig.title}
           defaultValue={promptConfig.defaultValue}
           onSubmit={async (value) => {
-            if (promptConfig.command === 'NOTES_ADD_FOLDER') {
+            if (promptConfig.command === 'NOTES_ADD_FOLDER' || promptConfig.command === 'NOTES_ADD_DIVIDER') {
               const folderKey = value.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
               
               // SAFETY CHECK: Ensure we have valid notes data before attempting to update.
@@ -659,6 +676,7 @@ function App() {
               const currentFolders = currentNotes.folders;
               const currentOrder = currentNotes.folder_order || Object.keys(currentFolders);
               const currentNames = currentNotes.folder_names || {};
+              const currentIsDivider = currentNotes.folder_is_divider || {};
               
               // @ts-ignore
               await window.electronAPI.writeJSON('notes.json', {
@@ -666,6 +684,7 @@ function App() {
                 folders: { ...currentFolders, [folderKey]: [] },
                 folder_order: [...currentOrder.filter((k: string) => k !== folderKey), folderKey],
                 folder_names: { ...currentNames, [folderKey]: value },
+                folder_is_divider: { ...currentIsDivider, [folderKey]: promptConfig.command === 'NOTES_ADD_DIVIDER' },
                 expanded_folders: [...(currentNotes.expanded_folders || ['root']).filter((k: string) => k !== folderKey), folderKey]
               });
             } else {
@@ -673,6 +692,7 @@ function App() {
               await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "${promptConfig.command}:${value}"`);
             }
             setLastActionTime(Date.now());
+            loadTemplates();
             setPromptConfig(null);
           }}
           onCancel={() => setPromptConfig(null)}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard } from './Icons';
+import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip } from './Icons';
 import IconPicker from './IconPicker';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
 
 interface Task {
   id: string;
@@ -9,11 +11,13 @@ interface Task {
   icon?: string;
   icons?: string[];
   shortcut?: string;
+  isExecutable?: boolean;
 }
 
 interface Template {
   name: string;
   filename: string;
+  isDivider?: boolean;
   tasks?: Task[];
 }
 
@@ -27,16 +31,21 @@ interface FlatItem {
 }
 
 export default function TempsTab({ templates, searchQuery, onAction }: { templates: Template[], searchQuery?: string, onAction?: () => void }) {
+  const [localTemplates, setLocalTemplates] = useState<Template[]>(templates);
   const [expandedTemps, setExpandedTemps] = useState<string[]>([]);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [showIconPicker, setShowIconPicker] = useState<{ filename: string, taskId: string } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setLocalTemplates(templates);
+  }, [templates]);
+
   const query = (searchQuery || '').toLowerCase().trim();
 
   const filteredTemplates = useMemo(() => {
-    return templates.map(temp => {
+    return localTemplates.map(temp => {
       if (!query) return temp;
       const nameMatch = temp.name.toLowerCase().includes(query);
       const matchingTasks = temp.tasks?.filter(t => t.name.toLowerCase().includes(query)) || [];
@@ -45,7 +54,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
       }
       return null;
     }).filter(Boolean) as Template[];
-  }, [templates, query]);
+  }, [localTemplates, query]);
 
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
@@ -95,6 +104,47 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
     await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_ICON:${filename}:${taskId}:${iconsStr}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
     onAction?.();
+  };
+
+  const onDragEnd = async (result: DropResult) => {
+    const { source, destination, type } = result;
+    if (!destination) return;
+
+    if (source.droppableId === destination.droppableId && source.index === destination.index) {
+      return;
+    }
+
+    if (type === 'template') {
+      const newTemplates = Array.from(localTemplates);
+      const [removed] = newTemplates.splice(source.index, 1);
+      newTemplates.splice(destination.index, 0, removed);
+      
+      setLocalTemplates(newTemplates);
+      const newOrderStr = newTemplates.map(t => t.filename).join(',');
+      // @ts-ignore
+      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "REORDER_TEMPLATES:${newOrderStr}"`);
+      onAction?.();
+    } else if (type === 'task') {
+      const templateFilename = source.droppableId.replace('tasks-', '');
+      const templateIndex = localTemplates.findIndex(t => t.filename === templateFilename);
+      
+      if (templateIndex === -1) return;
+      
+      const newTemplates = [...localTemplates];
+      const template = { ...newTemplates[templateIndex] };
+      const newTasks = Array.from(template.tasks || []);
+      
+      const [removed] = newTasks.splice(source.index, 1);
+      newTasks.splice(destination.index, 0, removed);
+      
+      template.tasks = newTasks;
+      newTemplates[templateIndex] = template;
+      
+      setLocalTemplates(newTemplates);
+      // @ts-ignore
+      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "MOVE_TASK:${templateFilename}:${removed.id}:${destination.index}"`);
+      onAction?.();
+    }
   };
 
   useEffect(() => {
@@ -148,55 +198,133 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
           {query ? 'No matching scripts or templates found' : 'No templates found in ~/.config/desktop-manager/templates'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {filteredTemplates.map(temp => {
-            const isExpanded = query ? true : expandedTemps.includes(temp.filename);
-            const templateFlatIndex = flatItems.findIndex(i => i.id === temp.filename && i.type === 'template');
-            const isTemplateFocused = focusedIndex === templateFlatIndex;
-
-            return (
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="temps-list" type="template" isDropDisabled={!!query}>
+            {(provided) => (
               <div 
-                key={temp.filename}
-                className={`unified-glass-card ${isTemplateFocused ? 'lifted-card' : ''}`}
-                style={{
-                  border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                  background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
-                  boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
-                }}
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}
               >
-                {isTemplateFocused && (
-                  <div style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: '12%',
-                    bottom: '12%',
-                    width: '3px',
-                    background: 'var(--aurora-pillar)',
-                    borderRadius: '0 4px 4px 0',
-                    boxShadow: 'var(--aurora-glow)',
-                    zIndex: 10
-                  }} />
-                )}
-                {/* Template Header */}
-                <div 
-                  id={`flat-item-${templateFlatIndex}`}
-                  onClick={() => toggleExpand(temp.filename)}
-                  style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    padding: '10px 14px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    background: isTemplateFocused ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
-                    borderTopLeftRadius: '11px',
-                    borderTopRightRadius: '11px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ 
-                      width: '28px', 
-                      height: '28px', 
+                {filteredTemplates.map((temp, index) => {
+                  const isExpanded = query ? true : expandedTemps.includes(temp.filename);
+                  const templateFlatIndex = flatItems.findIndex(i => i.id === temp.filename && i.type === 'template');
+                  const isTemplateFocused = focusedIndex === templateFlatIndex;
+
+                  return (
+                    <Draggable key={temp.filename} draggableId={temp.filename} index={index} isDragDisabled={!!query}>
+                      {(provided, snapshot) => (
+                        <div 
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`unified-glass-card ${isTemplateFocused ? 'lifted-card' : ''}`}
+                          style={{
+                            ...provided.draggableProps.style,
+                            opacity: snapshot.isDragging ? 0.8 : 1,
+                            border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                            background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
+                            boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
+                          }}
+                        >
+                          {isTemplateFocused && (
+                            <div style={{
+                              position: 'absolute',
+                              left: 0,
+                              top: '12%',
+                              bottom: '12%',
+                              width: '3px',
+                              background: 'var(--aurora-pillar)',
+                              borderRadius: '0 4px 4px 0',
+                              boxShadow: 'var(--aurora-glow)',
+                              zIndex: 10
+                            }} />
+                          )}
+                          {temp.isDivider ? (
+                            <div
+                              id={`flat-item-${templateFlatIndex}`}
+                              className="interactive-element"
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '10px', 
+                                padding: '8px 14px',
+                                background: isTemplateFocused ? 'rgba(133, 153, 0, 0.1)' : 'transparent',
+                                borderRadius: '11px',
+                              }}
+                            >
+                              <div
+                                {...provided.dragHandleProps}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  color: 'var(--accent-green)',
+                                  cursor: 'grab',
+                                  padding: '4px',
+                                  marginRight: '-4px'
+                                }}
+                              >
+                                <IconGrip size={14} />
+                              </div>
+                              <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
+                              <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '1px' }}>{temp.name}</span>
+                              <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
+                              
+                              <button 
+                                className="btn-hover"
+                                onClick={async (e) => { 
+                                  e.stopPropagation(); 
+                                  if (window.confirm(`Delete divider "${temp.name}"?`)) {
+                                    const key = `delete-temp-${temp.filename}`;
+                                    setLoadingTasks(prev => ({ ...prev, [key]: true }));
+                                    // @ts-ignore
+                                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
+                                    setLoadingTasks(prev => ({ ...prev, [key]: false }));
+                                    onAction?.();
+                                  }
+                                }}
+                                disabled={loadingTasks[`delete-temp-${temp.filename}`]}
+                                style={{ backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', border: '1px solid rgba(220, 50, 47, 0.2)', width: '20px', height: '20px', padding: 0 }}
+                                title="Delete Divider"
+                              >
+                                {loadingTasks[`delete-temp-${temp.filename}`] ? <IconLoader size={10} /> : <IconTrash size={10} />}
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                            {/* Template Header */}
+                            <div 
+                              id={`flat-item-${templateFlatIndex}`}
+                            onClick={() => toggleExpand(temp.filename)}
+                            style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              padding: '10px 14px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              background: isTemplateFocused ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
+                              borderTopLeftRadius: '11px',
+                              borderTopRightRadius: '11px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div
+                                {...provided.dragHandleProps}
+                                onClick={(e) => { e.stopPropagation(); }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  color: 'var(--text-dim)',
+                                  cursor: 'grab',
+                                  padding: '4px',
+                                  marginRight: '-4px'
+                                }}
+                              >
+                                <IconGrip size={14} />
+                              </div>
+                              <div style={{ 
+                                width: '28px', 
+                                height: '28px', 
                       borderRadius: '6px', 
                       background: 'rgba(38, 139, 210, 0.1)', 
                       display: 'flex', 
@@ -286,41 +414,65 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                   </div>
                 </div>
 
-                {/* Tasks List */}
-                {isExpanded && (
-                  <div style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    padding: '6px 10px 10px 10px', 
-                    gap: '4px', 
-                    background: 'rgba(0, 0, 0, 0.15)',
-                    borderBottomLeftRadius: '11px',
-                    borderBottomRightRadius: '11px',
-                    borderTop: '1px solid var(--border-glass)'
-                  }}>
-                    {temp.tasks && temp.tasks.length > 0 ? temp.tasks.map((task) => {
-                      const taskId = `${temp.filename}-${task.id}`;
-                      const taskFlatIndex = flatItems.findIndex(i => i.id === taskId && i.type === 'task');
-                      const isTaskFocused = focusedIndex === taskFlatIndex;
+                        {/* Tasks List */}
+                        {isExpanded && (
+                          <Droppable droppableId={`tasks-${temp.filename}`} type="task" isDropDisabled={!!query}>
+                            {(provided) => (
+                              <div 
+                                ref={provided.innerRef}
+                                {...provided.droppableProps}
+                                style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  padding: '6px 10px 10px 10px', 
+                                  gap: '4px', 
+                                  background: 'rgba(0, 0, 0, 0.15)',
+                                  borderBottomLeftRadius: '11px',
+                                  borderBottomRightRadius: '11px',
+                                  borderTop: '1px solid var(--border-glass)'
+                                }}
+                              >
+                        {temp.tasks && temp.tasks.length > 0 ? temp.tasks.map((task, taskIndex) => {
+                          const taskId = `${temp.filename}-${task.id}`;
+                          const taskFlatIndex = flatItems.findIndex(i => i.id === taskId && i.type === 'task');
+                          const isTaskFocused = focusedIndex === taskFlatIndex;
 
-                      return (
-                        <div 
-                          key={taskId} 
-                          id={`flat-item-${taskFlatIndex}`}
-                          className="interactive-element"
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '10px', 
-                            backgroundColor: isTaskFocused ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
-                            padding: '6px 12px', 
-                            borderRadius: '6px',
-                            transition: 'all 0.15s ease',
-                            position: 'relative',
-                            overflow: 'hidden'
-                          }}
-                        >
-                          {isTaskFocused && (
+                          return (
+                            <Draggable key={task.id} draggableId={`task-${temp.filename}-${task.id}`} index={taskIndex} isDragDisabled={!!query}>
+                              {(provided, snapshot) => (
+                                <div 
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  id={`flat-item-${taskFlatIndex}`}
+                                  className="interactive-element"
+                                  style={{ 
+                                    ...provided.draggableProps.style,
+                                    opacity: snapshot.isDragging ? 0.8 : 1,
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '10px', 
+                                    backgroundColor: isTaskFocused ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                                    padding: '6px 12px', 
+                                    borderRadius: '6px',
+                                    transition: 'all 0.15s ease',
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                  }}
+                                >
+                                  <div
+                                    {...provided.dragHandleProps}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      color: 'var(--text-dim)',
+                                      cursor: 'grab',
+                                      padding: '4px',
+                                      marginLeft: '-6px'
+                                    }}
+                                  >
+                                    <IconGrip size={12} />
+                                  </div>
+                                  {isTaskFocused && (
                             <div style={{
                               position: 'absolute',
                               left: 0,
@@ -339,7 +491,25 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                               <IconTerminal size={12} />
                             )}
                           </div>
-                          <span style={{ fontSize: '12px', color: isTaskFocused ? 'var(--text-main)' : '#a9b1d6', flex: 1, fontWeight: isTaskFocused ? '700' : '500' }}>{task.name}</span>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', color: isTaskFocused ? 'var(--text-main)' : '#a9b1d6', fontWeight: isTaskFocused ? '700' : '500' }}>{task.name}</span>
+                            {task.isExecutable === false && (
+                              <button 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const cleanPath = task.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
+                                  // @ts-ignore
+                                  await window.electronAPI.executeCommand(`chmod +x "${cleanPath}"`);
+                                  onAction?.();
+                                }}
+                                className="btn-hover"
+                                style={{ fontSize: '10px', color: '#f7768e', background: 'rgba(247, 118, 142, 0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(247, 118, 142, 0.2)', fontWeight: '600', cursor: 'pointer' }} 
+                                title="Click to make this script executable (chmod +x)."
+                              >
+                                +x Required
+                              </button>
+                            )}
+                          </div>
                           
                           <div style={{ display: 'flex', gap: '6px', opacity: isTaskFocused ? 1 : 0.6, transition: 'opacity 0.2s' }}>
                             <button 
@@ -436,17 +606,30 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                               RUN
                             </button>
                           </div>
+                                </div>
+                              )}
+                            </Draggable>
+                            );
+                          }) : (
+                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '10px', textAlign: 'center' }}>No scripts in this template.</div>
+                          )}
+                          {provided.placeholder}
                         </div>
-                      );
-                    }) : (
-                      <div style={{ fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic', padding: '10px', textAlign: 'center' }}>No scripts in this template.</div>
-                    )}
-                  </div>
+                      )}
+                    </Droppable>
+                  )}
+                  </>
                 )}
               </div>
-            );
-          })}
+            )}
+          </Draggable>
+          );
+        })}
+        {provided.placeholder}
         </div>
+        )}
+        </Droppable>
+        </DragDropContext>
       )}
 
       {showIconPicker && (

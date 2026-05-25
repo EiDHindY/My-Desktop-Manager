@@ -343,7 +343,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
   };
 
-  const renderFolder = (folderName: string, index: number, isDraggable: boolean, displayName?: string) => {
+  const renderFolder = (folderName: string, index: number, isDraggable: boolean, displayName?: string, isGridView = false) => {
     const label = displayName || folderName;
     const desktops = folders[folderName] || [];
 
@@ -568,6 +568,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                         onExecuteCommand={executeMenuCommand}
                         onPrompt={(title, defaultVal, command) => setPromptConfig({ title, defaultValue: defaultVal, command })}
                         onShowIconPicker={setShowIconPicker}
+                        hideActionButtons={isGridView}
                       />
                     );
                   })}
@@ -621,7 +622,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                   const displayName = parts[parts.length - 1];
                   return (
                     <div key={folderName}>
-                      {renderFolder(folderName, index, false, displayName)}
+                      {renderFolder(folderName, index, false, displayName, true)}
                     </div>
                   );
                 })}
@@ -638,7 +639,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
 
                     return (
                       <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
-                        {renderFolder(folderName, index + 2, false, displayName)}
+                        {renderFolder(folderName, index + 2, false, displayName, false)}
                       </div>
                     );
                   })}
@@ -657,7 +658,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
 
                     return (
                       <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
-                        {renderFolder(folderName, index, true, displayName)}
+                        {renderFolder(folderName, index, true, displayName, false)}
                       </div>
                     );
                   })}
@@ -709,6 +710,17 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
               <div className="menu-item" onClick={() => setPromptConfig({ title: 'Rename Desktop', defaultValue: desktopNames[contextMenu.id.split('___')[0]] || '', command: `RENAME:${contextMenu.id}` })}>
                 <IconPencil size={14} /> Rename
               </div>
+              <div className="menu-item" onClick={() => {
+                const pureId = contextMenu.id.split('___')[0];
+                setPromptConfig({ title: 'Global Shortcut (e.g. Control+Alt+1)', defaultValue: desktopShortcuts[pureId] || '', command: `SET_SHORTCUT:${contextMenu.id}` });
+              }}>
+                <IconKeyboard size={14} /> Set Hotkey
+              </div>
+              {desktopShortcuts[contextMenu.id.split('___')[0]] && (
+                <div className="menu-item" onClick={() => executeMenuCommand(`SET_SHORTCUT:${contextMenu.id}:`)} style={{ color: 'var(--accent-red)' }}>
+                  <IconWipe size={14} /> Clear Hotkey
+                </div>
+              )}
               <div className="menu-item" onClick={async (e) => {
                 e.stopPropagation();
                 try {

@@ -38,13 +38,14 @@ interface DesktopItemProps {
   onExecuteCommand: (cmd: string) => void;
   onPrompt: (title: string, defaultVal: string, command: string) => void;
   onShowIconPicker: (id: string) => void;
+  hideActionButtons?: boolean;
 }
 
 const DesktopItemComponent: React.FC<DesktopItemProps> = ({
   desktopId, pureId, dIndex, query, displayName, isActive, isReturn, winCount, hasWindows,
   isSelected, isHovered, priority, priorityColor, hasScriptAttached, isDeleting,
   icons, shortcut, hasShortcutError, folderName,
-  onContextMenu, onSwitch, onHover, onExecuteCommand, onPrompt, onShowIconPicker
+  onContextMenu, onSwitch, onHover, onExecuteCommand, onPrompt, onShowIconPicker, hideActionButtons
 }) => {
   let stateClass = "desktop-item ";
   if (isActive) stateClass += "active ";
@@ -112,90 +113,92 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
               color: isHovered && priority !== 'None' ? priorityColor : 'inherit'
             }}>{displayName}</span>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease', flexShrink: 0 }}>
-              {hasScriptAttached && (
+            {!hideActionButtons && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: isHovered ? 1 : 0, transition: 'opacity 0.2s ease', flexShrink: 0 }}>
+                {hasScriptAttached && (
+                  <div 
+                    className="btn-hover"
+                    onClick={(e) => { e.stopPropagation(); onExecuteCommand(`SUMMON:${desktopId}`); }}
+                    style={{ 
+                      backgroundColor: 'rgba(108, 113, 196, 0.15)', 
+                      color: 'var(--accent-purple)', 
+                      width: '24px', 
+                      height: '24px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      border: '1px solid rgba(108, 113, 196, 0.3)'
+                    }}
+                    title="Summon"
+                  >
+                    <IconZap size={14} />
+                  </div>
+                )}
+                
                 <div 
                   className="btn-hover"
-                  onClick={(e) => { e.stopPropagation(); onExecuteCommand(`SUMMON:${desktopId}`); }}
+                  onClick={(e) => { e.stopPropagation(); onPrompt('Rename Desktop', displayName, `RENAME:${desktopId}`); }}
                   style={{ 
-                    backgroundColor: 'rgba(108, 113, 196, 0.15)', 
-                    color: 'var(--accent-purple)', 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                    color: 'var(--text-main)', 
                     width: '24px', 
                     height: '24px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '1px solid rgba(108, 113, 196, 0.3)'
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
                   }}
-                  title="Summon"
+                  title="Rename"
                 >
-                  <IconZap size={14} />
+                  <IconPencil size={14} />
                 </div>
-              )}
-              
-              <div 
-                className="btn-hover"
-                onClick={(e) => { e.stopPropagation(); onPrompt('Rename Desktop', displayName, `RENAME:${desktopId}`); }}
-                style={{ 
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                  color: 'var(--text-main)', 
-                  width: '24px', 
-                  height: '24px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                }}
-                title="Rename"
-              >
-                <IconPencil size={14} />
-              </div>
 
-              <div 
-                className="btn-hover"
-                onClick={(e) => { e.stopPropagation(); onPrompt('Global Shortcut (e.g. Control+Alt+1)', shortcut || '', `SET_SHORTCUT:${desktopId}`); }}
-                style={{ 
-                  backgroundColor: shortcut ? 'rgba(38, 139, 210, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
-                  color: hasShortcutError ? 'var(--accent-red)' : (shortcut ? 'var(--accent-blue)' : 'var(--text-main)'), 
-                  width: '24px', 
-                  height: '24px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  border: hasShortcutError ? '1px solid rgba(220, 50, 47, 0.4)' : (shortcut ? '1px solid rgba(38, 139, 210, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
-                }}
-                title={hasShortcutError ? `FAILED: ${shortcut}` : (shortcut ? `Hotkey: ${shortcut}` : "Set Hotkey")}
-              >
-                <IconKeyboard size={14} />
-              </div>
-
-              {shortcut && (
                 <div 
                   className="btn-hover"
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    onExecuteCommand(`SET_SHORTCUT:${desktopId}:`);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onPrompt('Global Shortcut (e.g. Control+Alt+1)', shortcut || '', `SET_SHORTCUT:${desktopId}`); }}
                   style={{ 
-                    backgroundColor: 'rgba(220, 50, 47, 0.1)', 
-                    color: 'var(--accent-red)', 
-                    width: '18px', 
-                    height: '18px', 
+                    backgroundColor: shortcut ? 'rgba(38, 139, 210, 0.15)' : 'rgba(255, 255, 255, 0.05)', 
+                    color: hasShortcutError ? 'var(--accent-red)' : (shortcut ? 'var(--accent-blue)' : 'var(--text-main)'), 
+                    width: '24px', 
+                    height: '24px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '1px solid rgba(220, 50, 47, 0.2)',
-                    marginLeft: '-4px',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    zIndex: 10
+                    border: hasShortcutError ? '1px solid rgba(220, 50, 47, 0.4)' : (shortcut ? '1px solid rgba(38, 139, 210, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)')
                   }}
-                  title="Clear Hotkey"
+                  title={hasShortcutError ? `FAILED: ${shortcut}` : (shortcut ? `Hotkey: ${shortcut}` : "Set Hotkey")}
                 >
-                  ×
+                  <IconKeyboard size={14} />
                 </div>
-              )}
-            </div>
+
+                {shortcut && (
+                  <div 
+                    className="btn-hover"
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onExecuteCommand(`SET_SHORTCUT:${desktopId}:`);
+                    }}
+                    style={{ 
+                      backgroundColor: 'rgba(220, 50, 47, 0.1)', 
+                      color: 'var(--accent-red)', 
+                      width: '18px', 
+                      height: '18px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      border: '1px solid rgba(220, 50, 47, 0.2)',
+                      marginLeft: '-4px',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      zIndex: 10
+                    }}
+                    title="Clear Hotkey"
+                  >
+                    ×
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', flexShrink: 0 }}>
               {isReturn && !isActive && (

@@ -93,6 +93,8 @@ if (command.startsWith('RENAME:')) {
     handleImportFolder(command.substring(14));
 } else if (command.startsWith('CREATE_TEMPLATE:')) {
     handleCreateTemplate(command.substring(16));
+} else if (command.startsWith('CREATE_TEMPLATE_DIVIDER:')) {
+    handleCreateTemplate(command.substring(24), true);
 } else if (command.startsWith('IMPORT_SCRIPT_TO_TEMPLATE:')) {
     const parts = command.substring(26).split(":");
     const filename = parts[0];
@@ -210,6 +212,45 @@ if (command.startsWith('RENAME:')) {
             console.log('Saved new folder order:', newOrder);
         } catch(e) {
             console.error('Error saving folder order:', e);
+        }
+    }
+} else if (command.startsWith('REORDER_TEMPLATES:')) {
+    const foldersStr = command.substring(18);
+    if (foldersStr) {
+        const newOrder = foldersStr.split(',');
+        try {
+            const { readFileSync, writeFileSync } = require('fs');
+            const libPath = join(libraryDir, 'library.json');
+            let data: any = {};
+            try { data = JSON.parse(readFileSync(libPath, 'utf-8')); } catch(e) {}
+            data.folder_order = newOrder;
+            writeFileSync(libPath, JSON.stringify(data, null, 2));
+            console.log('Saved new template order:', newOrder);
+        } catch(e) {
+            console.error('Error saving template order:', e);
+        }
+    }
+} else if (command.startsWith('MOVE_TASK:')) {
+    const parts = command.substring(10).split(':');
+    if (parts.length >= 3) {
+        const filename = parts[0];
+        const taskId = parts[1];
+        const index = parseInt(parts[2]);
+        try {
+            const { readFileSync, writeFileSync } = require('fs');
+            const templatePath = join(templatesDir, filename);
+            const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+            if (data.tasks) {
+                const taskIndex = data.tasks.findIndex((t: any) => t.id === taskId);
+                if (taskIndex !== -1) {
+                    const [task] = data.tasks.splice(taskIndex, 1);
+                    data.tasks.splice(index, 0, task);
+                    writeFileSync(templatePath, JSON.stringify(data, null, 2));
+                    console.log(`Moved task ${taskId} in ${filename} to index ${index}`);
+                }
+            }
+        } catch(e) {
+            console.error('Error moving task:', e);
         }
     }
 }
