@@ -84,7 +84,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
   const handleDeployTemplate = async (templateName: string) => {
     setLoadingTasks(prev => ({ ...prev, [templateName]: true }));
     // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DEPLOY_ALL:${templateName}"`);
+    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DEPLOY_ALL:${templateName}"`);
     setLoadingTasks(prev => ({ ...prev, [templateName]: false }));
   };
 
@@ -92,7 +92,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
     const key = `${templateName}-${taskId}`;
     setLoadingTasks(prev => ({ ...prev, [key]: true }));
     // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DEPLOY_TASK:${templateName}:${taskId}"`);
+    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DEPLOY_TASK:${templateName}:${taskId}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
   };
 
@@ -101,7 +101,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
     setLoadingTasks(prev => ({ ...prev, [key]: true }));
     const iconsStr = icons.join(',');
     // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_ICON:${filename}:${taskId}:${iconsStr}"`);
+    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_ICON:${filename}:${taskId}:${iconsStr}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
     onAction?.();
   };
@@ -122,7 +122,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
       setLocalTemplates(newTemplates);
       const newOrderStr = newTemplates.map(t => t.filename).join(',');
       // @ts-ignore
-      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "REORDER_TEMPLATES:${newOrderStr}"`);
+      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "REORDER_TEMPLATES:${newOrderStr}"`);
       onAction?.();
     } else if (type === 'task') {
       const templateFilename = source.droppableId.replace('tasks-', '');
@@ -142,7 +142,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
       
       setLocalTemplates(newTemplates);
       // @ts-ignore
-      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "MOVE_TASK:${templateFilename}:${removed.id}:${destination.index}"`);
+      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "MOVE_TASK:${templateFilename}:${removed.id}:${destination.index}"`);
       onAction?.();
     }
   };
@@ -277,7 +277,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                     const key = `delete-temp-${temp.filename}`;
                                     setLoadingTasks(prev => ({ ...prev, [key]: true }));
                                     // @ts-ignore
-                                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
+                                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
                                     setLoadingTasks(prev => ({ ...prev, [key]: false }));
                                     onAction?.();
                                   }
@@ -356,7 +356,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                             const key = `import-script-${temp.filename}`;
                             setLoadingTasks(prev => ({ ...prev, [key]: true }));
                             // @ts-ignore
-                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "IMPORT_SCRIPT_TO_TEMPLATE:${temp.filename}:${scriptPath}"`);
+                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_SCRIPT_TO_TEMPLATE:${temp.filename}:${scriptPath}"`);
                             setLoadingTasks(prev => ({ ...prev, [key]: false }));
                             onAction?.();
                           }
@@ -375,7 +375,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                             const key = `delete-temp-${temp.filename}`;
                             setLoadingTasks(prev => ({ ...prev, [key]: true }));
                             // @ts-ignore
-                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
+                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
                             setLoadingTasks(prev => ({ ...prev, [key]: false }));
                             onAction?.();
                           }
@@ -533,7 +533,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                   const key = `delete-task-${taskId}`;
                                   setLoadingTasks(prev => ({ ...prev, [key]: true }));
                                   // @ts-ignore
-                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}"`);
+                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}"`);
                                   setLoadingTasks(prev => ({ ...prev, [key]: false }));
                                   onAction?.();
                                 }
@@ -565,7 +565,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                   const key = `set-shortcut-${temp.filename}-${task.id}`;
                                   setLoadingTasks(prev => ({ ...prev, [key]: true }));
                                   // @ts-ignore
-                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}:${val}"`);
+                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}:${val}"`);
                                   setLoadingTasks(prev => ({ ...prev, [key]: false }));
                                   onAction?.();
                                 }

@@ -75,7 +75,7 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
         if (kwinIdx !== null) {
             log(`Triggering window closing on desktop ${kwinIdx} (0-based) in background`);
             // cli.ts now handles the 0->1 conversion
-            runCommand(`(npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" CLOSE_WINDOWS:${kwinIdx} && notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} cleaned up") &`);
+            runCommand(`(npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" CLOSE_WINDOWS:${kwinIdx} && notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} cleaned up") &`);
         } else {
             runCommand(`notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} removed from list"`);
         }

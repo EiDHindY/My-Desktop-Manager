@@ -263,7 +263,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   const executeMenuCommand = async (command: string) => {
     setContextMenu(null);
     // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "${command}"`);
+    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${command}"`);
     if (onAction) onAction();
   };
 

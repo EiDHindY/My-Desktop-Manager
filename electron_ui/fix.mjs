@@ -15,7 +15,7 @@ const missingCode = `
 
   const executeMenuCommand = (command: string) => {
     // @ts-ignore
-    window.electronAPI.executeCommand(\`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "\${command}"\`);
+    window.electronAPI.executeCommand(\`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "\${command}"\`);
   };
 
   const handleContextMenu = (e: React.MouseEvent, type: 'folder' | 'desktop', id: string, folderName?: string) => {

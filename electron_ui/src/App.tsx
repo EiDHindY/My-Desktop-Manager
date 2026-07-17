@@ -39,7 +39,7 @@ function App() {
     _setLastActionTimeState(t)
   }, [])
   const dataRef = useRef<any>(null)
-  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string} | null>(null)
+  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string} | null>(null)
   const [isSplitLayout, setIsSplitLayout] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('desktopManager_liveSplitLayout');
@@ -496,7 +496,7 @@ function App() {
               <>
                 <button 
                   className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE' })}
+                  onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' })}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Create New Template Folder"
                 >
@@ -518,7 +518,7 @@ function App() {
                     const folderPath = await window.electronAPI.nativeAction('select-folder');
                     if (folderPath) {
                       // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
+                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
                       setLastActionTime(Date.now());
                       loadTemplates();
                     }
@@ -593,7 +593,7 @@ function App() {
                   className="btn-hover"
                   onClick={async () => {
                     // @ts-ignore
-                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
+                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
                     setLastActionTime(Date.now());
                   }}
                   style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -606,7 +606,7 @@ function App() {
                   onClick={async () => {
                     if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
                       // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
+                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
                       setLastActionTime(Date.now());
                     }
                   }}
@@ -659,6 +659,7 @@ function App() {
       {promptConfig && (
         <PromptModal 
           title={promptConfig.title}
+          description={promptConfig.description}
           defaultValue={promptConfig.defaultValue}
           onSubmit={async (value) => {
             if (promptConfig.command === 'NOTES_ADD_FOLDER' || promptConfig.command === 'NOTES_ADD_DIVIDER') {
@@ -689,7 +690,7 @@ function App() {
               });
             } else {
               // @ts-ignore
-              await window.electronAPI.executeCommand(`npx tsx "/home/dod/projects/Desktop Manager/shared_backend/cli.ts" "${promptConfig.command}:${value}"`);
+              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${promptConfig.command}:${value}"`);
             }
             setLastActionTime(Date.now());
             loadTemplates();

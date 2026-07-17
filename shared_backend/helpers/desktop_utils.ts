@@ -87,7 +87,7 @@ export function getScore(d: Desktop): number {
 }
 
 export function buildMenuCommand(currentDesktops: Desktop[], currentDesktopUuid: string): string {
-    let cmd = `'/home/dod/projects/Desktop Manager/python_ui/switcher-menu.py' --title "Desktop Manager" --menu "Select:" --current "${currentDesktopUuid}"`;
+    let cmd = `'/home/dod/Projects/My_Desktop_Manager/python_ui/switcher-menu.py' --title "Desktop Manager" --menu "Select:" --current "${currentDesktopUuid}"`;
     
     const sorted = [...currentDesktops].sort((a, b) => {
         const scoreA = getScore(a);

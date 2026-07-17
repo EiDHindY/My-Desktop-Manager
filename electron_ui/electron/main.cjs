@@ -18,10 +18,11 @@ const PID_FILE = '/tmp/desktop-manager.pid';
 function showWindow() {
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
+  
+  // Always show and focus (do not hide). The KDE Window Rule handles the Wayland override!
   mainWindow.show();
-  mainWindow.moveTop();
+  mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.focus();
-  app.focus({ steal: true });
 }
 
 // ─── SIGUSR2: Fired by KDE Custom Shortcut — zero latency, compositor-native ──
@@ -224,6 +225,7 @@ async function performFetchDesktops(scanWindows = true) {
       windowScanInProgress = true;
       try {
         const winScanScript = `
+export PATH=$PATH:~/.local/bin
 for id in $(kdotool search --class '.*' 2>/dev/null); do
   idx=$(kdotool get_desktop_for_window "$id" 2>/dev/null)
   [[ "$idx" =~ ^[0-9]+$ ]] && [[ "$idx" -gt 0 ]] && echo "$idx"

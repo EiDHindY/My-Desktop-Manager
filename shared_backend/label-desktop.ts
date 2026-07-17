@@ -66,7 +66,7 @@ function main() {
             execSync('sleep 0.3');
         } else if (result.startsWith('RENAME:')) {
             const key = result.substring(7), id = key.split("___")[0], old = desktopMap.get(key) || "";
-            const fresh = runCommand(`'/home/dod/projects/Desktop Manager/python_ui/rename-box.py' "${old}"`);
+            const fresh = runCommand(`'/home/dod/Projects/My_Desktop_Manager/python_ui/rename-box.py' "${old}"`);
             if (fresh) {
                 const parts = fresh.split('|');
                 const newName = parts[0] || "Empty";

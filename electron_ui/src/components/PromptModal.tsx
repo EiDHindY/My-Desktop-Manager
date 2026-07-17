@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 
 interface PromptModalProps {
   title: string;
+  description?: string;
   defaultValue: string;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }
 
-export default function PromptModal({ title, defaultValue, onSubmit, onCancel }: PromptModalProps) {
+export default function PromptModal({ title, description, defaultValue, onSubmit, onCancel }: PromptModalProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
   
@@ -90,7 +91,25 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
           fontWeight: '800',
           letterSpacing: '0.5px'
         }}>{title}</h3>
+
+        {description && (
+          <p style={{
+            margin: '-10px 0 0 0',
+            color: 'var(--text-dim)',
+            fontSize: '13px',
+            textAlign: 'center',
+            opacity: 0.8
+          }}>
+            {description}
+          </p>
+        )}
         
+        <style>{`
+          .prompt-modal-input::selection {
+            background-color: var(--accent-blue);
+            color: #ffffff;
+          }
+        `}</style>
         <input 
           ref={inputRef}
           type="text" 
@@ -99,18 +118,19 @@ export default function PromptModal({ title, defaultValue, onSubmit, onCancel }:
           onKeyDown={handleKeyDown}
           style={{
             width: '100%',
+            boxSizing: 'border-box',
             padding: '14px',
             borderRadius: '12px',
             backgroundColor: 'rgba(0, 33, 43, 0.6)',
             border: '2px solid var(--border-glass)',
-            color: 'var(--text-main)',
+            color: '#e0e0e0',
             outline: 'none',
             fontSize: '18px',
             textAlign: 'center',
             transition: 'all 0.3s ease',
             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
           }}
-          className="search-input-hover"
+          className="search-input-hover prompt-modal-input"
         />
 
         {isDesktopOp && (
