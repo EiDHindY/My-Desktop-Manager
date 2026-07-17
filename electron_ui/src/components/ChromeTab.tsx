@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { IconChrome, IconRocket } from './Icons';
+import { IconChrome, IconRocket, IconCopy } from './Icons';
 
 interface ChromeProfile {
   id: string;
@@ -157,9 +157,48 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
               overflow: 'hidden', 
               textOverflow: 'ellipsis',
               marginBottom: '2px',
-              transition: 'color 0.2s'
+              transition: 'color 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}>
-              {profile.name}
+              <span>{profile.name}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{
+                  backgroundColor: isSelected ? 'rgba(38, 139, 210, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: isSelected ? 'var(--accent-blue)' : 'var(--text-dim)',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontFamily: 'monospace',
+                  border: isSelected ? '1px solid rgba(38, 139, 210, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  fontWeight: 'normal'
+                }}>
+                  --profile-directory="{profile.id}"
+                </span>
+                <button
+                  className="btn-hover"
+                  title="Copy to clipboard"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(`--profile-directory="${profile.id}"`);
+                  }}
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: isSelected ? 'var(--accent-blue)' : 'var(--text-dim)',
+                    border: 'none',
+                    padding: '2px',
+                    width: '20px',
+                    height: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: 0.7
+                  }}
+                >
+                  <IconCopy size={12} />
+                </button>
+              </div>
             </div>
             <div style={{ 
               color: 'var(--text-dim)', 

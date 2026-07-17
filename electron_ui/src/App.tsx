@@ -83,8 +83,8 @@ function App() {
         // @ts-ignore
         window.electronAPI.readJSON('notes.json'),
         // @ts-ignore
-        // Only run the expensive window scan when on the Live tab
-        window.electronAPI.fetchDesktops(activeTabRef.current === 'live'),
+        // Always run the window scan to keep the Active/Empty header counts accurate across all tabs
+        window.electronAPI.fetchDesktops(true),
         // @ts-ignore
         window.electronAPI.readJSON('history.json')
       ]).then(([sessionData, notesData, desktopInfo, historyData]) => {
@@ -647,7 +647,7 @@ function App() {
                   isSplitLayout={isSplitLayout}
                 />
               )}
-              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} />}
+              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
               {activeTab === 'notes' && <NotesTab notesData={data?.notes} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 

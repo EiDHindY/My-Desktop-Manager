@@ -30,7 +30,7 @@ interface FlatItem {
   taskId?: string;
 }
 
-export default function TempsTab({ templates, searchQuery, onAction }: { templates: Template[], searchQuery?: string, onAction?: () => void }) {
+export default function TempsTab({ templates, searchQuery, onAction, setPromptConfig }: { templates: Template[], searchQuery?: string, onAction?: () => void, setPromptConfig?: any }) {
   const [localTemplates, setLocalTemplates] = useState<Template[]>(templates);
   const [expandedTemps, setExpandedTemps] = useState<string[]>([]);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
@@ -348,6 +348,24 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                     <div style={{ display: 'flex', gap: '4px', marginRight: '4px' }}>
                       <button 
                         className="btn-hover"
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          if (setPromptConfig) {
+                            setPromptConfig({ 
+                              title: `Create Script in ${temp.name}`, 
+                              description: 'Path: ~/.local/bin/Scripts/', 
+                              defaultValue: 'my_new_script.sh', 
+                              command: `CREATE_SCRIPT_TO_TEMPLATE:${temp.filename}` 
+                            });
+                          }
+                        }}
+                        style={{ backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(38, 139, 210, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                        title="Create Script"
+                      >
+                        <IconTerminal size={14} />
+                      </button>
+                      <button 
+                        className="btn-hover"
                         onClick={async (e) => { 
                           e.stopPropagation(); 
                           // @ts-ignore
@@ -518,7 +536,7 @@ export default function TempsTab({ templates, searchQuery, onAction }: { templat
                                 e.stopPropagation(); 
                                 const cleanPath = task.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
                                 // @ts-ignore
-                                window.electronAPI.executeCommand(`kwrite "${cleanPath}"`);
+                                window.electronAPI.executeCommand(`kate "${cleanPath}"`);
                               }}
                               style={{ backgroundColor: 'rgba(224, 175, 104, 0.1)', color: 'var(--accent-yellow, #e0af68)', border: '1px solid rgba(224, 175, 104, 0.2)', width: '24px', height: '24px', padding: 0 }}
                               title="Edit Script"

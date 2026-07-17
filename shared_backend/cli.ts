@@ -16,6 +16,7 @@ import {
     handleImportFolder,
     handleCreateTemplate,
     handleImportScriptToTemplate,
+    handleCreateScriptAndAddToTemplate,
     handleDeleteTemplate,
     handleDeleteTemplateTask,
     handleSetTemplateTaskIcon,
@@ -100,6 +101,11 @@ if (command.startsWith('RENAME:')) {
     const filename = parts[0];
     const scriptPath = parts.slice(1).join(":");
     handleImportScriptToTemplate(filename, scriptPath);
+} else if (command.startsWith('CREATE_SCRIPT_TO_TEMPLATE:')) {
+    const parts = command.substring(26).split(":");
+    const filename = parts[0];
+    const scriptName = parts.slice(1).join(":");
+    handleCreateScriptAndAddToTemplate(filename, scriptName);
 } else if (command.startsWith('DELETE_TEMPLATE:')) {
     handleDeleteTemplate(command.substring(16));
 } else if (command.startsWith('DELETE_TEMPLATE_TASK:')) {

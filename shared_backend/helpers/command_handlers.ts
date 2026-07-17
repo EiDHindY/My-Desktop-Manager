@@ -622,6 +622,37 @@ export function handleImportScriptToTemplate(filename: string, scriptPath: strin
         console.error("Import Script to Template error:", e);
     }
 }
+
+export function handleCreateScriptAndAddToTemplate(filename: string, scriptName: string) {
+    try {
+        const scriptsDir = join(process.env.HOME || '', '.local', 'bin', 'Scripts');
+        if (!existsSync(scriptsDir)) {
+            mkdirSync(scriptsDir, { recursive: true });
+        }
+        
+        // Ensure .sh extension
+        const finalScriptName = scriptName.endsWith('.sh') ? scriptName : `${scriptName}.sh`;
+        const scriptPath = join(scriptsDir, finalScriptName);
+        
+        // Create file with shebang
+        writeFileSync(scriptPath, '#!/bin/bash\n\n');
+        
+        // Make executable
+        try {
+            // fs.chmodSync sometimes has issues with specific node versions and masks, 
+            // using exact octal or fallback to command line
+            runCommand(`chmod +x "${scriptPath}"`);
+        } catch(e) {}
+        
+        // Call the existing import function to attach it to the template
+        handleImportScriptToTemplate(filename, scriptPath);
+        
+        runCommand(`notify-send "Desktop Manager" "✨ Created new script: '${finalScriptName}'"`);
+    } catch (e) {
+        console.error("Create Script and Add to Template error:", e);
+        runCommand(`notify-send "Desktop Manager" "❌ Failed to create script"`);
+    }
+}
 export function handleSetTemplateTaskIcon(filename: string, taskId: string, iconsStr: string | null) {
     try {
         const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
