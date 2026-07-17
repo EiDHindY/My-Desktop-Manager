@@ -27,14 +27,15 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         onSubmit(value + (isDesktopOp ? '|None' : ''));
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         onCancel();
       }
     };

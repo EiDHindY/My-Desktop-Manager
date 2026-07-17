@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip } from './Icons';
+import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip, IconFileText, IconImport, IconType, IconMonitor } from './Icons';
 import IconPicker from './IconPicker';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
@@ -381,9 +381,9 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                         }}
                         disabled={loadingTasks[`import-script-${temp.filename}`]}
                         style={{ backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', border: '1px solid rgba(133, 153, 0, 0.2)', width: '24px', height: '24px', padding: 0 }}
-                        title="Add Script"
+                        title="Import Script"
                       >
-                        {loadingTasks[`import-script-${temp.filename}`] ? <IconLoader size={12} /> : <IconFilePlus size={14} />}
+                        {loadingTasks[`import-script-${temp.filename}`] ? <IconLoader size={12} /> : <IconImport size={14} />}
                       </button>
                       <button 
                         className="btn-hover"
@@ -426,8 +426,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                         letterSpacing: '0.5px'
                       }}
                     >
-                      {loadingTasks[temp.name] ? <IconLoader size={12} /> : <IconPlay size={12} />} 
-                      {loadingTasks[temp.name] ? '...' : 'Deploy'}
+                      {loadingTasks[temp.name] ? <IconLoader size={12} /> : <IconMonitor size={12} />} 
+                      {loadingTasks[temp.name] ? '...' : 'Deploy All'}
                     </button>
                   </div>
                 </div>
@@ -534,6 +534,24 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                               className="btn-hover"
                               onClick={(e) => { 
                                 e.stopPropagation(); 
+                                if (setPromptConfig) {
+                                  setPromptConfig({ 
+                                    title: `Rename Script`, 
+                                    description: `Rename '${task.name}'. Include .sh if you want to change extension.`, 
+                                    defaultValue: task.name, 
+                                    command: `RENAME_TEMPLATE_SCRIPT:${temp.filename}:${task.id}` 
+                                  });
+                                }
+                              }}
+                              style={{ backgroundColor: 'rgba(108, 113, 196, 0.1)', color: 'var(--accent-purple)', border: '1px solid rgba(108, 113, 196, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                              title="Rename Script"
+                            >
+                              <IconType size={12} />
+                            </button>
+                            <button 
+                              className="btn-hover"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
                                 const cleanPath = task.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
                                 // @ts-ignore
                                 window.electronAPI.executeCommand(`kate "${cleanPath}"`);
@@ -620,8 +638,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 gap: '4px'
                               }}
                             >
-                              {loadingTasks[`${temp.name}-${task.id}`] ? <IconLoader size={10} /> : <IconPlay size={10} />} 
-                              RUN
+                              {loadingTasks[`${temp.name}-${task.id}`] ? <IconLoader size={10} /> : <IconMonitor size={10} />} 
+                              TO LIVE
                             </button>
                           </div>
                                 </div>

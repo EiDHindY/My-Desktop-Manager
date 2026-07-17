@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, accessSync, constants, mkdirSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, accessSync, constants, mkdirSync, renameSync } from 'fs';
+import { join, basename, extname, dirname } from 'path';
 import { execSync } from 'child_process';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
 import { Desktop } from './desktop_utils';
@@ -182,7 +182,15 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
 
         if (empties.length < tasks.length) return runCommand(`kdialog --msgbox "Not enough empty desktops (excluding your current one)."`);
         
-        let session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+        let session: any = { startup_apps: {}, folders: {}, folder_order: [] };
+        if (existsSync(sessionPath)) {
+            try {
+                session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+            } catch (e) {
+                console.error("Failed to parse session.json, starting fresh");
+            }
+        }
+        
         if (!session.startup_apps) session.startup_apps = {};
         if (!session.folders) session.folders = {};
         if (!session.folders[folderName]) session.folders[folderName] = [];
@@ -596,6 +604,68 @@ export function handleDeleteTemplateTask(filename: string, taskId: string) {
     }
 }
 
+export function handleRenameTemplateScript(filename: string, taskId: string, newName: string) {
+    try {
+        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        if (!existsSync(templatePath)) return;
+        
+        const data = JSON.parse(readFileSync(templatePath, 'utf-8'));
+        if (!data.tasks) return;
+        
+        const task = data.tasks.find((t: any) => t.id === taskId);
+        if (!task) return;
+
+        // Ensure new name has no bad characters if we are renaming a file
+        const safeNewName = newName.replace(/[^a-zA-Z0-9_\- \.]/g, '');
+        if (!safeNewName) return;
+
+        // Try to extract the physical script path
+        // Most scripts are formatted as: bash '/path/to/script.sh' or '/path/to/script'
+        let oldPath = '';
+        let isBashPrefixed = false;
+        const matchBash = task.script.match(/^bash '([^']+)'$/);
+        const matchDirect = task.script.match(/^'([^']+)'$/);
+        
+        if (matchBash) {
+            oldPath = matchBash[1];
+            isBashPrefixed = true;
+        } else if (matchDirect) {
+            oldPath = matchDirect[1];
+        }
+
+        if (oldPath && existsSync(oldPath)) {
+            // It's a real file, rename it
+            const dir = dirname(oldPath);
+            const ext = oldPath.endsWith('.sh') ? '.sh' : '';
+            // Make sure we append .sh if the old one had it, unless the user included it
+            let finalFileName = safeNewName;
+            if (ext && !finalFileName.endsWith(ext)) {
+                finalFileName += ext;
+            }
+            const newPath = join(dir, finalFileName);
+            
+            try {
+                renameSync(oldPath, newPath);
+                // Update the script command with the new path
+                task.script = isBashPrefixed ? `bash '${newPath}'` : `'${newPath}'`;
+            } catch (fsErr) {
+                console.error("Failed to rename physical file:", fsErr);
+                runCommand(`notify-send "Desktop Manager" "❌ Failed to rename physical file"`);
+                return; // Stop if physical rename fails
+            }
+        }
+        
+        // Update the display name (strip .sh for display)
+        task.name = safeNewName.replace(/\.sh$/, '');
+        
+        writeFileSync(templatePath, JSON.stringify(data, null, 2));
+        runCommand(`notify-send "Desktop Manager" "✏️ Renamed script to '${task.name}'"`);
+    } catch (e) {
+        console.error("Rename Template Script error:", e);
+        runCommand(`notify-send "Desktop Manager" "❌ Error renaming script"`);
+    }
+}
+
 export function handleImportScriptToTemplate(filename: string, scriptPath: string) {
     try {
         const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
@@ -634,8 +704,13 @@ export function handleCreateScriptAndAddToTemplate(filename: string, scriptName:
         const finalScriptName = scriptName.endsWith('.sh') ? scriptName : `${scriptName}.sh`;
         const scriptPath = join(scriptsDir, finalScriptName);
         
-        // Create file with shebang
-        writeFileSync(scriptPath, '#!/bin/bash\n\n');
+        // Create file with shebang and helper snippets
+        const templateContent = `#!/bin/bash
+sleep 1
+
+> /dev/null 2>&1 &
+`;
+        writeFileSync(scriptPath, templateContent);
         
         // Make executable
         try {

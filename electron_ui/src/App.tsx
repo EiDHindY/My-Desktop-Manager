@@ -5,7 +5,7 @@ import NotesTab from './components/NotesTab'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 
-import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid } from './components/Icons'
+import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
 import './App.css'
 
 function App() {
@@ -508,7 +508,7 @@ function App() {
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Add Group Divider"
                 >
-                  <IconLayoutGrid size={16} />
+                  <IconMinus size={16} />
                 </button>
                 <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button 
@@ -537,7 +537,7 @@ function App() {
                   style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
                   title="Open Scripts Directory"
                 >
-                  <IconTerminal size={13} /> Scripts
+                  <IconFolderOpen size={13} /> Scripts
                 </button>
               </>
             ) : activeTab === 'notes' ? (
@@ -556,7 +556,7 @@ function App() {
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Add Group Divider"
                 >
-                  <IconLayoutGrid size={16} />
+                  <IconMinus size={16} />
                 </button>
                 <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button

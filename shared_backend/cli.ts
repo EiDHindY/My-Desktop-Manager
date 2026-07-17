@@ -20,7 +20,8 @@ import {
     handleDeleteTemplate,
     handleDeleteTemplateTask,
     handleSetTemplateTaskIcon,
-    handleSetTemplateTaskShortcut
+    handleSetTemplateTaskShortcut,
+    handleRenameTemplateScript
 } from './helpers/command_handlers';
 import { saveSnapshot, applyTemplate } from './helpers/session_manager';
 
@@ -111,6 +112,12 @@ if (command.startsWith('RENAME:')) {
 } else if (command.startsWith('DELETE_TEMPLATE_TASK:')) {
     const parts = command.substring(21).split(":");
     handleDeleteTemplateTask(parts[0], parts[1]);
+} else if (command.startsWith('RENAME_TEMPLATE_SCRIPT:')) {
+    const parts = command.substring(23).split(":");
+    const filename = parts[0];
+    const taskId = parts[1];
+    const newName = parts.slice(2).join(":");
+    handleRenameTemplateScript(filename, taskId, newName);
 } else if (command.startsWith('SET_TEMPLATE_TASK_ICON:')) {
     const parts = command.substring(23).split(":");
     const filename = parts[0];
