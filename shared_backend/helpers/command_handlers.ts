@@ -10,8 +10,8 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
     const log = (msg: string) => {
         try {
             const time = new Date().toISOString();
-            // console.log(`[${time}] ${msg}`);
-            // appendFileSync(logPath, `[${time}] ${msg}\n`);
+            const { appendFileSync } = require('fs');
+            appendFileSync(logPath, `[${time}] ${msg}\n`);
         } catch (e) {}
     };
 
@@ -237,7 +237,11 @@ export function handleCreateTemplate(folderName: string, isDivider: boolean = fa
         if (!existsSync(templatesDir)) {
             mkdirSync(templatesDir, { recursive: true });
         }
-        const filename = folderName.toLowerCase().replace(/\s+/g, '_') + '.json';
+        let baseFilename = folderName.toLowerCase().replace(/\s+/g, '_');
+        if (isDivider) {
+            baseFilename += '_divider';
+        }
+        const filename = baseFilename + '.json';
         const templatePath = join(templatesDir, filename);
 
         if (existsSync(templatePath)) {
@@ -575,10 +579,21 @@ export function handleImportFolder(folderPath: string) {
 
 export function handleDeleteTemplate(filename: string) {
     try {
-        const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
+        const libraryDir = join(process.env.HOME || '', '.config', 'desktop-manager');
+        const templatePath = join(libraryDir, 'templates', filename);
         if (existsSync(templatePath)) {
             unlinkSync(templatePath);
             runCommand(`notify-send "Desktop Manager" "🗑️ Deleted template '${filename}'"`);
+            
+            // Also remove from library.json folder_order so it stops showing up in the UI
+            const libPath = join(libraryDir, 'library.json');
+            if (existsSync(libPath)) {
+                const data = JSON.parse(readFileSync(libPath, 'utf-8'));
+                if (data.folder_order) {
+                    data.folder_order = data.folder_order.filter((f: string) => f !== filename);
+                    writeFileSync(libPath, JSON.stringify(data, null, 2));
+                }
+            }
         }
     } catch (e) {
         console.error("Delete Template error:", e);

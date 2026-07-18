@@ -725,31 +725,20 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
                 e.stopPropagation();
                 try {
                   const targetId = contextMenu?.id;
-                  const targetFolder = contextMenu?.folderName;
                   
                   if (!targetId) {
                     window.alert("Error: No desktop ID found in context menu!");
                     return;
                   }
 
-                   if (window.confirm(`Are you sure you want to delete this desktop?`)) {
-                    // EMERGENCY FLARE: Send a notification immediately
-                    await window.electronAPI.executeCommand(`notify-send "Desktop Manager" "Deletion started for: ${targetId}"`);
-                    
-                    console.log(`Starting deletion for ${targetId} in folder ${targetFolder}`);
-                    
-                    // Mark as deleting for visual feedback
-                    setDeletingDesktops(prev => [...prev, targetId]);
-                    setContextMenu(null); // Close menu immediately
-                    
-                    try {
-                      // Trigger the actual backend command (WAIT for it to finish so we know it's gone from backend)
-                      await executeMenuCommand(`CLEAR:${targetId}`);
-                    } finally {
-                      // Clean up state (if it fails, we still want to stop showing loader)
-                      setDeletingDesktops(prev => prev.filter(id => id !== targetId));
-                    }
-                  }
+                  // Use PromptModal for confirmation to avoid KDE Wayland native dialog bugs
+                  setPromptConfig({ 
+                    title: 'Type YES to delete desktop', 
+                    defaultValue: 'YES', 
+                    command: `CLEAR:${targetId}` 
+                  });
+                  setContextMenu(null);
+                  
                 } catch (err: any) {
                   window.alert(`CRITICAL ERROR during delete: ${err.message}`);
                   console.error(err);

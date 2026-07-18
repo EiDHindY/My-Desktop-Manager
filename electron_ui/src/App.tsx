@@ -39,7 +39,7 @@ function App() {
     _setLastActionTimeState(t)
   }, [])
   const dataRef = useRef<any>(null)
-  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string} | null>(null)
+  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean} | null>(null)
   const [isSplitLayout, setIsSplitLayout] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('desktopManager_liveSplitLayout');
@@ -325,7 +325,7 @@ function App() {
       boxSizing: 'border-box',
       borderRadius: '12px',
       border: isFocused ? '2px solid var(--accent-blue)' : '2px solid var(--border-glass)',
-      boxShadow: isFocused ? '0 10px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(38, 139, 210, 0.3)' : '0 10px 40px rgba(0,0,0,0.4)',
+      boxShadow: isFocused ? 'inset 0 0 0 1px rgba(38, 139, 210, 0.1)' : 'none',
       overflow: 'hidden',
       transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
       backdropFilter: 'blur(20px)'
@@ -689,8 +689,11 @@ function App() {
                 expanded_folders: [...(currentNotes.expanded_folders || ['root']).filter((k: string) => k !== folderKey), folderKey]
               });
             } else {
+              const finalCommand = promptConfig.isConfirm 
+                ? promptConfig.command 
+                : `${promptConfig.command}:${value}`;
               // @ts-ignore
-              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${promptConfig.command}:${value}"`);
+              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${finalCommand}"`);
             }
             setLastActionTime(Date.now());
             loadTemplates();

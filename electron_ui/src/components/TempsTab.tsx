@@ -217,13 +217,19 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                         <div 
                           ref={provided.innerRef}
                           {...provided.draggableProps}
-                          className={`unified-glass-card ${isTemplateFocused ? 'lifted-card' : ''}`}
+                          className={temp.isDivider ? '' : `unified-glass-card ${isTemplateFocused ? 'lifted-card' : ''}`}
                           style={{
                             ...provided.draggableProps.style,
                             opacity: snapshot.isDragging ? 0.8 : 1,
-                            border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                            background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
-                            boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
+                            ...(temp.isDivider ? {
+                              background: 'transparent',
+                              border: 'none',
+                              boxShadow: 'none'
+                            } : {
+                              border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                              background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
+                              boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
+                            })
                           }}
                         >
                           {isTemplateFocused && (
@@ -273,13 +279,13 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 className="btn-hover"
                                 onClick={async (e) => { 
                                   e.stopPropagation(); 
-                                  if (window.confirm(`Delete divider "${temp.name}"?`)) {
-                                    const key = `delete-temp-${temp.filename}`;
-                                    setLoadingTasks(prev => ({ ...prev, [key]: true }));
-                                    // @ts-ignore
-                                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
-                                    setLoadingTasks(prev => ({ ...prev, [key]: false }));
-                                    onAction?.();
+                                  if (setPromptConfig) {
+                                    setPromptConfig({
+                                      title: `Type YES to delete divider "${temp.name}"`,
+                                      defaultValue: 'YES',
+                                      command: `DELETE_TEMPLATE:${temp.filename}`,
+                                      isConfirm: true
+                                    });
                                   }
                                 }}
                                 disabled={loadingTasks[`delete-temp-${temp.filename}`]}
@@ -389,13 +395,13 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                         className="btn-hover"
                         onClick={async (e) => { 
                           e.stopPropagation(); 
-                          if (window.confirm(`Delete template "${temp.name}"?`)) {
-                            const key = `delete-temp-${temp.filename}`;
-                            setLoadingTasks(prev => ({ ...prev, [key]: true }));
-                            // @ts-ignore
-                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE:${temp.filename}"`);
-                            setLoadingTasks(prev => ({ ...prev, [key]: false }));
-                            onAction?.();
+                          if (setPromptConfig) {
+                            setPromptConfig({
+                              title: `Type YES to delete template "${temp.name}"`,
+                              defaultValue: 'YES',
+                              command: `DELETE_TEMPLATE:${temp.filename}`,
+                              isConfirm: true
+                            });
                           }
                         }}
                         disabled={loadingTasks[`delete-temp-${temp.filename}`]}
@@ -565,13 +571,13 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                               className="btn-hover"
                               onClick={async (e) => { 
                                 e.stopPropagation(); 
-                                if (window.confirm(`Delete script "${task.name}" from template "${temp.name}"?`)) {
-                                  const key = `delete-task-${taskId}`;
-                                  setLoadingTasks(prev => ({ ...prev, [key]: true }));
-                                  // @ts-ignore
-                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}"`);
-                                  setLoadingTasks(prev => ({ ...prev, [key]: false }));
-                                  onAction?.();
+                                if (setPromptConfig) {
+                                  setPromptConfig({
+                                    title: `Type YES to delete script "${task.name}"`,
+                                    defaultValue: 'YES',
+                                    command: `DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}`,
+                                    isConfirm: true
+                                  });
                                 }
                               }}
                               disabled={loadingTasks[`delete-task-${taskId}`]}
@@ -596,14 +602,12 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                               className="btn-hover"
                               onClick={async (e) => { 
                                 e.stopPropagation(); 
-                                const val = window.prompt("Global Shortcut (e.g. Control+Alt+1)", task.shortcut || "");
-                                if (val !== null) {
-                                  const key = `set-shortcut-${temp.filename}-${task.id}`;
-                                  setLoadingTasks(prev => ({ ...prev, [key]: true }));
-                                  // @ts-ignore
-                                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}:${val}"`);
-                                  setLoadingTasks(prev => ({ ...prev, [key]: false }));
-                                  onAction?.();
+                                if (setPromptConfig) {
+                                  setPromptConfig({
+                                    title: 'Global Shortcut (e.g. Control+Alt+1)',
+                                    defaultValue: task.shortcut || '',
+                                    command: `SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}`
+                                  });
                                 }
                               }}
                               style={{ 

@@ -63,8 +63,7 @@ function createWindow() {
     width: 600,
     height: 800,
     frame: false,
-    transparent: false, // Solid background for visibility
-    backgroundColor: '#1a1b26', // Matching your theme
+    transparent: true,
     alwaysOnTop: true,
     title: "Desktop Manager", // Explicit title for wmctrl
     icon: ICON_PATH,

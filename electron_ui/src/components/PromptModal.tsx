@@ -12,7 +12,7 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  const isDesktopOp = title.toLowerCase().includes('desktop');
+  const isDesktopOp = title.toLowerCase().includes('desktop') && !title.toLowerCase().includes('delete');
 
   useEffect(() => {
     const focusInput = () => {
