@@ -719,8 +719,12 @@ export function handleCreateScriptAndAddToTemplate(filename: string, scriptName:
         const finalScriptName = scriptName.endsWith('.sh') ? scriptName : `${scriptName}.sh`;
         const scriptPath = join(scriptsDir, finalScriptName);
         
-        // Create file with shebang and helper snippets
         const templateContent = `#!/bin/bash
+
+# google-chrome --new-window --profile-directory="Profile 1" "https://example.com" > /dev/null 2>&1 &
+#
+# "/home/dod/Downloads/Antigravity IDE/antigravity-ide" path > /dev/null 2>&1 &
+
 sleep 1
 
 > /dev/null 2>&1 &
