@@ -8,7 +8,7 @@ import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
 
-import { IconSweeper, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
+import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
 import './App.css'
 
 function App() {
@@ -392,7 +392,7 @@ function App() {
                     setLastActionTime(Date.now());
                   }}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Empty all"
+                  title="Empty Empty"
                 >
                   <IconSweeper size={16} />
                 </button>
@@ -406,9 +406,9 @@ function App() {
                     }
                   }}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Shutdown"
+                  title="Nuke All"
                 >
-                  <IconTrash size={16} />
+                  <IconBomb size={16} />
                 </button>
               </div>
 

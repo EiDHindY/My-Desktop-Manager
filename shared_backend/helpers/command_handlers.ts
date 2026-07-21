@@ -449,6 +449,17 @@ export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string
             }
         }
         
+        // Clean up empty folders
+        if (session.folders) {
+            const emptyFolders = Object.keys(session.folders).filter(f => f !== 'root' && session.folders[f].length === 0);
+            for (const f of emptyFolders) {
+                delete session.folders[f];
+                if (session.folder_order) {
+                    session.folder_order = session.folder_order.filter((name: string) => name !== f);
+                }
+            }
+        }
+        
         if (cleanedCount > 0) {
             writeFileSync(sessionPath, JSON.stringify(session, null, 2));
             runCommand(`notify-send "Desktop Manager" "🧹 Cleaned ${cleanedCount} empty desktops."`);
@@ -483,6 +494,17 @@ export function handleClearAll(currentDesktops: Desktop[], currentUuid: string, 
             }
             delete session.desktop_notes[d.uuid];
             if (session.startup_apps) delete session.startup_apps[d.uuid];
+        }
+        
+        // Clean up empty folders
+        if (session.folders) {
+            const emptyFolders = Object.keys(session.folders).filter(f => f !== 'root' && session.folders[f].length === 0);
+            for (const f of emptyFolders) {
+                delete session.folders[f];
+                if (session.folder_order) {
+                    session.folder_order = session.folder_order.filter((name: string) => name !== f);
+                }
+            }
         }
         
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));

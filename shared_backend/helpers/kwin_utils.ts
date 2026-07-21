@@ -7,7 +7,7 @@ import { join } from 'path';
  */
 export function runCommand(command: string): string | undefined {
     try {
-        return execSync(command).toString().replace(/\n$/, '');
+        return execSync(command, { shell: '/bin/bash' }).toString().replace(/\n$/, '');
     } catch (error) {
         return undefined;
     }
