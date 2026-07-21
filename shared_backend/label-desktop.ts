@@ -61,7 +61,7 @@ function main() {
         } else if (result.startsWith('SWITCH:')) {
             const id = result.substring(7).split("___")[0];
             if (id === 'ACTION_CHROME') runCommand('/home/dod/.local/bin/chrome_launcher.sh');
-            else runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${id}"`);
+            else runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${id}"`);
             // Wait for KWin to process the switch before re-opening the menu
             execSync('sleep 0.3');
         } else if (result.startsWith('RENAME:')) {
@@ -84,7 +84,7 @@ function main() {
             if (kwinIdx) closeWindowsOnDesktop(kwinIdx);
         } else if (result.startsWith('SUMMON:')) {
             const id = result.substring(7).split("___")[0];
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${id}"`);
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${id}"`);
             launchAppsForDesktop(id);
             execSync('sleep 0.3');
         } else if (result.startsWith('SUMMON_FOLDER:')) {

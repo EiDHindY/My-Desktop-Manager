@@ -11,8 +11,6 @@ interface PromptModalProps {
 export default function PromptModal({ title, description, defaultValue, onSubmit, onCancel }: PromptModalProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  const isDesktopOp = title.toLowerCase().includes('desktop') && !title.toLowerCase().includes('delete');
 
   useEffect(() => {
     const focusInput = () => {
@@ -31,7 +29,7 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        onSubmit(value + (isDesktopOp ? '|None' : ''));
+        onSubmit(value);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
@@ -42,19 +40,12 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
 
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [value, onSubmit, onCancel, isDesktopOp]);
+  }, [value, onSubmit, onCancel]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     e.nativeEvent.stopImmediatePropagation();
     e.nativeEvent.stopPropagation();
   };
-
-  const priorityBtns = [
-    { label: '⚓ Anchor', value: 'Anchor', color: '#c3e88d' },
-    { label: '🔴 High', value: 'High', color: '#ff757f' },
-    { label: '🟡 Mid', value: 'Mid', color: '#ffc777' },
-    { label: '🔵 Low', value: 'Low', color: '#82aaff' }
-  ];
 
   return (
     <div style={{
@@ -73,7 +64,7 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
       <form 
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit(value + (isDesktopOp ? '|None' : ''));
+          onSubmit(value);
         }}
         className="unified-glass-card"
         style={{
@@ -134,46 +125,6 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
           className="search-input-hover prompt-modal-input"
         />
 
-        {isDesktopOp && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '5px' }}>
-            {priorityBtns.map(btn => (
-              <button
-                key={btn.value}
-                type="button"
-                onClick={() => onSubmit(`${value}|${btn.value}`)}
-                className="interactive-element"
-                style={{
-                  padding: '12px',
-                  backgroundColor: 'rgba(7, 54, 66, 0.4)',
-                  color: btn.color,
-                  border: `1px solid ${btn.color}33`,
-                  borderRadius: '10px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '800',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = `${btn.color}11`;
-                  e.currentTarget.style.borderColor = btn.color;
-                  e.currentTarget.style.boxShadow = `0 0 15px ${btn.color}22`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(7, 54, 66, 0.4)';
-                  e.currentTarget.style.borderColor = `${btn.color}33`;
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-        )}
-
         <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
           <button 
             type="button"
@@ -209,7 +160,7 @@ export default function PromptModal({ title, description, defaultValue, onSubmit
               boxShadow: '0 4px 15px rgba(38, 139, 210, 0.3)'
             }}
           >
-            {isDesktopOp ? 'Set Generic' : 'Submit'}
+            Submit
           </button>
         </div>
       </form>

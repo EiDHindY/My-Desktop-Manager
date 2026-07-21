@@ -4,8 +4,9 @@ import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
+import CreateDesktopModal from './components/CreateDesktopModal'
 
-import { IconWipe, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
+import { IconSweeper, IconTrash, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
 import './App.css'
 
 function App() {
@@ -40,18 +41,7 @@ function App() {
   }, [])
   const dataRef = useRef<any>(null)
   const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean} | null>(null)
-  const [isSplitLayout, setIsSplitLayout] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('desktopManager_liveSplitLayout');
-      return saved === 'true';
-    } catch (e) {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('desktopManager_liveSplitLayout', isSplitLayout ? 'true' : 'false');
-  }, [isSplitLayout]);
+  const [showCreateDesktopModal, setShowCreateDesktopModal] = useState(false)
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(true);
@@ -264,6 +254,17 @@ function App() {
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
+        if (e.key.toLowerCase() === 'n') {
+          e.preventDefault();
+          if (activeTabRef.current === 'live') {
+            setShowCreateDesktopModal(true);
+          } else if (activeTabRef.current === 'temps') {
+            setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' });
+          } else if (activeTabRef.current === 'notes') {
+            setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' });
+          }
+          return;
+        }
       }
 
       // Clear search on Escape - Allow if in search input or no input
@@ -351,13 +352,13 @@ function App() {
               placeholder="Search or Command..." 
               style={{ 
                 width: '100%', 
-                padding: '10px 14px', 
-                borderRadius: '10px', 
+                padding: '6px 10px', 
+                borderRadius: '8px', 
                 backgroundColor: 'rgba(0, 33, 43, 0.5)', 
                 border: '1px solid var(--border-glass)', 
                 color: 'var(--text-main)', 
                 outline: 'none', 
-                fontSize: '14px',
+                fontSize: '13px',
                 transition: 'all 0.3s ease',
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)',
                 boxSizing: 'border-box'
@@ -365,92 +366,90 @@ function App() {
               className="search-input-hover"
             />
           </div>
-
-          {activeTab === 'live' && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(0, 33, 43, 0.3)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '10px',
-              padding: '2px',
-              gap: '2px',
-              height: '38px',
-              boxSizing: 'border-box'
-            }}>
-              <button
-                onClick={() => setIsSplitLayout(false)}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: !isSplitLayout ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                  color: !isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  padding: 0
-                }}
-                title="Switch to List View"
-                className="btn-hover"
-              >
-                <IconList size={18} />
-              </button>
-              <button
-                onClick={() => setIsSplitLayout(true)}
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  backgroundColor: isSplitLayout ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                  color: isSplitLayout ? 'var(--accent-blue)' : 'var(--text-dim)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  padding: 0
-                }}
-                title="Switch to Dashboard View"
-                className="btn-hover"
-              >
-                <IconLayoutGrid size={18} />
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* Stats Summary */}
-        <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '6px', 
-            backgroundColor: 'rgba(42, 161, 152, 0.1)', 
-            padding: '4px 10px', 
-            borderRadius: '20px',
-            border: '1px solid rgba(42, 161, 152, 0.2)'
-          }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)', boxShadow: '0 0 8px var(--accent-cyan)' }}></span>
-            <span style={{ color: 'var(--accent-cyan)', fontWeight: '800' }}>{totalActive}</span>
-            <span style={{ color: 'var(--text-dim)', fontWeight: '500' }}>Active</span>
+        {/* Actions and Stats Summary */}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '28px' }}>
+          
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button 
+              className="btn-hover"
+              onClick={() => {
+                if (activeTab === 'live') {
+                  setShowCreateDesktopModal(true);
+                } else if (activeTab === 'temps') {
+                  setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' });
+                } else if (activeTab === 'notes') {
+                  setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' });
+                }
+              }}
+              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+              title="New (Ctrl + N)"
+            >
+              <IconPlus size={16} />
+            </button>
+            <button 
+              className="btn-hover"
+              onClick={async () => {
+                // @ts-ignore
+                await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
+                setLastActionTime(Date.now());
+              }}
+              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+              title="Empty all"
+            >
+              <IconSweeper size={16} />
+            </button>
+            <button 
+              className="btn-hover"
+              onClick={async () => {
+                if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
+                  // @ts-ignore
+                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
+                  setLastActionTime(Date.now());
+                }
+              }}
+              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+              title="Shutdown"
+            >
+              <IconTrash size={16} />
+            </button>
           </div>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '6px', 
-            backgroundColor: 'rgba(7, 54, 66, 0.4)', 
-            padding: '4px 10px', 
-            borderRadius: '20px',
-            border: '1px solid var(--border-glass)'
-          }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-dim)' }}></span>
-            <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{totalEmpty}</span>
-            <span style={{ color: 'var(--text-dim)', fontWeight: '500' }}>Empty</span>
+
+          {/* Divider */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+
+          {/* Stats */}
+          <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
+            <div 
+              title="Active Desktops"
+              style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              backgroundColor: 'rgba(42, 161, 152, 0.1)', 
+              padding: '2px 8px', 
+              borderRadius: '20px',
+              border: '1px solid rgba(42, 161, 152, 0.2)'
+            }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-cyan)', boxShadow: '0 0 8px var(--accent-cyan)' }}></span>
+              <span style={{ color: 'var(--accent-cyan)', fontWeight: '800' }}>{totalActive}</span>
+            </div>
+            <div 
+              title="Empty Desktops"
+              style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              backgroundColor: 'rgba(7, 54, 66, 0.4)', 
+              padding: '2px 8px', 
+              borderRadius: '20px',
+              border: '1px solid var(--border-glass)'
+            }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-dim)' }}></span>
+              <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{totalEmpty}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -461,10 +460,10 @@ function App() {
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between',
-          padding: '0 12px', 
+          padding: '0 8px', 
           borderBottom: '1px solid var(--border-glass)', 
           backgroundColor: 'rgba(7, 54, 66, 0.4)',
-          height: '40px'
+          height: '32px'
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -474,7 +473,7 @@ function App() {
                 onClick={() => handleSetActiveTab(tab)}
                 className="interactive-element"
                   style={{ 
-                    padding: '5px 12px', 
+                    padding: '4px 10px', 
                     color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-dim)',
                     backgroundColor: activeTab === tab ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
                     borderRadius: '6px',
@@ -494,14 +493,7 @@ function App() {
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {activeTab === 'temps' ? (
               <>
-                <button 
-                  className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Create New Template Folder"
-                >
-                  <IconPlus size={16} />
-                </button>
+
                 <button 
                   className="btn-hover"
                   onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'CREATE_TEMPLATE_DIVIDER' })}
@@ -542,14 +534,7 @@ function App() {
               </>
             ) : activeTab === 'notes' ? (
               <>
-                <button
-                  className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="New Folder"
-                >
-                  <IconPlus size={16} />
-                </button>
+
                 <button 
                   className="btn-hover"
                   onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'NOTES_ADD_DIVIDER' })}
@@ -576,46 +561,6 @@ function App() {
                   <IconFileText size={13} /> Note
                 </button>
               </>
-            ) : activeTab === 'live' ? (
-              <>
-                <button 
-                  className="btn-hover"
-                  onClick={() => {
-                    setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'ADD_FOLDER' });
-                  }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Add Folder"
-                >
-                  <IconPlus size={16} />
-                </button>
-                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    // @ts-ignore
-                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
-                    setLastActionTime(Date.now());
-                  }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  title="Clean Empty"
-                >
-                  <IconWipe size={14} /> Clean
-                </button>
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
-                      // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
-                      setLastActionTime(Date.now());
-                    }
-                  }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}
-                  title="Clear All"
-                >
-                  <IconTrash size={14} /> Clear
-                </button>
-              </>
             ) : null}
           </div>
         </div>
@@ -638,13 +583,18 @@ function App() {
                   desktopIcons={desktopIcons}
                   desktopShortcuts={desktopShortcuts}
                   shortcutErrors={shortcutErrors}
-                  searchQuery={searchQuery} 
-                  currentDesktop={currentDesktop} 
+                  searchQuery={searchQuery}
+                  currentDesktop={currentDesktop}
                   returnDesktop={returnDesktop}
-                  setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
+                  setSessionData={(newData: any) => window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "UPDATE_SESSION"`).then(() => setData(newData))}
                   onAction={() => setLastActionTime(Date.now())}
-                  onSwitch={handleSwitch}
-                  isSplitLayout={isSplitLayout}
+                  onSwitch={(id) => {
+                    setVisitHistory(prev => {
+                      const pureId = id.split('___')[0];
+                      if (pureId === currentDesktop) return prev;
+                      return [...prev, currentDesktop as string].slice(-50);
+                    });
+                  }}
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
@@ -700,6 +650,19 @@ function App() {
             setPromptConfig(null);
           }}
           onCancel={() => setPromptConfig(null)}
+        />
+      )}
+
+      {showCreateDesktopModal && (
+        <CreateDesktopModal
+          existingFolders={Object.keys(data?.session?.folders || {})}
+          onSubmit={async (folderName, desktopNameWithPriority) => {
+            setShowCreateDesktopModal(false);
+            // @ts-ignore
+            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_LIVE_DESKTOP:${folderName}:${desktopNameWithPriority}"`);
+            setLastActionTime(Date.now());
+          }}
+          onCancel={() => setShowCreateDesktopModal(false)}
         />
       )}
 

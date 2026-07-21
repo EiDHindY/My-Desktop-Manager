@@ -40,7 +40,7 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch, isSplitLayout = false }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void, isSplitLayout?: boolean }) {
+export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -418,12 +418,12 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
             onMouseLeave={() => setHoveredFolder(null)}
             style={{ 
               display: 'flex',
-              padding: '10px 14px',
+              padding: '6px 10px',
               background: isSelected ? 'rgba(108, 113, 196, 0.08)' : 'transparent',
               alignItems: 'center',
               color: '#c8d3f5',
               fontWeight: '600',
-              fontSize: '15px',
+              fontSize: '13px',
               position: 'relative',
               transition: 'all 0.25s ease',
               borderBottom: isExpanded ? '1px solid rgba(255, 255, 255, 0.03)' : '1px solid transparent'
@@ -435,7 +435,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
           <span style={{ 
             flex: 1, 
             userSelect: 'none', 
-            fontSize: '1.1rem', 
+            fontSize: '13px', 
             fontWeight: '600',
             letterSpacing: '0.01em',
             overflow: 'hidden',
@@ -515,7 +515,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
         </div>
 
         {isExpanded && (
-          <div style={{ padding: '4px 12px 8px 12px' }}>
+          <div style={{ padding: '2px 8px 6px 8px' }}>
             <Droppable droppableId={folderName} type="DESKTOP" isDropDisabled={!!query}>
               {(providedDroppable) => (
                 <div 
@@ -599,78 +599,35 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
   };
 
   const nonRootFolders = folderNames.filter(f => f !== 'root');
-  const isSplit = isSplitLayout && nonRootFolders.length >= 2;
-  const topGridFolders = isSplit ? nonRootFolders.slice(0, 2) : [];
-  const listFolders = isSplit ? nonRootFolders.slice(2) : nonRootFolders;
 
   return (
     <div style={{ width: '100%', height: '100%', overflowY: 'auto' }} className="custom-scrollbar">
       <DragDropContext onDragEnd={onDragEnd}>
         <div style={{ padding: '10px' }}>
           
-          {/* Conditional Layout Rendering */}
-          {isSplit ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Top Grid for first 2 folders (Pm Main & Communication) */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', 
-                gap: '12px'
-              }}>
-                {topGridFolders.map((folderName, index) => {
+          <Droppable droppableId="board" type="FOLDER">
+            {(provided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps}>
+                {nonRootFolders.map((folderName, index) => {
                   const parts = folderName.split('/');
                   const displayName = parts[parts.length - 1];
+                  const level = parts.length - 1;
+                  const indent = level * 24;
+
                   return (
-                    <div key={folderName}>
-                      {renderFolder(folderName, index, false, displayName, true)}
+                    <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
+                      {renderFolder(folderName, index, true, displayName, false)}
                     </div>
                   );
                 })}
+                {provided.placeholder}
               </div>
-
-              {/* List for subsequent folders */}
-              {listFolders.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {listFolders.map((folderName, index) => {
-                    const parts = folderName.split('/');
-                    const displayName = parts[parts.length - 1];
-                    const level = parts.length - 1;
-                    const indent = level * 24;
-
-                    return (
-                      <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
-                        {renderFolder(folderName, index + 2, false, displayName, false)}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ) : (
-            <Droppable droppableId="board" type="FOLDER">
-              {(provided) => (
-                <div ref={provided.innerRef} {...provided.droppableProps}>
-                  {nonRootFolders.map((folderName, index) => {
-                    const parts = folderName.split('/');
-                    const displayName = parts[parts.length - 1];
-                    const level = parts.length - 1;
-                    const indent = level * 24;
-
-                    return (
-                      <div key={folderName} style={{ paddingLeft: `${indent}px`, boxSizing: 'border-box' }}>
-                        {renderFolder(folderName, index, true, displayName, false)}
-                      </div>
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          )}
+            )}
+          </Droppable>
           
           {/* Render Root statically below */}
           {folders['root'] && (
-            <div style={{ marginTop: isSplit ? '16px' : '0' }}>
+            <div style={{ marginTop: '0' }}>
               {renderFolder('root', 999, false)}
             </div>
           )}

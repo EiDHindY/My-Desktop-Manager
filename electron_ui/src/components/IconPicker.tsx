@@ -78,7 +78,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                   {isSelected && <div style={{ width: '6px', height: '6px', background: 'white', borderRadius: '1px' }} />}
                 </div>
                 <img 
-                  src={`local-icon://${icon}`} 
+                  src={`local-icon://${encodeURIComponent(icon)}`} 
                   alt={icon} 
                   style={{ 
                     width: '32px', 

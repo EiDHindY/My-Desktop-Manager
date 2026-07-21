@@ -132,7 +132,7 @@ if (command.startsWith('RENAME:')) {
     handleSetTemplateTaskShortcut(filename, taskId, shortcut);
 } else if (command.startsWith('SUMMON:')) {
     const pureId = command.substring(7).split("___")[0];
-    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
+    runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${pureId}"`);
     
     // Also execute any startup apps associated with this desktop
     launchAppsForDesktop(pureId);

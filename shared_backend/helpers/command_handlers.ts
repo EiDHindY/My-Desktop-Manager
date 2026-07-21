@@ -111,7 +111,7 @@ export function handleSummonFolder(folderName: string, sessionPath: string) {
             
             if (uuid) {
                 console.log(`Summoning ${uuid} (Desktop ${i+1}/${uids.length})`);
-                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${uuid}"`);
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${uuid}"`);
                 
                 // If desktop already has windows, skip launching apps to avoid duplicates
                 if (position >= 0 && activeIndices.includes(position + 1)) {
@@ -391,7 +391,7 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
 
 export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string) {
     // 1. Find indices of desktops that HAVE windows
-    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
     const activeStr = runCommand(cmd) || "";
     const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
     

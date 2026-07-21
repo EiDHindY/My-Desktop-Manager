@@ -45,8 +45,8 @@ body {
   border: 1px solid var(--border-glass);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  padding: 8px;
-  margin-bottom: 16px;
+  padding: 6px;
+  margin-bottom: 8px;
   transition: all 0.2s ease;
 }
 
@@ -58,12 +58,12 @@ body {
 .desktop-item {
   display: flex;
   align-items: center;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 6px;
-  margin-bottom: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   position: relative;
   transition: all 0.2s ease;
   border: 1px solid transparent;
@@ -84,11 +84,11 @@ body {
 .window-badge {
   background: rgba(0, 33, 43, 0.6);
   color: var(--text-dim);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
   font-weight: 600;
-  margin-left: 8px;
+  margin-left: 6px;
   border: 1px solid var(--border-glass);
 }
 
@@ -110,8 +110,8 @@ body {
 .unified-glass-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-glass);
-  border-radius: 10px;
-  margin-bottom: 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
   transition: all 0.2s ease;
   position: relative;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
@@ -174,12 +174,12 @@ body {
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 6px 10px;
   cursor: pointer;
   color: var(--text-main);
-  font-size: 13px;
-  border-radius: 6px;
+  font-size: 12px;
+  border-radius: 4px;
   transition: all 0.15s ease;
 }
 
@@ -201,11 +201,11 @@ body {
   position: fixed;
   background: var(--bg-secondary);
   border: 1px solid var(--border-glass);
-  border-radius: 8px;
+  border-radius: 6px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   z-index: 10000;
-  padding: 6px;
-  min-width: 200px;
+  padding: 4px;
+  min-width: 180px;
   animation: menuIn 0.15s ease-out;
 }
 

@@ -69,6 +69,14 @@ export const IconTrash = ({ size = 16, color = "currentColor" }) => (
   </svg>
 );
 
+export const IconSweeper = ({ size = 16, color = "currentColor" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="2" x2="12" y2="14" />
+    <path d="M9 14h6l2 8H7l2-8z" />
+    <line x1="9" y1="18" x2="15" y2="18" />
+  </svg>
+);
+
 export const IconWipe = ({ size = 16, color = "currentColor" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="m14 18 6-6a2.83 2.83 0 0 0-4-4l-6 6"></path>
@@ -310,7 +318,7 @@ export const ManualIcon = ({ icon, size = 16, className = "" }: { icon: string |
       {icons.map((ic, i) => (
         <img 
           key={`${ic}-${i}`}
-          src={`local-icon://${ic}`} 
+          src={`local-icon://${encodeURIComponent(ic)}`} 
           alt={ic} 
           style={{ width: size, height: size, objectFit: 'contain', flexShrink: 0 }} 
         />
