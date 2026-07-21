@@ -9,6 +9,7 @@ interface CreateDesktopModalProps {
 export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel }: CreateDesktopModalProps) {
   const [folderName, setFolderName] = useState('');
   const [desktopName, setDesktopName] = useState('New Desktop');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const desktopInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -69,17 +70,17 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
         }}
         className="unified-glass-card"
         style={{
-          padding: '28px',
-          width: '420px',
+          padding: '24px',
+          width: '380px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
+          gap: '16px',
           boxShadow: '0 25px 50px rgba(0,0,0,0.6)'
         }}>
         <h3 style={{ 
           margin: 0, 
           color: 'var(--accent-blue)', 
-          fontSize: '20px', 
+          fontSize: '18px', 
           textAlign: 'center', 
           fontWeight: '800',
           letterSpacing: '0.5px'
@@ -93,7 +94,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
         `}</style>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 'bold' }}>Desktop Name</label>
+          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Desktop Name</label>
           <input 
             ref={desktopInputRef}
             type="text" 
@@ -103,13 +104,13 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
             style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: '12px',
+              padding: '10px',
               borderRadius: '8px',
               backgroundColor: 'rgba(0, 33, 43, 0.6)',
               border: '1px solid var(--border-glass)',
               color: '#e0e0e0',
               outline: 'none',
-              fontSize: '16px',
+              fontSize: '14px',
               transition: 'all 0.3s ease',
               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
             }}
@@ -117,51 +118,96 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
           />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 'bold' }}>Select Existing Folder</label>
-          <select 
-            value={existingFolders.includes(folderName) ? folderName : "___NEW___"}
-            onChange={(e) => setFolderName(e.target.value)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
+          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Select Existing Folder</label>
+          <div 
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="search-input-hover"
             style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: '12px',
+              padding: '10px 12px',
               borderRadius: '8px',
               backgroundColor: 'rgba(0, 33, 43, 0.6)',
               border: '1px solid var(--border-glass)',
               color: '#e0e0e0',
-              outline: 'none',
-              fontSize: '16px',
-              transition: 'all 0.3s ease',
+              fontSize: '14px',
+              cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
             }}
-            className="search-input-hover"
           >
-            <option value="___NEW___" disabled>Choose a folder...</option>
-            {existingFolders.map(folder => (
-              <option key={folder} value={folder}>{folder}</option>
-            ))}
-          </select>
+            <span>{existingFolders.includes(folderName) ? folderName : 'Choose a folder...'}</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>▼</span>
+          </div>
           
-          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px', margin: '4px 0', fontWeight: 'bold' }}>- OR -</div>
+          {isDropdownOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '55px',
+              left: 0,
+              right: 0,
+              backgroundColor: 'rgba(7, 54, 66, 0.95)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              zIndex: 2010,
+              boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(8px)',
+              maxHeight: '160px',
+              overflowY: 'auto'
+            }}>
+              {existingFolders.length === 0 ? (
+                <div style={{ padding: '10px', color: 'var(--text-dim)', fontSize: '13px', textAlign: 'center', fontStyle: 'italic' }}>
+                  No folders exist yet
+                </div>
+              ) : existingFolders.map(folder => (
+                <div 
+                  key={folder}
+                  className="interactive-element"
+                  onClick={() => {
+                    setFolderName(folder);
+                    setIsDropdownOpen(false);
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: folderName === folder ? 'var(--accent-blue)' : 'var(--text-main)',
+                    backgroundColor: folderName === folder ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                    transition: 'background-color 0.1s'
+                  }}
+                >
+                  {folder}
+                </div>
+              ))}
+            </div>
+          )}
           
-          <label style={{ color: 'var(--text-dim)', fontSize: '13px', fontWeight: 'bold' }}>Create New Folder</label>
+          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px', margin: '4px 0', fontWeight: 'bold' }}>- OR -</div>
+          
+          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Create New Folder</label>
           <input 
             type="text" 
             value={existingFolders.includes(folderName) ? "" : folderName}
             placeholder="Type new folder name..."
-            onChange={(e) => setFolderName(e.target.value)}
+            onChange={(e) => {
+              setFolderName(e.target.value);
+              setIsDropdownOpen(false);
+            }}
             onKeyDown={handleKeyDown}
             style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: '12px',
+              padding: '10px',
               borderRadius: '8px',
               backgroundColor: 'rgba(0, 33, 43, 0.6)',
               border: '1px solid var(--border-glass)',
               color: '#e0e0e0',
               outline: 'none',
-              fontSize: '16px',
+              fontSize: '14px',
               transition: 'all 0.3s ease',
               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
             }}
@@ -169,7 +215,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
           <button 
             type="button"
             onClick={onCancel}
@@ -182,7 +228,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
               border: '1px solid var(--border-glass)',
               borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: '700'
             }}
           >
@@ -199,7 +245,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '14px',
+              fontSize: '13px',
               fontWeight: '800',
               boxShadow: '0 4px 15px rgba(38, 139, 210, 0.3)'
             }}

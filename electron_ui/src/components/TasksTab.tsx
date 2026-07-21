@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil } from './Icons';
+import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers } from './Icons';
+import CreateTaskModal from './CreateTaskModal';
 
 interface Task {
   id: string;
@@ -32,7 +33,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
   
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleCreateNew = () => setShowCreateModal(true);
+    window.addEventListener('tasks-create-new', handleCreateNew as EventListener);
+    return () => window.removeEventListener('tasks-create-new', handleCreateNew as EventListener);
+  }, []);
   
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -196,6 +204,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     return tasks;
   };
 
+  const getUnfinishedCount = (cat: 'general' | 'live' | 'templates', subId?: string) => {
+    let tasks: Task[] = [];
+    if (cat === 'general') tasks = data.general || [];
+    else if (cat === 'live' && subId) tasks = data.live[subId] || [];
+    else if (cat === 'templates' && subId) tasks = data.templates[subId] || [];
+    return tasks.filter(t => !t.checked).length;
+  };
+
   const activeTasks = getActiveTasks();
 
   const selectCategory = (category: 'general' | 'live' | 'templates', subId: string | null) => {
@@ -205,17 +221,17 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)' }}>
+    <div style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
       {/* Main Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 32px' }}>
-        <div style={{ marginBottom: '24px', position: 'relative' }} ref={dropdownRef}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', minWidth: 0 }}>
+        <div style={{ marginBottom: '16px', position: 'relative' }} ref={dropdownRef}>
           <h2 
             className="interactive-element"
             onClick={() => setShowDropdown(!showDropdown)}
             style={{ 
               margin: 0, 
               color: 'var(--text-main)', 
-              fontSize: '24px', 
+              fontSize: '16px', 
               fontWeight: '800', 
               display: 'inline-flex', 
               alignItems: 'center', 
@@ -228,11 +244,23 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
               userSelect: 'none'
             }}
           >
-            {activeCategory === 'general' && "📥 General Tasks"}
-            {activeCategory === 'live' && `🟢 ${activeSubId || 'Live Tasks'}`}
-            {activeCategory === 'templates' && `🛠️ ${activeSubId}`}
+            {activeCategory === 'general' && (
+              <>
+                <IconInbox size={18} color="var(--accent-blue)" /> General Tasks
+              </>
+            )}
+            {activeCategory === 'live' && (
+              <>
+                <IconRadio size={18} color="var(--accent-green)" /> {activeSubId || 'Live Tasks'}
+              </>
+            )}
+            {activeCategory === 'templates' && (
+              <>
+                <IconLayers size={18} color="var(--accent-yellow)" /> {activeSubId}
+              </>
+            )}
             <div style={{ color: 'var(--text-dim)', display: 'flex', opacity: 0.7 }}>
-              {showDropdown ? <IconChevronDown size={20} /> : <IconChevronRight size={20} />}
+              {showDropdown ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
             </div>
           </h2>
           
@@ -243,14 +271,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
               top: '100%',
               left: 0,
               marginTop: '4px',
-              width: '320px',
+              width: '280px',
               backgroundColor: 'rgba(7, 54, 66, 0.95)',
               backdropFilter: 'blur(12px)',
               border: '1px solid var(--border-glass)',
               borderRadius: '12px',
               boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               zIndex: 100,
-              maxHeight: '400px',
+              maxHeight: 'calc(100vh - 180px)',
               overflowY: 'auto',
               padding: '12px'
             }}>
@@ -271,13 +299,19 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                   marginBottom: '16px'
                 }}
               >
-                📥 General Tasks
+                <IconInbox size={16} />
+                <span style={{ flex: 1 }}>General Tasks</span>
+                {getUnfinishedCount('general') > 0 && (
+                  <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                    {getUnfinishedCount('general')}
+                  </span>
+                )}
               </div>
 
               {/* Live Desktops */}
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-                  🟢 LIVE DESKTOPS
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
+                  <IconRadio size={12} color="var(--accent-green)" /> LIVE DESKTOPS
                 </div>
                 {sessionData?.folders && (() => {
                   const folders = sessionData.folders || {};
@@ -311,7 +345,12 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                         }}
                       >
                         {isActive ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
-                        {name}
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                        {getUnfinishedCount('live', folderId) > 0 && (
+                          <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                            {getUnfinishedCount('live', folderId)}
+                          </span>
+                        )}
                       </div>
                     );
                   });
@@ -320,8 +359,8 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
 
               {/* Templates */}
               <div>
-                <div style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-                  🛠️ TEMPLATES
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
+                  <IconLayers size={12} color="var(--accent-yellow)" /> TEMPLATES
                 </div>
                 {templates && templates.filter(t => !t.isDivider).map((template: any) => {
                   const isActive = activeCategory === 'templates' && activeSubId === template.name;
@@ -344,30 +383,35 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                         gap: '8px'
                       }}
                     >
-                      {isActive ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
-                      {template.name}
+                      {isActive ? <IconLayers size={14} color="var(--accent-blue)" /> : <IconLayers size={14} />}
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
+                      {getUnfinishedCount('templates', template.name) > 0 && (
+                        <span style={{ backgroundColor: 'rgba(7, 54, 66, 0.8)', color: 'var(--text-dim)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                          {getUnfinishedCount('templates', template.name)}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-          <p style={{ margin: '4px 0 0 0', color: 'var(--text-dim)', fontSize: '13px' }}>
+          <p style={{ margin: '4px 0 0 0', color: 'var(--text-dim)', fontSize: '12px' }}>
             {activeCategory === 'templates' ? 'Tasks defined here will be copied to Live Desktops when this template is deployed.' : 'Manage your active tasks and to-dos.'}
           </p>
         </div>
 
         {/* Task List */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
           {activeTasks.length === 0 ? (
-            <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-dim)', fontStyle: 'italic', fontSize: '14px' }}>
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-dim)', fontStyle: 'italic', fontSize: '13px' }}>
               No tasks here yet. Press enter below to add one!
             </div>
           ) : (
             <DragDropContext onDragEnd={onDragEnd}>
               <Droppable droppableId="tasks-list">
                 {(provided) => (
-                  <div {...provided.droppableProps} ref={provided.innerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '10px' }}>
+                  <div {...provided.droppableProps} ref={provided.innerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '10px', minWidth: 0 }}>
                     {activeTasks.map((task, index) => (
                       <Draggable key={task.id} draggableId={task.id} index={index}>
                         {(provided, snapshot) => (
@@ -381,32 +425,33 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                               ...provided.draggableProps.style,
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '12px',
-                              padding: '12px 16px',
+                              gap: '8px',
+                              padding: '8px 12px',
                               backgroundColor: snapshot.isDragging ? 'rgba(0, 43, 54, 0.8)' : 'rgba(0, 43, 54, 0.4)',
                               border: snapshot.isDragging ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
                               borderRadius: '8px',
-                              transition: snapshot.isDragging ? 'none' : 'all 0.2s ease',
+                              transition: `${provided.draggableProps.style?.transition ? provided.draggableProps.style.transition + ', ' : ''}background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease`,
                               opacity: task.checked ? 0.6 : 1,
-                              boxShadow: snapshot.isDragging ? '0 8px 24px rgba(0,0,0,0.3)' : 'none'
+                              boxShadow: snapshot.isDragging ? '0 8px 24px rgba(0,0,0,0.3)' : 'none',
+                              minWidth: 0
                             }}
                           >
                             <div 
                               {...provided.dragHandleProps}
                               style={{ color: 'var(--text-dim)', cursor: 'grab', opacity: hoveredTaskId === task.id || snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s', display: 'flex' }}
                             >
-                              <IconGrip size={18} />
+                              <IconGrip size={14} />
                             </div>
                             
                             <div 
                               onClick={() => toggleTask(task.id)}
                               style={{ cursor: 'pointer', color: task.checked ? 'var(--accent-green)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
-                              {task.checked ? <IconCheck size={20} /> : <IconSquare size={20} />}
+                              {task.checked ? <IconCheck size={16} /> : <IconSquare size={16} />}
                             </div>
 
                             <div 
-                              style={{ flex: 1, overflow: 'hidden', cursor: 'text' }}
+                              style={{ flex: 1, overflow: 'hidden', cursor: 'text', minWidth: 0 }}
                               onClick={() => {
                                 setEditingTaskId(task.id);
                                 setEditingTaskText(task.text);
@@ -434,7 +479,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                                     borderRadius: '4px',
                                     padding: '6px 8px',
                                     color: 'var(--text-main)',
-                                    fontSize: '14px',
+                                    fontSize: '13px',
                                     outline: 'none',
                                     boxSizing: 'border-box',
                                     resize: 'vertical',
@@ -444,7 +489,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                               ) : (
                                 <div style={{ 
                                   color: task.checked ? 'var(--text-dim)' : 'var(--text-main)', 
-                                  fontSize: '14px',
+                                  fontSize: '13px',
                                   textDecoration: task.checked ? 'line-through' : 'none',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
@@ -463,7 +508,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                                 style={{ color: 'var(--accent-red)', cursor: 'pointer', padding: '4px' }}
                                 title="Delete"
                               >
-                                <IconTrash size={16} />
+                                <IconTrash size={14} />
                               </div>
                             </div>
                           </div>
@@ -479,9 +524,9 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
         </div>
 
         {/* Quick Add Input */}
-        <div style={{ marginTop: '20px', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-blue)', display: 'flex' }}>
-            <IconPlus size={18} />
+        <div style={{ marginTop: '12px', position: 'relative' }}>
+          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-blue)', display: 'flex' }}>
+            <IconPlus size={14} />
           </div>
           <input
             type="text"
@@ -491,13 +536,13 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             placeholder={`Add a new task to ${activeCategory === 'general' ? 'General' : activeSubId}...`}
             style={{
               width: '100%',
-              height: '48px',
+              height: '36px',
               backgroundColor: 'rgba(0, 43, 54, 0.6)',
               border: '1px solid var(--accent-blue)',
               borderRadius: '8px',
-              padding: '0 20px 0 46px',
+              padding: '0 12px 0 36px',
               color: 'var(--text-main)',
-              fontSize: '14px',
+              fontSize: '13px',
               outline: 'none',
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
               boxSizing: 'border-box'
@@ -505,6 +550,35 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
           />
         </div>
       </div>
+
+      {showCreateModal && (
+        <CreateTaskModal
+          existingLiveFolders={Object.keys(sessionData?.folders || {}).filter(k => k !== 'root').concat('root')}
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => t.name)}
+          initialCategory={activeCategory}
+          initialSubId={activeSubId}
+          onSubmit={(taskName, category, subId) => {
+            setShowCreateModal(false);
+            const newTask: Task = {
+              id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              text: taskName,
+              checked: false
+            };
+            const newData = { ...data };
+            if (category === 'general') {
+              newData.general = [...newData.general, newTask];
+            } else if (category === 'live' && subId) {
+              if (!newData.live[subId]) newData.live[subId] = [];
+              newData.live[subId] = [...newData.live[subId], newTask];
+            } else if (category === 'templates' && subId) {
+              if (!newData.templates[subId]) newData.templates[subId] = [];
+              newData.templates[subId] = [...newData.templates[subId], newTask];
+            }
+            writeData(newData);
+          }}
+          onCancel={() => setShowCreateModal(false)}
+        />
+      )}
     </div>
   );
 }

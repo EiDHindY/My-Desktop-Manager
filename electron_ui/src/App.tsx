@@ -3,7 +3,6 @@ import LiveTab from './components/LiveTab'
 import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
 import TasksTab from './components/TasksTab'
-import NotesTabNew from './components/NotesTabNew'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
@@ -21,7 +20,13 @@ function App() {
   const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
+  const currentDesktopRef = useRef<string | null>(null)
+  useEffect(() => { currentDesktopRef.current = currentDesktop }, [currentDesktop])
+  
   const [returnDesktop, setReturnDesktop] = useState<string | null>(null)
+  const returnDesktopRef = useRef<string | null>(null)
+  useEffect(() => { returnDesktopRef.current = returnDesktop }, [returnDesktop])
+  
   const [visitHistory, setVisitHistory] = useState<string[]>([])
   const prevDesktopRef = useRef<string | null>(null);
   const [templates, setTemplates] = useState<any[]>([])
@@ -249,19 +254,42 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'];
+          const tabs = ['live', 'notes', 'tasks', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'];
+          const tabs = ['live', 'notes', 'tasks', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
-        if (e.key.toLowerCase() === 'n' && activeTabRef.current === 'live') {
+        if (e.key.toLowerCase() === 'n') {
+          if (activeTabRef.current === 'live') {
+            e.preventDefault();
+            setShowCreateDesktopModal(true);
+            return;
+          } else if (activeTabRef.current === 'tasks' || activeTabRef.current === 'notes') {
+            e.preventDefault();
+            window.dispatchEvent(new CustomEvent(`${activeTabRef.current}-create-new`));
+            return;
+          }
+        }
+        if (e.key.toLowerCase() === 'r') {
           e.preventDefault();
-          setShowCreateDesktopModal(true);
+          const rD = returnDesktopRef.current;
+          const cD = currentDesktopRef.current;
+          if (rD) {
+            const pureId = rD.split("___")[0];
+            handleSetActiveTab('live');
+            // @ts-ignore
+            window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
+            
+            setVisitHistory(prev => {
+              if (cD && pureId === cD) return prev;
+              return [...prev, cD as string].slice(-50);
+            });
+          }
           return;
         }
       }
@@ -314,6 +342,29 @@ function App() {
   const totalAll = Object.keys(desktopNames || {}).length;
   const totalEmpty = totalAll - totalActive;
 
+  const totalUnfinishedTasks = (() => {
+    let count = 0;
+    
+    // General tasks
+    if (data?.tasks?.general) {
+      count += data.tasks.general.filter((t: any) => !t.checked).length;
+    }
+    
+    // Live tasks (only active folders + root)
+    if (data?.tasks?.live) {
+      const activeFolders = Object.keys(data?.session?.folders || {});
+      Object.entries(data.tasks.live).forEach(([folderId, folderTasks]: [string, any]) => {
+        if (folderId === 'root' || activeFolders.includes(folderId)) {
+          count += folderTasks.filter((t: any) => !t.checked).length;
+        }
+      });
+    }
+    
+    // Template tasks are blueprints, not active outstanding tasks, so we don't count them here
+    
+    return count;
+  })();
+
   return (
     <div style={{ 
       color: 'var(--text-main)', 
@@ -341,8 +392,8 @@ function App() {
         gap: '24px',
         backdropFilter: 'blur(10px)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '220px', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '100px' }}>
+          <div style={{ width: '100%', maxWidth: '220px', position: 'relative' }}>
             <input 
               ref={searchInputRef}
               type="text" 
@@ -369,6 +420,25 @@ function App() {
 
         {/* Actions and Stats Summary */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '28px' }}>
+          {/* Action Buttons (Tasks and Notes Tabs) */}
+          {(activeTab === 'tasks' || activeTab === 'notes') && (
+            <>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  className="btn-hover"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent(`${activeTab}-create-new`));
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title={`New ${activeTab === 'tasks' ? 'Task' : 'Note'} (Ctrl + N)`}
+                >
+                  <IconPlus size={16} />
+                </button>
+              </div>
+              {/* Divider */}
+              <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+            </>
+          )}
           
           {/* Action Buttons (Only for Live Tab) */}
           {activeTab === 'live' && (
@@ -464,7 +534,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'].map(tab => (
+            {['live', 'notes', 'tasks', 'temps', 'chrome'].map(tab => (
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
@@ -480,9 +550,15 @@ function App() {
                     letterSpacing: '0.5px',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer',
-                    border: activeTab === tab ? '1px solid rgba(38, 139, 210, 0.2)' : '1px solid transparent'
+                    border: activeTab === tab ? '1px solid rgba(38, 139, 210, 0.2)' : '1px solid transparent',
+                    position: 'relative'
                   }}
-              >{tab === 'notes' ? 'old notes' : tab === 'notes_new' ? 'notes' : tab}</div>
+              >
+                {tab}
+                {tab === 'tasks' && totalUnfinishedTasks > 0 && (
+                  <span style={{ color: 'var(--accent-red)' }}> [{totalUnfinishedTasks}]</span>
+                )}
+              </div>
             ))}
           </div>
 
@@ -529,35 +605,6 @@ function App() {
                   <IconFolderOpen size={13} /> Scripts
                 </button>
               </>
-            ) : activeTab === 'notes' ? (
-              <>
-
-                <button 
-                  className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'NOTES_ADD_DIVIDER' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Add Group Divider"
-                >
-                  <IconMinus size={16} />
-                </button>
-                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
-                <button
-                  className="btn-hover"
-                  onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'checkbox', folderKey: 'root' } }))}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
-                  title="Add Checkbox"
-                >
-                  <IconSquare size={13} /> Checkbox
-                </button>
-                <button
-                  className="btn-hover"
-                  onClick={() => window.dispatchEvent(new CustomEvent('notes-add', { detail: { type: 'note', folderKey: 'root' } }))}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid rgba(108, 113, 196, 0.2)', backgroundColor: 'rgba(108, 113, 196, 0.1)', color: 'var(--accent-purple)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
-                  title="Add Note"
-                >
-                  <IconFileText size={13} /> Note
-                </button>
-              </>
             ) : null}
           </div>
         </div>
@@ -583,7 +630,7 @@ function App() {
                   searchQuery={searchQuery}
                   currentDesktop={currentDesktop}
                   returnDesktop={returnDesktop}
-                  setSessionData={(newData: any) => window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "UPDATE_SESSION"`).then(() => setData(newData))}
+                  setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
                   onAction={() => setLastActionTime(Date.now())}
                   onSwitch={(id) => {
                     setVisitHistory(prev => {
@@ -595,9 +642,8 @@ function App() {
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
-              {activeTab === 'notes' && <NotesTab notesData={data?.notes} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
+              {activeTab === 'notes' && <NotesTab notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'tasks' && <TasksTab tasksData={data?.tasks} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
-              {activeTab === 'notes_new' && <NotesTabNew notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
             </>

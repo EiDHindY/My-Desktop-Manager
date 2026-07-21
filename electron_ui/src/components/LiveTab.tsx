@@ -232,9 +232,6 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
         if (visibleItems.length > 0) {
           setSelectedIndex(prev => (prev - 1 + visibleItems.length) % visibleItems.length);
         }
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'r' && returnDesktop) {
-        e.preventDefault();
-        handleSwitchDesktop(returnDesktop);
       } else if (e.key === 'Enter' && visibleItems[selectedIndex]) {
         e.preventDefault();
         const item = visibleItems[selectedIndex];
