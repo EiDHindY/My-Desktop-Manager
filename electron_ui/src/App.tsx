@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef, useCallback } from 'react'
 import LiveTab from './components/LiveTab'
 import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
+import TasksTab from './components/TasksTab'
+import NotesTabNew from './components/NotesTabNew'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
@@ -73,11 +75,14 @@ function App() {
         // @ts-ignore
         window.electronAPI.readJSON('notes.json'),
         // @ts-ignore
-        // Always run the window scan to keep the Active/Empty header counts accurate across all tabs
+        window.electronAPI.readJSON('tasks.json'),
+        // @ts-ignore
+        window.electronAPI.readJSON('notes_new.json'),
+        // @ts-ignore
         window.electronAPI.fetchDesktops(true),
         // @ts-ignore
         window.electronAPI.readJSON('history.json')
-      ]).then(([sessionData, notesData, desktopInfo, historyData]) => {
+      ]).then(([sessionData, notesData, tasksData, notesDataNew, desktopInfo, historyData]) => {
         // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment
         if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 1500) return;
 
@@ -128,7 +133,7 @@ function App() {
           window.electronAPI.writeJSON('notes.json', finalNotesData);
         }
 
-        const newData = { session: sessionData, notes: finalNotesData };
+        const newData = { session: sessionData, notes: finalNotesData, tasks: tasksData, notes_new: notesDataNew };
         dataRef.current = newData;
         setData(newData)
         setDesktopNames(desktopInfo?.names || {})
@@ -244,25 +249,19 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'temps', 'chrome'];
+          const tabs = ['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'temps', 'chrome'];
+          const tabs = ['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
-        if (e.key.toLowerCase() === 'n') {
+        if (e.key.toLowerCase() === 'n' && activeTabRef.current === 'live') {
           e.preventDefault();
-          if (activeTabRef.current === 'live') {
-            setShowCreateDesktopModal(true);
-          } else if (activeTabRef.current === 'temps') {
-            setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' });
-          } else if (activeTabRef.current === 'notes') {
-            setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' });
-          }
+          setShowCreateDesktopModal(true);
           return;
         }
       }
@@ -371,54 +370,52 @@ function App() {
         {/* Actions and Stats Summary */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '28px' }}>
           
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button 
-              className="btn-hover"
-              onClick={() => {
-                if (activeTab === 'live') {
-                  setShowCreateDesktopModal(true);
-                } else if (activeTab === 'temps') {
-                  setPromptConfig({ title: 'New Template Folder', defaultValue: 'New Folder', command: 'CREATE_TEMPLATE', description: 'Path: ~/.config/desktop-manager/templates/' });
-                } else if (activeTab === 'notes') {
-                  setPromptConfig({ title: 'New Folder Name', defaultValue: 'New Folder', command: 'NOTES_ADD_FOLDER' });
-                }
-              }}
-              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-              title="New (Ctrl + N)"
-            >
-              <IconPlus size={16} />
-            </button>
-            <button 
-              className="btn-hover"
-              onClick={async () => {
-                // @ts-ignore
-                await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
-                setLastActionTime(Date.now());
-              }}
-              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-              title="Empty all"
-            >
-              <IconSweeper size={16} />
-            </button>
-            <button 
-              className="btn-hover"
-              onClick={async () => {
-                if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
-                  // @ts-ignore
-                  await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
-                  setLastActionTime(Date.now());
-                }
-              }}
-              style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-              title="Shutdown"
-            >
-              <IconTrash size={16} />
-            </button>
-          </div>
+          {/* Action Buttons (Only for Live Tab) */}
+          {activeTab === 'live' && (
+            <>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  className="btn-hover"
+                  onClick={() => {
+                    setShowCreateDesktopModal(true);
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="New (Ctrl + N)"
+                >
+                  <IconPlus size={16} />
+                </button>
+                <button 
+                  className="btn-hover"
+                  onClick={async () => {
+                    // @ts-ignore
+                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
+                    setLastActionTime(Date.now());
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Empty all"
+                >
+                  <IconSweeper size={16} />
+                </button>
+                <button 
+                  className="btn-hover"
+                  onClick={async () => {
+                    if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
+                      // @ts-ignore
+                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
+                      setLastActionTime(Date.now());
+                    }
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Shutdown"
+                >
+                  <IconTrash size={16} />
+                </button>
+              </div>
 
-          {/* Divider */}
-          <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+              {/* Divider */}
+              <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+            </>
+          )}
 
           {/* Stats */}
           <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
@@ -467,7 +464,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['live', 'notes', 'temps', 'chrome'].map(tab => (
+            {['live', 'notes', 'tasks', 'notes_new', 'temps', 'chrome'].map(tab => (
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
@@ -485,7 +482,7 @@ function App() {
                     cursor: 'pointer',
                     border: activeTab === tab ? '1px solid rgba(38, 139, 210, 0.2)' : '1px solid transparent'
                   }}
-              >{tab}</div>
+              >{tab === 'notes' ? 'old notes' : tab === 'notes_new' ? 'notes' : tab}</div>
             ))}
           </div>
 
@@ -599,6 +596,8 @@ function App() {
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
               {activeTab === 'notes' && <NotesTab notesData={data?.notes} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
+              {activeTab === 'tasks' && <TasksTab tasksData={data?.tasks} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
+              {activeTab === 'notes_new' && <NotesTabNew notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
             </>

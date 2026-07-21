@@ -224,6 +224,32 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             }
         }
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+
+        // Sync Tasks: Copy template tasks to the live folder
+        try {
+            const tasksJsonPath = join(libraryDir, 'tasks.json');
+            if (existsSync(tasksJsonPath)) {
+                const tasksData = JSON.parse(readFileSync(tasksJsonPath, 'utf-8'));
+                if (tasksData.templates && tasksData.templates[folderName] && tasksData.templates[folderName].length > 0) {
+                    if (!tasksData.live) tasksData.live = {};
+                    if (!tasksData.live[folderName]) tasksData.live[folderName] = [];
+                    
+                    // Create deep copies with new IDs and reset checked state
+                    const copiedTasks = tasksData.templates[folderName].map((t: any) => ({
+                        id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        text: t.text,
+                        checked: false
+                    }));
+                    
+                    tasksData.live[folderName] = [...tasksData.live[folderName], ...copiedTasks];
+                    writeFileSync(tasksJsonPath, JSON.stringify(tasksData, null, 2));
+                    console.log(`Copied ${copiedTasks.length} tasks from template '${folderName}' to live folder.`);
+                }
+            }
+        } catch (taskErr) {
+            console.error("Failed to copy template tasks:", taskErr);
+        }
+
         runCommand(`notify-send "Desktop Manager" "🚀 Deployed ${tasks.length} tasks to '${folderName}'"`);
     } catch (e) {
         console.error("Deploy error:", e);
