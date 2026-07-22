@@ -40,7 +40,7 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -149,11 +149,14 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       if (!folderMatches) return; // hide folders that don't match the folder segment
 
       const matchingDesktops = desktops.filter((id: string) => {
+        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         if (desktopQuery === '') return true;
         const pureId = id.split('___')[0];
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(desktopQuery);
       });
+
+      if (showOnlyActive && matchingDesktops.length === 0) return;
 
       visibleItems.push({ type: 'folder', id: folderName });
       matchingDesktops.forEach((dId: string) => {
@@ -162,6 +165,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     } else {
       // === NORMAL MODE (no space typed yet) ===
       const matchingDesktops = desktops.filter((id: string) => {
+        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         const pureId = id.split('___')[0];
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(folderQuery);
@@ -169,10 +173,11 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       const folderMatches = folderName.toLowerCase().includes(folderQuery);
 
       if (folderQuery && !folderMatches && matchingDesktops.length === 0) return;
+      if (showOnlyActive && matchingDesktops.length === 0) return;
 
       visibleItems.push({ type: 'folder', id: folderName });
 
-      if (expandedFolders.includes(folderName) || folderQuery) {
+      if (expandedFolders.includes(folderName) || folderQuery || showOnlyActive) {
         const sorted = folderName === 'root'
           ? [...matchingDesktops].sort((a, b) => {
               const pA = a.split('___')[0]; const pB = b.split('___')[0];
@@ -184,7 +189,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
               if (!eA && eB) return -1; if (eA && !eB) return 1;
               return 0;
             })
-          : (folderQuery ? matchingDesktops : desktops);
+          : (folderQuery || showOnlyActive ? matchingDesktops : desktops);
 
         sorted.forEach((dId: string) => {
           visibleItems.push({ type: 'desktop', id: dId, folderName });
@@ -219,7 +224,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     }
   }, [searchQuery, currentDesktop, visibleItems.length]);
 
-  // Keyboard Navigation: Ctrl + J / K
+  // Keyboard Navigation: Ctrl + J / K and Ctrl + Enter
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'j') {
@@ -231,6 +236,20 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
         e.preventDefault();
         if (visibleItems.length > 0) {
           setSelectedIndex(prev => (prev - 1 + visibleItems.length) % visibleItems.length);
+        }
+      } else if (e.ctrlKey && e.key === 'Enter' && visibleItems[selectedIndex]) {
+        e.preventDefault();
+        const item = visibleItems[selectedIndex];
+        if (item.type === 'folder') {
+          handleDeployAll(item.id);
+        } else {
+          const pureId = item.id.split("___")[0];
+          const hasWindows = (windowCounts[pureId] || 0) > 0;
+          if (hasWindows) {
+            handleSwitchDesktop(item.id);
+          } else {
+            executeMenuCommand(`SUMMON:${item.id}`);
+          }
         }
       } else if (e.key === 'Enter' && visibleItems[selectedIndex]) {
         e.preventDefault();
@@ -247,7 +266,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visibleItems, selectedIndex, returnDesktop]);
+  }, [visibleItems, selectedIndex, returnDesktop, windowCounts]);
 
   const toggleFolder = (folderName: string) => {
     if (expandedFolders.includes(folderName)) {
@@ -354,6 +373,7 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
       if (!folderMatches) return null;
 
       matchingDesktops = desktops.filter((id: string) => {
+        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         if (desktopQuery === '') return true;
         const pureId = id.split('___')[0];
         const name = desktopNames[pureId] || '';
@@ -364,16 +384,18 @@ export default function LiveTab({ sessionData, desktopNames = {}, desktopPriorit
     } else {
       // === NORMAL MODE ===
       matchingDesktops = desktops.filter((id: string) => {
+        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         const pureId = id.split('___')[0];
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(folderQuery);
       });
 
       const folderMatches = folderName.toLowerCase().includes(folderQuery);
-      displayDesktops = (folderQuery && !folderMatches) ? matchingDesktops : desktops;
-      isExpanded = expandedFolders.includes(folderName) || !!folderQuery;
+      displayDesktops = (folderQuery && !folderMatches) || showOnlyActive ? matchingDesktops : desktops;
+      isExpanded = expandedFolders.includes(folderName) || !!folderQuery || showOnlyActive;
 
       if (folderQuery && !folderMatches && matchingDesktops.length === 0) return null;
+      if (showOnlyActive && matchingDesktops.length === 0) return null;
     }
 
     const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split('___')[0]] || 0) > 0).length;

@@ -3,6 +3,7 @@ import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoa
 import IconPicker from './IconPicker';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
+import CreateTemplateScriptModal from './CreateTemplateScriptModal';
 
 interface Task {
   id: string;
@@ -36,7 +37,14 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [showIconPicker, setShowIconPicker] = useState<{ filename: string, taskId: string } | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleCreateNew = () => setShowCreateModal(true);
+    window.addEventListener('temps-create-new', handleCreateNew);
+    return () => window.removeEventListener('temps-create-new', handleCreateNew);
+  }, []);
 
   useEffect(() => {
     setLocalTemplates(templates);
@@ -81,11 +89,12 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
     setExpandedTemps(prev => prev.includes(filename) ? prev.filter(f => f !== filename) : [...prev, filename]);
   };
 
-  const handleDeployTemplate = async (templateName: string) => {
-    setLoadingTasks(prev => ({ ...prev, [templateName]: true }));
+  const handleDeployTemplate = async (templateFilename: string, templateName: string) => {
+    const key = `deploy-temp-${templateFilename}`;
+    setLoadingTasks(prev => ({ ...prev, [key]: true }));
     // @ts-ignore
     await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DEPLOY_ALL:${templateName}"`);
-    setLoadingTasks(prev => ({ ...prev, [templateName]: false }));
+    setLoadingTasks(prev => ({ ...prev, [key]: false }));
   };
 
   const handleDeployTask = async (templateName: string, taskId: string) => {
@@ -149,6 +158,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if a modal is open
+      if (showCreateModal || showIconPicker) return;
       if (flatItems.length === 0) return;
 
       // Handle Arrow keys and Ctrl+J / Ctrl+K (Vim-like navigation)
@@ -162,7 +173,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
         e.preventDefault();
         const item = flatItems[focusedIndex];
         if (item.type === 'template') {
-          handleDeployTemplate(item.name);
+          handleDeployTemplate(item.id, item.name);
         } else if (item.type === 'task') {
           handleDeployTask(item.templateName!, item.taskId!);
         }
@@ -171,7 +182,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [flatItems, focusedIndex]);
+  }, [flatItems, focusedIndex, showCreateModal, showIconPicker]);
 
   // Reset focus when query changes
   useEffect(() => {
@@ -249,28 +260,17 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                             <div
                               id={`flat-item-${templateFlatIndex}`}
                               className="interactive-element"
+                              {...provided.dragHandleProps}
                               style={{ 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 gap: '10px', 
-                                padding: '8px 14px',
+                                padding: '6px 12px',
                                 background: isTemplateFocused ? 'rgba(133, 153, 0, 0.1)' : 'transparent',
                                 borderRadius: '11px',
+                                cursor: 'grab'
                               }}
                             >
-                              <div
-                                {...provided.dragHandleProps}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  color: 'var(--accent-green)',
-                                  cursor: 'grab',
-                                  padding: '4px',
-                                  marginRight: '-4px'
-                                }}
-                              >
-                                <IconGrip size={14} />
-                              </div>
                               <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
                               <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '1px' }}>{temp.name}</span>
                               <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
@@ -300,13 +300,14 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                             {/* Template Header */}
                             <div 
                               id={`flat-item-${templateFlatIndex}`}
+                              {...provided.dragHandleProps}
                             onClick={() => toggleExpand(temp.filename)}
                             style={{ 
                               display: 'flex', 
                               justifyContent: 'space-between', 
                               alignItems: 'center', 
-                              padding: '10px 14px',
-                              cursor: 'pointer',
+                              padding: '8px 12px',
+                              cursor: 'grab',
                               transition: 'all 0.2s ease',
                               background: isTemplateFocused ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
                               borderTopLeftRadius: '11px',
@@ -314,23 +315,9 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div
-                                {...provided.dragHandleProps}
-                                onClick={(e) => { e.stopPropagation(); }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  color: 'var(--text-dim)',
-                                  cursor: 'grab',
-                                  padding: '4px',
-                                  marginRight: '-4px'
-                                }}
-                              >
-                                <IconGrip size={14} />
-                              </div>
                               <div style={{ 
-                                width: '28px', 
-                                height: '28px', 
+                                width: '24px', 
+                                height: '24px', 
                       borderRadius: '6px', 
                       background: 'rgba(38, 139, 210, 0.1)', 
                       display: 'flex', 
@@ -338,10 +325,10 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                       justifyContent: 'center',
                       color: 'var(--accent-blue)'
                     }}>
-                      {isExpanded ? <IconFolderOpen size={16} /> : <IconFolder size={16} />}
+                      {isExpanded ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '800', color: isTemplateFocused ? 'var(--accent-cyan)' : 'var(--text-main)' }}>{temp.name}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '800', color: isTemplateFocused ? 'var(--accent-cyan)' : 'var(--text-main)' }}>{temp.name}</span>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: '600' }}>
                           {temp.tasks?.length || 0} Scripts
@@ -414,7 +401,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
 
                     <button 
                       className="btn-hover"
-                      onClick={(e) => { e.stopPropagation(); handleDeployTemplate(temp.name); }}
+                      onClick={(e) => { e.stopPropagation(); handleDeployTemplate(temp.filename, temp.name); }}
                       disabled={loadingTasks[temp.name]}
                       style={{ 
                         background: 'var(--aurora-gradient)', 
@@ -448,7 +435,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 style={{ 
                                   display: 'flex', 
                                   flexDirection: 'column', 
-                                  padding: '6px 10px 10px 10px', 
+                                  padding: '4px 8px 8px 8px', 
                                   gap: '4px', 
                                   background: 'rgba(0, 0, 0, 0.15)',
                                   borderBottomLeftRadius: '11px',
@@ -467,6 +454,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 <div 
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
                                   id={`flat-item-${taskFlatIndex}`}
                                   className="interactive-element"
                                   style={{ 
@@ -480,22 +468,10 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                     borderRadius: '6px',
                                     transition: 'all 0.15s ease',
                                     position: 'relative',
-                                    overflow: 'hidden'
+                                    overflow: 'hidden',
+                                    cursor: 'grab'
                                   }}
                                 >
-                                  <div
-                                    {...provided.dragHandleProps}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      color: 'var(--text-dim)',
-                                      cursor: 'grab',
-                                      padding: '4px',
-                                      marginLeft: '-6px'
-                                    }}
-                                  >
-                                    <IconGrip size={12} />
-                                  </div>
                                   {isTaskFocused && (
                             <div style={{
                               position: 'absolute',
@@ -670,6 +646,35 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
         )}
         </Droppable>
         </DragDropContext>
+      )}
+
+      {showCreateModal && (
+        <CreateTemplateScriptModal
+          existingTemplates={localTemplates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
+          onCancel={() => setShowCreateModal(false)}
+          onSubmit={async (scriptName, templateName, isNewTemplate, icon) => {
+            let filename = templateName.toLowerCase().replace(/\s+/g, '_') + '.json';
+            
+            if (isNewTemplate) {
+              // @ts-ignore
+              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE:${templateName}"`);
+              // Wait a bit to ensure it's created before adding script
+              await new Promise(r => setTimeout(r, 200));
+            }
+
+            // Create script and add to template, optionally with icon
+            let cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}"`;
+            if (icon) {
+              cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}:${icon}"`;
+            }
+            
+            // @ts-ignore
+            await window.electronAPI.executeCommand(cmd);
+            
+            setShowCreateModal(false);
+            onAction?.();
+          }}
+        />
       )}
 
       {showIconPicker && (

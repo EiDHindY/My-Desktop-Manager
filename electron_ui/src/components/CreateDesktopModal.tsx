@@ -10,7 +10,14 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
   const [folderName, setFolderName] = useState('');
   const [desktopName, setDesktopName] = useState('New Desktop');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const desktopInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredFolders = existingFolders.filter(folder => {
+    const isExactMatch = existingFolders.some(ex => ex.toLowerCase() === folderName.toLowerCase());
+    if (isExactMatch) return true;
+    return folder.toLowerCase().includes(folderName.toLowerCase());
+  });
 
   useEffect(() => {
     const focusInput = () => {
@@ -25,13 +32,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        const folderToUse = folderName.trim() || 'root';
-        onSubmit(folderToUse, desktopName);
-      } else if (e.key === 'Escape') {
+      if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -41,11 +42,13 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
 
     window.addEventListener('keydown', handleGlobalKeyDown, true);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [folderName, desktopName, onSubmit, onCancel]);
+  }, [onCancel]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    e.nativeEvent.stopImmediatePropagation();
-    e.nativeEvent.stopPropagation();
+    if (e.key !== 'Enter') {
+      e.nativeEvent.stopImmediatePropagation();
+      e.nativeEvent.stopPropagation();
+    }
   };
 
   return (
@@ -118,37 +121,94 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
           />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
-          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Select Existing Folder</label>
-          <div 
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="search-input-hover"
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px 12px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 33, 43, 0.6)',
-              border: '1px solid var(--border-glass)',
-              color: '#e0e0e0',
-              fontSize: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-            }}
-          >
-            <span>{existingFolders.includes(folderName) ? folderName : 'Choose a folder...'}</span>
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>▼</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative', zIndex: 10 }}>
+          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Target Folder</label>
+          <div style={{ position: 'relative' }}>
+            <input 
+              type="text" 
+              value={folderName}
+              placeholder="Select or type new folder name"
+              onChange={(e) => {
+                setFolderName(e.target.value);
+                setIsDropdownOpen(true);
+                setFocusedIndex(-1);
+              }}
+              onFocus={() => setIsDropdownOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  e.nativeEvent.stopImmediatePropagation();
+                  e.stopPropagation();
+                  if (!isDropdownOpen) {
+                    setIsDropdownOpen(true);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    setFocusedIndex(prev => {
+                      const next = prev < filteredFolders.length - 1 ? prev + 1 : prev;
+                      return next === -1 && filteredFolders.length > 0 ? 0 : next;
+                    });
+                  } else {
+                    setFocusedIndex(prev => (prev > 0 ? prev - 1 : prev));
+                  }
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.nativeEvent.stopImmediatePropagation();
+                  e.stopPropagation();
+                  
+                  let finalFolder = folderName;
+                  if (isDropdownOpen && filteredFolders.length > 0) {
+                    finalFolder = focusedIndex >= 0 ? filteredFolders[focusedIndex] : filteredFolders[0];
+                  }
+                  
+                  finalFolder = finalFolder.trim() || 'root';
+                  onSubmit(finalFolder, desktopName);
+                } else if (e.key === 'Escape') {
+                  e.nativeEvent.stopImmediatePropagation();
+                  e.stopPropagation();
+                  setIsDropdownOpen(false);
+                } else {
+                  handleKeyDown(e);
+                }
+              }}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '10px 30px 10px 10px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(0, 33, 43, 0.6)',
+                border: '1px solid var(--border-glass)',
+                color: '#e0e0e0',
+                outline: 'none',
+                fontSize: '14px',
+                transition: 'all 0.3s ease',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+              }}
+              className="search-input-hover prompt-modal-input"
+            />
+            <div 
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                cursor: 'pointer',
+                color: 'var(--text-dim)',
+                padding: '4px'
+              }}
+            >
+              ▼
+            </div>
           </div>
           
-          {isDropdownOpen && (
+          {isDropdownOpen && existingFolders.length > 0 && (
             <div style={{
               position: 'absolute',
-              top: '55px',
+              top: '100%',
               left: 0,
               right: 0,
+              marginTop: '4px',
               backgroundColor: 'rgba(7, 54, 66, 0.95)',
               border: '1px solid var(--border-glass)',
               borderRadius: '8px',
@@ -159,60 +219,31 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
               maxHeight: '160px',
               overflowY: 'auto'
             }}>
-              {existingFolders.length === 0 ? (
-                <div style={{ padding: '10px', color: 'var(--text-dim)', fontSize: '13px', textAlign: 'center', fontStyle: 'italic' }}>
-                  No folders exist yet
-                </div>
-              ) : existingFolders.map(folder => (
-                <div 
-                  key={folder}
-                  className="interactive-element"
-                  onClick={() => {
-                    setFolderName(folder);
-                    setIsDropdownOpen(false);
-                  }}
-                  style={{
-                    padding: '10px 12px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    color: folderName === folder ? 'var(--accent-blue)' : 'var(--text-main)',
-                    backgroundColor: folderName === folder ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
-                    transition: 'background-color 0.1s'
-                  }}
-                >
-                  {folder}
-                </div>
-              ))}
+              {filteredFolders.map((folder, index) => {
+                const isSelected = folderName.toLowerCase() === folder.toLowerCase() || index === focusedIndex || (focusedIndex === -1 && index === 0 && folderName.trim() !== '');
+                return (
+                  <div 
+                    key={folder}
+                    className="interactive-element"
+                    onClick={() => {
+                      setFolderName(folder);
+                      setIsDropdownOpen(false);
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      color: isSelected ? 'var(--accent-blue)' : 'var(--text-main)',
+                      backgroundColor: isSelected ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                      transition: 'background-color 0.1s'
+                    }}
+                  >
+                    {folder}
+                  </div>
+                );
+              })}
             </div>
           )}
-          
-          <div style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '11px', margin: '4px 0', fontWeight: 'bold' }}>- OR -</div>
-          
-          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Create New Folder</label>
-          <input 
-            type="text" 
-            value={existingFolders.includes(folderName) ? "" : folderName}
-            placeholder="Type new folder name..."
-            onChange={(e) => {
-              setFolderName(e.target.value);
-              setIsDropdownOpen(false);
-            }}
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 33, 43, 0.6)',
-              border: '1px solid var(--border-glass)',
-              color: '#e0e0e0',
-              outline: 'none',
-              fontSize: '14px',
-              transition: 'all 0.3s ease',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-            }}
-            className="search-input-hover prompt-modal-input"
-          />
         </div>
 
         <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>

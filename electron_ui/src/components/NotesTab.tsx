@@ -33,10 +33,12 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   const [editingNoteInfo, setEditingNoteInfo] = useState('');
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
   const [copiedNoteId, setCopiedNoteId] = useState<string | null>(null);
+  const newNoteInputRef = useRef<HTMLInputElement>(null);
   
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  useEffect(() => setSelectedIndex(0), [searchQuery]);
 
   useEffect(() => {
     const handleCreateNew = () => setShowCreateModal(true);
@@ -45,14 +47,34 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   }, []);
   
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowDropdown(false);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        setIsSidebarOpen(true);
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        setIsSidebarOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+  
+  // Removed click outside logic
+
+  useEffect(() => {
+    const handleGlobalTyping = (e: any) => {
+      if (!isSidebarOpen) {
+        e.preventDefault(); // Stop App.tsx from focusing the global search bar
+        if (newNoteInputRef.current) {
+          newNoteInputRef.current.focus();
+        }
+      }
+    };
+    window.addEventListener('global-typing-intercept', handleGlobalTyping);
+    return () => window.removeEventListener('global-typing-intercept', handleGlobalTyping);
+  }, [isSidebarOpen]);
+
   
   useEffect(() => {
     if (notesData) {
@@ -186,7 +208,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
     if (activeCategory === 'live' && activeSubId) notes = data.live[activeSubId] || [];
     if (activeCategory === 'templates' && activeSubId) notes = data.templates[activeSubId] || [];
     
-    if (searchQuery) {
+    if (searchQuery && !isSidebarOpen) {
       notes = notes.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()) || (t.info && t.info.toLowerCase().includes(searchQuery.toLowerCase())));
     }
     return notes;
@@ -205,33 +227,222 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   const selectCategory = (category: 'general' | 'live' | 'templates', subId: string | null) => {
     setActiveCategory(category);
     setActiveSubId(subId);
-    setShowDropdown(false);
+    setTimeout(() => {
+      if (newNoteInputRef.current) {
+        newNoteInputRef.current.focus();
+      }
+    }, 10);
+  };
+
+  
+  // Compute visible items for keyboard navigation highlighting
+  const visibleItems: { type: 'general' | 'live' | 'templates', id: string | null }[] = [];
+  if (!isSidebarOpen || !searchQuery || 'general notes'.includes(searchQuery.toLowerCase())) {
+    visibleItems.push({ type: 'general', id: null });
+  }
+  
+  let liveFolders: string[] = [];
+  if (sessionData?.folders) {
+    const folders = sessionData.folders || {};
+    const savedOrder = sessionData.folder_order || [];
+    const allKeys = Object.keys(folders);
+    const folderNames = [
+      ...savedOrder.filter((k: string) => k !== 'root' && allKeys.includes(k)),
+      ...allKeys.filter((k: string) => !savedOrder.includes(k) && k !== 'root'),
+      'root'
+    ];
+    liveFolders = isSidebarOpen && searchQuery 
+      ? folderNames.filter((fid: string) => {
+          const name = sessionData.folder_names?.[fid] || fid;
+          return name.toLowerCase().includes(searchQuery.toLowerCase());
+        })
+      : folderNames;
+  }
+  liveFolders.forEach(fid => visibleItems.push({ type: 'live', id: fid }));
+  
+  const templateItems = templates ? templates.filter(t => !t.isDivider).filter(t => isSidebarOpen && searchQuery ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) : true) : [];
+  templateItems.forEach(t => visibleItems.push({ type: 'templates', id: t.name }));
+
+  useEffect(() => {
+    if (!isSidebarOpen || !searchQuery) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only process Ctrl+J / Ctrl+K or Enter
+      if (e.ctrlKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % visibleItems.length);
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev - 1 + visibleItems.length) % visibleItems.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const item = visibleItems[selectedIndex];
+        if (item) {
+          selectCategory(item.type, item.id);
+          setIsSidebarOpen(false);
+          window.dispatchEvent(new CustomEvent('clear-search-query'));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSidebarOpen, searchQuery, selectedIndex, visibleItems]);
+
+  const isHighlighted = (type: string, id: string | null) => {
+    if (!isSidebarOpen || !searchQuery || visibleItems.length === 0) return false;
+    const current = visibleItems[selectedIndex];
+    return current && current.type === type && current.id === id;
   };
 
   return (
     <div style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
-      {/* Main Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', minWidth: 0 }}>
-        <div style={{ marginBottom: '16px', position: 'relative' }} ref={dropdownRef}>
-          <h2 
+      {/* Sidebar */}
+      {isSidebarOpen && (
+        <div style={{
+          width: '240px',
+          backgroundColor: 'rgba(0, 33, 43, 0.4)',
+          borderRight: '1px solid var(--border-glass)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '16px 12px',
+          overflowY: 'auto'
+        }}>
+          {/* General Notes */}
+          {(!isSidebarOpen || !searchQuery || 'general notes'.includes(searchQuery.toLowerCase())) && (
+          <div 
             className="interactive-element"
-            onClick={() => setShowDropdown(!showDropdown)}
-            style={{ 
-              margin: 0, 
-              color: 'var(--text-main)', 
-              fontSize: '16px', 
-              fontWeight: '800', 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: '10px',
+            onClick={() => { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
+            tabIndex={0}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              padding: '6px 10px',
-              borderRadius: '8px',
-              marginLeft: '-10px',
-              transition: 'background-color 0.2s',
-              userSelect: 'none'
+              backgroundColor: activeCategory === 'general' || isHighlighted('general', null) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
+              boxShadow: isHighlighted('general', null) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
+              color: activeCategory === 'general' ? 'var(--accent-blue)' : 'var(--text-main)',
+              fontWeight: activeCategory === 'general' ? '700' : '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '16px'
             }}
           >
+            <IconInbox size={16} />
+            <span style={{ flex: 1 }}>General Notes</span>
+            {getUnfinishedCount('general') > 0 && (
+              <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                {getUnfinishedCount('general')}
+              </span>
+            )}
+          </div>
+          )}
+
+          {/* Live Desktops */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
+              <IconRadio size={12} color="var(--accent-green)" /> LIVE DESKTOPS
+            </div>
+            {sessionData?.folders && liveFolders.map((folderId: string) => {
+                const name = sessionData.folder_names?.[folderId] || folderId;
+                const isActive = activeCategory === 'live' && activeSubId === folderId;
+                return (
+                  <div 
+                    key={folderId}
+                    className="interactive-element"
+                    onClick={() => { selectCategory('live', folderId); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('live', folderId); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
+                    tabIndex={0}
+                    style={{
+                      padding: '6px 12px',
+                      margin: '2px 0',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      backgroundColor: isActive || isHighlighted('live', folderId) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
+                      boxShadow: isHighlighted('live', folderId) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
+                      color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
+                      fontSize: '13px',
+                      fontWeight: isActive ? '700' : '500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    {isActive ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                    {getUnfinishedCount('live', folderId) > 0 && (
+                      <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                        {getUnfinishedCount('live', folderId)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* Templates */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
+              <IconLayers size={12} color="var(--accent-yellow)" /> TEMPLATES
+            </div>
+            {templateItems.map((template: any) => {
+              const isActive = activeCategory === 'templates' && activeSubId === template.name;
+              return (
+                <div 
+                  key={template.name}
+                  className="interactive-element"
+                  onClick={() => { selectCategory('templates', template.name); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('templates', template.name); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
+                  tabIndex={0}
+                  style={{
+                    padding: '6px 12px',
+                    margin: '2px 0',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    backgroundColor: isActive || isHighlighted('templates', template.name) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
+                    boxShadow: isHighlighted('templates', template.name) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
+                    color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
+                    fontSize: '13px',
+                    fontWeight: isActive ? '700' : '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isActive ? <IconLayers size={14} color="var(--accent-blue)" /> : <IconLayers size={14} />}
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
+                  {getUnfinishedCount('templates', template.name) > 0 && (
+                    <span style={{ backgroundColor: 'rgba(7, 54, 66, 0.8)', color: 'var(--text-dim)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+                      {getUnfinishedCount('templates', template.name)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', minWidth: 0 }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h2 style={{ 
+            margin: 0, 
+            color: 'var(--text-main)', 
+            fontSize: '16px', 
+            fontWeight: '800', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '10px',
+            userSelect: 'none'
+          }}>
+            <div 
+              className="interactive-element" 
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              style={{ cursor: 'pointer', display: 'flex', padding: '4px', marginLeft: '-4px', borderRadius: '4px' }}
+              title="Toggle Sidebar (Ctrl+L to open, Ctrl+H to close)"
+            >
+              {isSidebarOpen ? <IconChevronDown size={18} /> : <IconChevronRight size={18} />}
+            </div>
             {activeCategory === 'general' && (
               <>
                 <IconInbox size={18} color="var(--accent-blue)" /> General Notes
@@ -247,144 +458,8 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
                 <IconLayers size={18} color="var(--accent-yellow)" /> {activeSubId}
               </>
             )}
-            <div style={{ color: 'var(--text-dim)', display: 'flex', opacity: 0.7 }}>
-              {showDropdown ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-            </div>
           </h2>
-          
-          {/* Dropdown Menu */}
-          {showDropdown && (
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              marginTop: '4px',
-              width: '280px',
-              backgroundColor: 'rgba(7, 54, 66, 0.95)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '12px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-              zIndex: 100,
-              maxHeight: 'calc(100vh - 180px)',
-              overflowY: 'auto',
-              padding: '12px'
-            }}>
-              {/* General Notes */}
-              <div 
-                className="interactive-element dropdown-item"
-                onClick={() => selectCategory('general', null)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  backgroundColor: activeCategory === 'general' ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                  color: activeCategory === 'general' ? 'var(--accent-blue)' : 'var(--text-main)',
-                  fontWeight: activeCategory === 'general' ? '700' : '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px'
-                }}
-              >
-                <IconInbox size={16} />
-                <span style={{ flex: 1 }}>General Notes</span>
-                {getUnfinishedCount('general') > 0 && (
-                  <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                    {getUnfinishedCount('general')}
-                  </span>
-                )}
-              </div>
-
-              {/* Live Desktops */}
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-                  <IconRadio size={12} color="var(--accent-green)" /> LIVE DESKTOPS
-                </div>
-                {sessionData?.folders && (() => {
-                  const folders = sessionData.folders || {};
-                  const savedOrder = sessionData.folder_order || [];
-                  const allKeys = Object.keys(folders);
-                  const folderNames = [
-                    ...savedOrder.filter((k: string) => k !== 'root' && allKeys.includes(k)),
-                    ...allKeys.filter((k: string) => !savedOrder.includes(k) && k !== 'root'),
-                    'root'
-                  ];
-                  return folderNames.map((folderId: string) => {
-                    const name = sessionData.folder_names?.[folderId] || folderId;
-                    const isActive = activeCategory === 'live' && activeSubId === folderId;
-                    return (
-                      <div 
-                        key={folderId}
-                        className="interactive-element dropdown-item"
-                        onClick={() => selectCategory('live', folderId)}
-                        style={{
-                          padding: '6px 12px',
-                          margin: '2px 0',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          backgroundColor: isActive ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                          color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
-                          fontSize: '13px',
-                          fontWeight: isActive ? '700' : '500',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        {isActive ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                        {getUnfinishedCount('live', folderId) > 0 && (
-                          <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                            {getUnfinishedCount('live', folderId)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-
-              {/* Templates */}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-                  <IconLayers size={12} color="var(--accent-yellow)" /> TEMPLATES
-                </div>
-                {templates && templates.filter(t => !t.isDivider).map((template: any) => {
-                  const isActive = activeCategory === 'templates' && activeSubId === template.name;
-                  return (
-                    <div 
-                      key={template.name}
-                      className="interactive-element dropdown-item"
-                      onClick={() => selectCategory('templates', template.name)}
-                      style={{
-                        padding: '6px 12px',
-                        margin: '2px 0',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        backgroundColor: isActive ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                        color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
-                        fontSize: '13px',
-                        fontWeight: isActive ? '700' : '500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}
-                    >
-                      {isActive ? <IconLayers size={14} color="var(--accent-blue)" /> : <IconLayers size={14} />}
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
-                      {getUnfinishedCount('templates', template.name) > 0 && (
-                        <span style={{ backgroundColor: 'rgba(7, 54, 66, 0.8)', color: 'var(--text-dim)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                          {getUnfinishedCount('templates', template.name)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <p style={{ margin: '4px 0 0 0', color: 'var(--text-dim)', fontSize: '12px' }}>
+          <p style={{ margin: '4px 0 0 32px', color: 'var(--text-dim)', fontSize: '12px' }}>
             {activeCategory === 'templates' ? 'Notes defined here will be copied to Live Desktops when this template is deployed.' : 'Manage your active notes and to-dos.'}
           </p>
         </div>
@@ -556,6 +631,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
             <IconPlus size={14} />
           </div>
           <input
+            ref={newNoteInputRef}
             type="text"
             value={newNoteText}
             onChange={e => setNewNoteText(e.target.value)}

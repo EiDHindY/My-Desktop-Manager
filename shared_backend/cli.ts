@@ -105,8 +105,9 @@ if (command.startsWith('RENAME:')) {
 } else if (command.startsWith('CREATE_SCRIPT_TO_TEMPLATE:')) {
     const parts = command.substring(26).split(":");
     const filename = parts[0];
-    const scriptName = parts.slice(1).join(":");
-    handleCreateScriptAndAddToTemplate(filename, scriptName);
+    const scriptName = parts[1];
+    const iconName = parts.slice(2).join(":") || undefined;
+    handleCreateScriptAndAddToTemplate(filename, scriptName, iconName);
 } else if (command.startsWith('DELETE_TEMPLATE:')) {
     handleDeleteTemplate(command.substring(16));
 } else if (command.startsWith('DELETE_TEMPLATE_TASK:')) {

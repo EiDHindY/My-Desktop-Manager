@@ -9,14 +9,26 @@ interface IconPickerProps {
   title?: string;
 }
 
+let globalIconCache: string[] | null = null;
+let isFetchingIcons = false;
+
 export default function IconPicker({ currentIcons, onToggle, onClear, onClose, title = "Select Icons" }: IconPickerProps) {
   const [availableIcons, setAvailableIcons] = useState<string[]>([]);
 
   useEffect(() => {
-    // @ts-ignore
-    if (window.electronAPI && window.electronAPI.listIcons) {
+    if (globalIconCache) {
+      setAvailableIcons(globalIconCache);
+    } else if (!isFetchingIcons) {
+      isFetchingIcons = true;
       // @ts-ignore
-      window.electronAPI.listIcons().then(setAvailableIcons);
+      if (window.electronAPI && window.electronAPI.listIcons) {
+        // @ts-ignore
+        window.electronAPI.listIcons().then((icons: string[]) => {
+          globalIconCache = icons;
+          setAvailableIcons(icons);
+          isFetchingIcons = false;
+        });
+      }
     }
   }, []);
 
@@ -39,7 +51,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
             onClick={onClear}
             style={{ borderStyle: 'dashed', opacity: currentIcons.length > 0 ? 1 : 0.5 }}
           >
-            <div style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 'bold' }}>Clear All</div>
+            <div style={{ fontSize: '9px', color: 'var(--text-dim)', fontWeight: 'bold' }}>Clear All</div>
           </div>
           {availableIcons.map(icon => {
             const isSelected = currentIcons.includes(icon);
@@ -53,7 +65,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                   border: isSelected ? '1px solid var(--accent-blue)' : '1px solid transparent',
                   background: isSelected ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
                   borderRadius: '8px',
-                  padding: '8px',
+                  padding: '6px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -81,8 +93,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                   src={`local-icon://${encodeURIComponent(icon)}`} 
                   alt={icon} 
                   style={{ 
-                    width: '32px', 
-                    height: '32px', 
+                    width: '28px', height: '28px', 
                     objectFit: 'contain',
                     flexShrink: 0,
                     filter: isSelected ? 'none' : 'grayscale(0.3) opacity(0.8)'
@@ -91,11 +102,11 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
                 <span style={{ 
                   fontSize: '10px', 
                   color: isSelected ? 'var(--text-main)' : 'var(--text-dim)', 
-                  marginTop: '6px',
+                  marginTop: '4px',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  maxWidth: '100%'
+                  maxWidth: '100%', textAlign: 'center'
                 }}>
                   {icon.split('.')[0]}
                 </span>

@@ -254,13 +254,13 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'tasks', 'temps', 'chrome'];
+          const tabs = ['live', 'active', 'notes', 'tasks', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['live', 'notes', 'tasks', 'temps', 'chrome'];
+          const tabs = ['live', 'active', 'notes', 'tasks', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
@@ -269,7 +269,7 @@ function App() {
             e.preventDefault();
             setShowCreateDesktopModal(true);
             return;
-          } else if (activeTabRef.current === 'tasks' || activeTabRef.current === 'notes') {
+          } else if (activeTabRef.current === 'tasks' || activeTabRef.current === 'notes' || activeTabRef.current === 'temps') {
             e.preventDefault();
             window.dispatchEvent(new CustomEvent(`${activeTabRef.current}-create-new`));
             return;
@@ -279,9 +279,12 @@ function App() {
           e.preventDefault();
           const rD = returnDesktopRef.current;
           const cD = currentDesktopRef.current;
+          handleSetActiveTab('active');
           if (rD) {
+            setLastActionTime(Date.now());
             const pureId = rD.split("___")[0];
-            handleSetActiveTab('live');
+            setCurrentDesktop(pureId);
+            setSearchQuery('');
             // @ts-ignore
             window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
             
@@ -306,12 +309,21 @@ function App() {
 
       // Auto-focus search on any alphanumeric key if not already in an input
       if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
-        searchInputRef.current?.focus()
+        const interceptEvent = new CustomEvent('global-typing-intercept', { detail: { key: e.key }, cancelable: true });
+        window.dispatchEvent(interceptEvent);
+        if (!interceptEvent.defaultPrevented) {
+          searchInputRef.current?.focus()
+        }
       }
     }
 
-    window.addEventListener('keydown', handleGlobalKeyDown)
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+    const clearSearchHandler = () => setSearchQuery('');
+    window.addEventListener('clear-search-query', clearSearchHandler);
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('clear-search-query', clearSearchHandler);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    }
   }, [])
 
   useEffect(() => {
@@ -440,6 +452,64 @@ function App() {
             </>
           )}
           
+          {/* Action Buttons (Only for Temps Tab) */}
+          {activeTab === 'temps' && (
+            <>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button 
+                  className="btn-hover"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('temps-create-new'));
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(38, 139, 210, 0.2)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Create Template Script (Ctrl + N)"
+                >
+                  <IconPlus size={16} />
+                </button>
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
+                <button 
+                  className="btn-hover"
+                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'CREATE_TEMPLATE_DIVIDER' })}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Add Group Divider"
+                >
+                  <IconMinus size={16} />
+                </button>
+                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
+                <button 
+                  className="btn-hover"
+                  onClick={async () => {
+                    // @ts-ignore
+                    const folderPath = await window.electronAPI.nativeAction('select-folder');
+                    if (folderPath) {
+                      // @ts-ignore
+                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
+                      setLastActionTime(Date.now());
+                      loadTemplates();
+                    }
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Import Folder"
+                >
+                  <IconImport size={16} />
+                </button>
+                <button 
+                  className="btn-hover"
+                  onClick={async () => {
+                    // @ts-ignore
+                    await window.electronAPI.executeCommand(`xdg-open "/home/dod/.local/bin/Scripts/"`);
+                  }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  title="Open Scripts Directory"
+                >
+                  <IconFolderOpen size={16} />
+                </button>
+              </div>
+              {/* Divider */}
+              <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+            </>
+          )}
+          
           {/* Action Buttons (Only for Live Tab) */}
           {activeTab === 'live' && (
             <>
@@ -534,7 +604,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['live', 'notes', 'tasks', 'temps', 'chrome'].map(tab => (
+            {['live', 'active', 'notes', 'tasks', 'temps', 'chrome'].map(tab => (
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
@@ -564,48 +634,7 @@ function App() {
 
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {activeTab === 'temps' ? (
-              <>
-
-                <button 
-                  className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'CREATE_TEMPLATE_DIVIDER' })}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Add Group Divider"
-                >
-                  <IconMinus size={16} />
-                </button>
-                <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    // @ts-ignore
-                    const folderPath = await window.electronAPI.nativeAction('select-folder');
-                    if (folderPath) {
-                      // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
-                      setLastActionTime(Date.now());
-                      loadTemplates();
-                    }
-                  }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
-                  title="Import Folder"
-                >
-                  <IconImport size={13} /> Import
-                </button>
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    // @ts-ignore
-                    await window.electronAPI.executeCommand(`xdg-open "/home/dod/.local/bin/Scripts/"`);
-                  }}
-                  style={{ height: '28px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}
-                  title="Open Scripts Directory"
-                >
-                  <IconFolderOpen size={13} /> Scripts
-                </button>
-              </>
-            ) : null}
+            {/* Action Buttons are in the Top Bar */}
           </div>
         </div>
 
@@ -617,8 +646,9 @@ function App() {
             </div>
           ) : (
             <>
-              {activeTab === 'live' && (
+              {(activeTab === 'live' || activeTab === 'active') && (
                 <LiveTab 
+                  showOnlyActive={activeTab === 'active'}
                   sessionData={data?.session} 
                   desktopNames={desktopNames} 
                   desktopPriorities={desktopPriorities}

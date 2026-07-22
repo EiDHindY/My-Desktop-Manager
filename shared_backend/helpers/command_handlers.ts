@@ -729,7 +729,7 @@ export function handleRenameTemplateScript(filename: string, taskId: string, new
     }
 }
 
-export function handleImportScriptToTemplate(filename: string, scriptPath: string) {
+export function handleImportScriptToTemplate(filename: string, scriptPath: string, iconName?: string) {
     try {
         const templatePath = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates', filename);
         if (existsSync(templatePath)) {
@@ -742,11 +742,17 @@ export function handleImportScriptToTemplate(filename: string, scriptPath: strin
             const isScript = scriptPath.endsWith('.sh');
             const cmd = isScript ? `bash '${scriptPath}'` : `'${scriptPath}'`;
             
-            data.tasks.push({
+            const newTask: any = {
                 id: taskId,
                 name: scriptName.replace(/\.sh$/, ''),
                 script: cmd
-            });
+            };
+            
+            if (iconName) {
+                newTask.icons = iconName.split(',').filter(i => i.trim() !== '');
+            }
+
+            data.tasks.push(newTask);
             
             writeFileSync(templatePath, JSON.stringify(data, null, 2));
             runCommand(`notify-send "Desktop Manager" "📜 Added '${scriptName}' to template"`);
@@ -756,7 +762,7 @@ export function handleImportScriptToTemplate(filename: string, scriptPath: strin
     }
 }
 
-export function handleCreateScriptAndAddToTemplate(filename: string, scriptName: string) {
+export function handleCreateScriptAndAddToTemplate(filename: string, scriptName: string, iconName?: string) {
     try {
         const scriptsDir = join(process.env.HOME || '', '.local', 'bin', 'Scripts');
         if (!existsSync(scriptsDir)) {
@@ -787,7 +793,7 @@ sleep 1
         } catch(e) {}
         
         // Call the existing import function to attach it to the template
-        handleImportScriptToTemplate(filename, scriptPath);
+        handleImportScriptToTemplate(filename, scriptPath, iconName);
         
         runCommand(`notify-send "Desktop Manager" "✨ Created new script: '${finalScriptName}'"`);
     } catch (e) {
