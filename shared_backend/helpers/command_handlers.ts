@@ -63,6 +63,10 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
                     log(`Deleted notes for ${id}`);
                 }
             }
+            if (data.creation_times && data.creation_times[id]) {
+                delete data.creation_times[id];
+                log(`Deleted creation time for ${id}`);
+            }
             writeFileSync(sessionPath, JSON.stringify(data, null, 2));
             log(`Successfully wrote session.json`);
         }
@@ -175,14 +179,7 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             tasks = tasks.filter((t: any) => selectedIds.includes(t.id));
         }
 
-        const empties = currentDesktops.filter(d => {
-            const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
-            return isNameEmpty && d.uuid !== currentUuid;
-        });
-
-        if (empties.length < tasks.length) return runCommand(`kdialog --msgbox "Not enough empty desktops (excluding your current one)."`);
-        
-        let session: any = { startup_apps: {}, folders: {}, folder_order: [] };
+        let session: any = { startup_apps: {}, folders: {}, folder_order: [], creation_times: {} };
         if (existsSync(sessionPath)) {
             try {
                 session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
@@ -190,6 +187,16 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
                 console.error("Failed to parse session.json, starting fresh");
             }
         }
+        if (!session.creation_times) session.creation_times = {};
+
+        const empties = currentDesktops.filter(d => {
+            const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
+            const creationTime = session.creation_times[d.uuid] || 0;
+            const isRecentlyCreated = Date.now() - creationTime < 15 * 1000;
+            return (isNameEmpty || d.windowCount === 0) && !isRecentlyCreated && d.uuid !== currentUuid;
+        });
+
+        if (empties.length < tasks.length) return runCommand(`kdialog --msgbox "Not enough empty desktops (excluding your current one)."`);
         
         if (!session.startup_apps) session.startup_apps = {};
         if (!session.folders) session.folders = {};
@@ -204,52 +211,67 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             const entry = `${dest.uuid}___${dest.position}`;
             for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
             
-            // Safety check: only add if not already present (though filter above should handle it)
             if (!session.folders[folderName].includes(entry)) {
                 session.folders[folderName].push(entry);
             }
             
             if (t.script) session.startup_apps[dest.uuid] = [t.script];
             
-            // Handle multiple icons
             if (t.icons && Array.isArray(t.icons)) {
                 updateIcon(dest.uuid, t.icons.join(','));
             } else if (t.icon) {
                 updateIcon(dest.uuid, t.icon);
             }
             
-            // Handle shortcut
             if (t.shortcut) {
                 updateShortcut(dest.uuid, t.shortcut);
             }
+            
+            session.creation_times[dest.uuid] = Date.now();
         }
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));
 
-        // Sync Tasks: Copy template tasks to the live folder
-        try {
-            const tasksJsonPath = join(libraryDir, 'tasks.json');
-            if (existsSync(tasksJsonPath)) {
-                const tasksData = JSON.parse(readFileSync(tasksJsonPath, 'utf-8'));
-                if (tasksData.templates && tasksData.templates[folderName] && tasksData.templates[folderName].length > 0) {
-                    if (!tasksData.live) tasksData.live = {};
-                    if (!tasksData.live[folderName]) tasksData.live[folderName] = [];
-                    
-                    // Create deep copies with new IDs and reset checked state
-                    const copiedTasks = tasksData.templates[folderName].map((t: any) => ({
-                        id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                        text: t.text,
-                        checked: false
-                    }));
-                    
-                    tasksData.live[folderName] = [...tasksData.live[folderName], ...copiedTasks];
-                    writeFileSync(tasksJsonPath, JSON.stringify(tasksData, null, 2));
-                    console.log(`Copied ${copiedTasks.length} tasks from template '${folderName}' to live folder.`);
+
+        if (tasks.length > 0) {
+            for (let i = 0; i < tasks.length; i++) {
+                const dest = empties[i];
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${dest.uuid}"`);
+                
+                // Wait briefly for KWin to finish switching before launching apps
+                try { execSync('sleep 0.5'); } catch (e) {}
+
+                // Count windows before launching
+                let initialCount = 0;
+                try {
+                    const countStr = runCommand(`kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
+                    initialCount = parseInt(countStr || "0");
+                } catch (e) {}
+
+                launchAppsForDesktop(dest.uuid, true);
+
+                if (i < tasks.length - 1) {
+                    const apps = session.startup_apps?.[dest.uuid] || [];
+                    if (apps.length > 0) {
+                        let attempts = 0;
+                        while (attempts < 40) { // 8 seconds timeout
+                            try {
+                                const newCountStr = runCommand(`kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
+                                const newCount = parseInt(newCountStr || "0");
+                                if (newCount > initialCount) {
+                                    // Window appeared! Allow it to finish mapping
+                                    try { execSync('sleep 0.5'); } catch (e) {}
+                                    break; 
+                                }
+                            } catch (e) {}
+                            try { execSync('sleep 0.2'); } catch (e) {}
+                            attempts++;
+                        }
+                    } else {
+                        try { execSync('sleep 1.0'); } catch (e) {}
+                    }
                 }
             }
-        } catch (taskErr) {
-            console.error("Failed to copy template tasks:", taskErr);
         }
-
         runCommand(`notify-send "Desktop Manager" "🚀 Deployed ${tasks.length} tasks to '${folderName}'"`);
     } catch (e) {
         console.error("Deploy error:", e);
@@ -302,9 +324,21 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         
         if (!name) return;
 
+        let session: any = { folders: {}, folder_order: [], creation_times: {} };
+        if (existsSync(sessionPath)) {
+            try {
+                session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+            } catch (e) {
+                console.error("Failed to parse session.json, starting fresh");
+            }
+        }
+        if (!session.creation_times) session.creation_times = {};
+
         const empties = currentDesktops.filter(d => {
             const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
-            return isNameEmpty && d.uuid !== currentUuid;
+            const creationTime = session.creation_times[d.uuid] || 0;
+            const isRecentlyCreated = Date.now() - creationTime < 15 * 1000;
+            return (isNameEmpty || d.windowCount === 0) && !isRecentlyCreated && d.uuid !== currentUuid;
         });
 
         console.log(`Found ${empties.length} empty desktops.`);
@@ -322,7 +356,6 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         updateLabel(dest.uuid, name);
         name = nameOnly; // for the notification below
 
-        let session = JSON.parse(readFileSync(sessionPath, 'utf-8'));
         if (!session.folders) session.folders = {};
         if (!session.folders[folderName]) session.folders[folderName] = [];
         
@@ -331,6 +364,8 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
             session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
         }
         session.folders[folderName].push(entry);
+
+        session.creation_times[dest.uuid] = Date.now();
 
         console.log(`Saving session to ${sessionPath}...`);
         writeFileSync(sessionPath, JSON.stringify(session, null, 2));
@@ -796,6 +831,9 @@ sleep 1
         handleImportScriptToTemplate(filename, scriptPath, iconName);
         
         runCommand(`notify-send "Desktop Manager" "✨ Created new script: '${finalScriptName}'"`);
+        
+        // Automatically open the new script in the text editor
+        runCommand(`kate "${scriptPath}" &`);
     } catch (e) {
         console.error("Create Script and Add to Template error:", e);
         runCommand(`notify-send "Desktop Manager" "❌ Failed to create script"`);

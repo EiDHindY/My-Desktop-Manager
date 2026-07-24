@@ -10,6 +10,17 @@ import CreateDesktopModal from './components/CreateDesktopModal'
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
 import './App.css'
 
+const getThemeColor = (tab: string, type: 'var' | 'hex' = 'var') => {
+  const themes: Record<string, { var: string, hex: string }> = {
+    temps: { var: 'var(--accent-purple)', hex: '#6c71c4' },
+    active: { var: 'var(--accent-cyan)', hex: '#2aa198' },
+    notes: { var: 'var(--accent-yellow)', hex: '#b58900' },
+    tasks: { var: 'var(--accent-green)', hex: '#859900' },
+    chrome: { var: 'var(--accent-orange)', hex: '#cb4b16' }
+  };
+  return themes[tab]?.[type] || (type === 'var' ? 'var(--accent-blue)' : '#268bd2');
+};
+
 function App() {
   const [data, setData] = useState<any>(null)
   const [desktopNames, setDesktopNames] = useState<Record<string, string>>({})
@@ -19,6 +30,29 @@ function App() {
   const [desktopIcons, setDesktopIcons] = useState<Record<string, string[] | null>>({})
   const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore modifier keys alone
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      document.body.classList.add('keyboard-nav');
+    };
+    
+    const handleMouseMove = () => {
+      if (document.body.classList.contains('keyboard-nav')) {
+        document.body.classList.remove('keyboard-nav');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('mousemove', handleMouseMove, true);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('mousemove', handleMouseMove, true);
+    };
+  }, []);
+
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
   const currentDesktopRef = useRef<string | null>(null)
   useEffect(() => { currentDesktopRef.current = currentDesktop }, [currentDesktop])
@@ -31,9 +65,9 @@ function App() {
   const prevDesktopRef = useRef<string | null>(null);
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('live')
+  const [activeTab, setActiveTab] = useState('temps')
   // Ref so loadData can read current tab without being recreated
-  const activeTabRef = useRef('live')
+  const activeTabRef = useRef('temps')
   const handleSetActiveTab = useCallback((tab: string) => {
     activeTabRef.current = tab
     setActiveTab(tab)
@@ -52,6 +86,17 @@ function App() {
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(true);
+  const [chromeProfileCount, setChromeProfileCount] = useState(0);
+
+  useEffect(() => {
+    // @ts-ignore
+    if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
+      // @ts-ignore
+      window.electronAPI.fetchChromeProfiles().then((data: any[]) => {
+        setChromeProfileCount(data ? data.length : 0);
+      }).catch(console.error);
+    }
+  }, []);
 
   // Load templates separately — they rarely change, no need to fetch every 2.5s
   const loadTemplates = useCallback(async () => {
@@ -143,7 +188,9 @@ function App() {
         setData(newData)
         setDesktopNames(desktopInfo?.names || {})
         setDesktopPriorities(desktopInfo?.priorities || {})
-        setWindowCounts(desktopInfo?.counts || {})
+        if (desktopInfo?.counts !== undefined) {
+          setWindowCounts(desktopInfo.counts)
+        }
         setDesktopApps(desktopInfo?.apps || {})
         setDesktopIcons(desktopInfo?.icons || {})
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
@@ -178,7 +225,9 @@ function App() {
         
         setDesktopNames(desktopInfo?.names || {})
         setDesktopPriorities(desktopInfo?.priorities || {})
-        setWindowCounts(desktopInfo?.counts || {})
+        if (desktopInfo?.counts !== undefined) {
+          setWindowCounts(desktopInfo.counts)
+        }
         setDesktopApps(desktopInfo?.apps || {})
         setDesktopIcons(desktopInfo?.icons || {})
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
@@ -188,7 +237,7 @@ function App() {
 
     // Only poll (for window counts) when focused to save CPU
     if (!isFocused) return;
-    const interval = setInterval(() => loadData(activeTabRef.current === 'live'), 2500)
+    const interval = setInterval(() => loadData(activeTabRef.current === 'active'), 2500)
     return () => clearInterval(interval)
   }, [loadData, isFocused])
 
@@ -247,6 +296,7 @@ function App() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const tag = (document.activeElement as HTMLElement)?.tagName;
       const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
 
@@ -254,18 +304,18 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['live', 'active', 'notes', 'tasks', 'temps', 'chrome'];
+          const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['live', 'active', 'notes', 'tasks', 'temps', 'chrome'];
+          const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'n') {
-          if (activeTabRef.current === 'live') {
+          if (activeTabRef.current === 'active') {
             e.preventDefault();
             setShowCreateDesktopModal(true);
             return;
@@ -295,6 +345,38 @@ function App() {
           }
           return;
         }
+        if (e.key.toLowerCase() === 'e') {
+          e.preventDefault();
+          setVisitHistory(currentHist => {
+            if (currentHist.length === 0) return currentHist;
+            const target = currentHist[Math.max(0, currentHist.length - 2)];
+            if (target) {
+              setLastActionTime(Date.now());
+              setCurrentDesktop(target);
+              setSearchQuery('');
+              // @ts-ignore
+              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
+            }
+            return currentHist;
+          });
+          return;
+        }
+        if (e.key.toLowerCase() === 't') {
+          e.preventDefault();
+          setVisitHistory(currentHist => {
+            if (currentHist.length === 0) return currentHist;
+            const target = currentHist[Math.max(0, currentHist.length - 3)];
+            if (target) {
+              setLastActionTime(Date.now());
+              setCurrentDesktop(target);
+              setSearchQuery('');
+              // @ts-ignore
+              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
+            }
+            return currentHist;
+          });
+          return;
+        }
       }
 
       // Clear search on Escape - Allow if in search input or no input
@@ -318,10 +400,13 @@ function App() {
     }
 
     const clearSearchHandler = () => setSearchQuery('');
+    const focusSearchHandler = () => searchInputRef.current?.focus();
     window.addEventListener('clear-search-query', clearSearchHandler);
+    window.addEventListener('focus-global-search', focusSearchHandler);
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       window.removeEventListener('clear-search-query', clearSearchHandler);
+      window.removeEventListener('focus-global-search', focusSearchHandler);
       window.removeEventListener('keydown', handleGlobalKeyDown);
     }
   }, [])
@@ -353,6 +438,7 @@ function App() {
   const totalActive = Object.values(windowCounts || {}).filter(c => c > 0).length;
   const totalAll = Object.keys(desktopNames || {}).length;
   const totalEmpty = totalAll - totalActive;
+  const totalScripts = templates.filter(t => !t.isDivider).reduce((acc, t) => acc + (t.tasks ? t.tasks.length : 0), 0);
 
   const totalUnfinishedTasks = (() => {
     let count = 0;
@@ -372,7 +458,40 @@ function App() {
       });
     }
     
-    // Template tasks are blueprints, not active outstanding tasks, so we don't count them here
+    // Template tasks (now treated as active tasks for that project)
+    if (data?.tasks?.templates) {
+      Object.values(data.tasks.templates).forEach((folderTasks: any) => {
+        count += folderTasks.filter((t: any) => !t.checked).length;
+      });
+    }
+    
+    return count;
+  })();
+
+  const totalNotes = (() => {
+    let count = 0;
+    
+    // General notes
+    if (data?.notes_new?.general) {
+      count += data.notes_new.general.length;
+    }
+    
+    // Live notes
+    if (data?.notes_new?.live) {
+      const activeFolders = Object.keys(data?.session?.folders || {});
+      Object.entries(data.notes_new.live).forEach(([folderId, folderNotes]: [string, any]) => {
+        if (folderId === 'root' || activeFolders.includes(folderId)) {
+          count += folderNotes.length;
+        }
+      });
+    }
+    
+    // Template notes
+    if (data?.notes_new?.templates) {
+      Object.values(data.notes_new.templates).forEach((folderNotes: any) => {
+        count += folderNotes.length;
+      });
+    }
     
     return count;
   })();
@@ -387,8 +506,8 @@ function App() {
       flexDirection: 'column',
       boxSizing: 'border-box',
       borderRadius: '12px',
-      border: isFocused ? '2px solid var(--accent-blue)' : '2px solid var(--border-glass)',
-      boxShadow: isFocused ? 'inset 0 0 0 1px rgba(38, 139, 210, 0.1)' : 'none',
+      border: isFocused ? `2px solid ${getThemeColor(activeTab)}` : '2px solid var(--border-glass)',
+      boxShadow: isFocused ? `inset 0 0 0 1px ${getThemeColor(activeTab, 'hex')}1A` : 'none',
       overflow: 'hidden',
       transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
       backdropFilter: 'blur(20px)'
@@ -407,10 +526,25 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '100px' }}>
           <div style={{ width: '100%', maxWidth: '220px', position: 'relative' }}>
             <input 
+              id="global-search-input"
               ref={searchInputRef}
               type="text" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.startsWith('/')) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.nativeEvent.stopImmediatePropagation();
+                  const query = searchQuery.slice(1).toLowerCase();
+                  const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
+                  const matchedTab = tabs.find(t => t.includes(query));
+                  if (matchedTab) {
+                    handleSetActiveTab(matchedTab);
+                    setSearchQuery('');
+                  }
+                }
+              }}
               placeholder="Search or Command..." 
               style={{ 
                 width: '100%', 
@@ -441,7 +575,7 @@ function App() {
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent(`${activeTab}-create-new`));
                   }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: `${getThemeColor(activeTab, 'hex')}1A`, color: getThemeColor(activeTab), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0, transition: 'all 0.3s ease' }}
                   title={`New ${activeTab === 'tasks' ? 'Task' : 'Note'} (Ctrl + N)`}
                 >
                   <IconPlus size={16} />
@@ -510,8 +644,8 @@ function App() {
             </>
           )}
           
-          {/* Action Buttons (Only for Live Tab) */}
-          {activeTab === 'live' && (
+          {/* Action Buttons (Only for Active Tab) */}
+          {activeTab === 'active' && (
             <>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button 
@@ -519,36 +653,10 @@ function App() {
                   onClick={() => {
                     setShowCreateDesktopModal(true);
                   }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: `${getThemeColor(activeTab, 'hex')}1A`, color: getThemeColor(activeTab), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0, transition: 'all 0.3s ease' }}
                   title="New (Ctrl + N)"
                 >
                   <IconPlus size={16} />
-                </button>
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    // @ts-ignore
-                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAN_EMPTY"`);
-                    setLastActionTime(Date.now());
-                  }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Empty Empty"
-                >
-                  <IconSweeper size={16} />
-                </button>
-                <button 
-                  className="btn-hover"
-                  onClick={async () => {
-                    if (window.confirm('Clear ALL? This will close windows on all desktops except your current one.')) {
-                      // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CLEAR_ALL"`);
-                      setLastActionTime(Date.now());
-                    }
-                  }}
-                  style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(220, 50, 47, 0.3)', backgroundColor: 'rgba(220, 50, 47, 0.1)', color: 'var(--accent-red)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                  title="Nuke All"
-                >
-                  <IconBomb size={16} />
                 </button>
               </div>
 
@@ -599,20 +707,23 @@ function App() {
           justifyContent: 'space-between',
           padding: '0 8px', 
           borderBottom: '1px solid var(--border-glass)', 
-          backgroundColor: 'rgba(7, 54, 66, 0.4)',
-          height: '32px'
+          backgroundColor: `${getThemeColor(activeTab, 'hex')}15`, // Very subtle tint of the active tab color
+          height: '32px',
+          transition: 'background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['live', 'active', 'notes', 'tasks', 'temps', 'chrome'].map(tab => (
+            {['temps', 'active', 'notes', 'tasks', 'chrome']
+              .filter(tab => !searchQuery.startsWith('/') || tab.includes(searchQuery.slice(1).toLowerCase()))
+              .map(tab => (
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
                 className="interactive-element"
                   style={{ 
                     padding: '4px 10px', 
-                    color: activeTab === tab ? 'var(--accent-blue)' : 'var(--text-dim)',
-                    backgroundColor: activeTab === tab ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                    color: activeTab === tab ? getThemeColor(tab) : 'var(--text-dim)',
+                    backgroundColor: activeTab === tab ? `${getThemeColor(tab, 'hex')}1A` : 'transparent',
                     borderRadius: '6px',
                     fontWeight: '800',
                     fontSize: '11px',
@@ -620,13 +731,25 @@ function App() {
                     letterSpacing: '0.5px',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer',
-                    border: activeTab === tab ? '1px solid rgba(38, 139, 210, 0.2)' : '1px solid transparent',
+                    border: activeTab === tab ? `1px solid ${getThemeColor(tab, 'hex')}33` : '1px solid transparent',
                     position: 'relative'
                   }}
               >
                 {tab}
+                {tab === 'temps' && totalScripts > 0 && (
+                  <span style={{ color: 'var(--text-dim)' }}> [{totalScripts}]</span>
+                )}
+                {tab === 'active' && totalActive > 0 && (
+                  <span style={{ color: 'var(--text-dim)' }}> [{totalActive}]</span>
+                )}
                 {tab === 'tasks' && totalUnfinishedTasks > 0 && (
-                  <span style={{ color: 'var(--accent-red)' }}> [{totalUnfinishedTasks}]</span>
+                  <span style={{ color: 'var(--accent-yellow)' }}> [{totalUnfinishedTasks}]</span>
+                )}
+                {tab === 'notes' && totalNotes > 0 && (
+                  <span style={{ color: 'var(--accent-cyan)' }}> [{totalNotes}]</span>
+                )}
+                {tab === 'chrome' && chromeProfileCount > 0 && (
+                  <span style={{ color: 'var(--text-dim)' }}> [{chromeProfileCount}]</span>
                 )}
               </div>
             ))}
@@ -646,9 +769,9 @@ function App() {
             </div>
           ) : (
             <>
-              {(activeTab === 'live' || activeTab === 'active') && (
+              {activeTab === 'active' && (
                 <LiveTab 
-                  showOnlyActive={activeTab === 'active'}
+                  showOnlyActive={true}
                   sessionData={data?.session} 
                   desktopNames={desktopNames} 
                   desktopPriorities={desktopPriorities}
@@ -659,7 +782,7 @@ function App() {
                   shortcutErrors={shortcutErrors}
                   searchQuery={searchQuery}
                   currentDesktop={currentDesktop}
-                  returnDesktop={returnDesktop}
+                  visitHistory={visitHistory}
                   setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
                   onAction={() => setLastActionTime(Date.now())}
                   onSwitch={(id) => {
@@ -686,6 +809,7 @@ function App() {
           title={promptConfig.title}
           description={promptConfig.description}
           defaultValue={promptConfig.defaultValue}
+          isConfirm={promptConfig.isConfirm}
           onSubmit={async (value) => {
             if (promptConfig.command === 'NOTES_ADD_FOLDER' || promptConfig.command === 'NOTES_ADD_DIVIDER') {
               const folderKey = value.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
@@ -730,7 +854,16 @@ function App() {
 
       {showCreateDesktopModal && (
         <CreateDesktopModal
-          existingFolders={Object.keys(data?.session?.folders || {})}
+          existingFolders={Object.keys(data?.session?.folders || {}).filter(folderId => {
+            const desktops = data?.session?.folders[folderId] || [];
+            return desktops.some((id: string) => {
+              const pureId = id.split('___')[0];
+              const hasWindows = (windowCounts[pureId] || 0) > 0;
+              const creationTime = data?.session?.creation_times?.[pureId] || 0;
+              const isRecentlyCreated = Date.now() - creationTime < 5 * 60 * 1000;
+              return hasWindows || isRecentlyCreated;
+            });
+          })}
           onSubmit={async (folderName, desktopNameWithPriority) => {
             setShowCreateDesktopModal(false);
             // @ts-ignore

@@ -11,7 +11,7 @@ interface CreateTemplateScriptModalProps {
 export default function CreateTemplateScriptModal({ existingTemplates, onSubmit, onCancel }: CreateTemplateScriptModalProps) {
   const [scriptName, setScriptName] = useState('');
   const [templateName, setTemplateName] = useState(existingTemplates.length > 0 ? existingTemplates[0].name : '');
-  const [icon, setIcon] = useState<string | null>(null);
+  const [icons, setIcons] = useState<string[]>([]);
   const [showIconPicker, setShowIconPicker] = useState(false);
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -84,6 +84,17 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
         e.stopPropagation();
         e.stopImmediatePropagation();
         onCancel();
+      } else if (e.key === 'Enter') {
+        if (showIconPicker || isDropdownOpen) return;
+        if (document.activeElement?.tagName === 'BUTTON') return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        if (!scriptName.trim() || !templateName.trim()) return;
+        const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === templateName.toLowerCase().trim());
+        onSubmit(scriptName.trim(), templateName.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
       }
     };
 
@@ -91,7 +102,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
-  }, [onCancel]);
+  }, [onCancel, scriptName, templateName, icons, showIconPicker, isDropdownOpen, existingTemplates, onSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -100,7 +111,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
       if (!scriptName.trim() || !templateName.trim()) return;
       
       const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === templateName.toLowerCase().trim());
-      onSubmit(scriptName.trim(), templateName.trim(), isNewTemplate, icon);
+      onSubmit(scriptName.trim(), templateName.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -222,7 +233,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
                   } else {
                     if (!scriptName.trim() || !finalFolder.trim()) return;
                     const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === finalFolder.toLowerCase().trim());
-                    onSubmit(scriptName.trim(), finalFolder.trim(), isNewTemplate, icon);
+                    onSubmit(scriptName.trim(), finalFolder.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
                   }
                 } else if (e.key === 'Escape') {
                   e.nativeEvent.stopImmediatePropagation();
@@ -329,12 +340,16 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
               }}
               className="search-input-hover"
             >
-              {icon ? <ManualIcon icon={icon} size={16} /> : 'Select Icon...'}
-              {icon && <span>{icon}</span>}
+              {icons.length > 0 ? (
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {icons.map(ic => <ManualIcon key={ic} icon={ic} size={16} />)}
+                </div>
+              ) : 'Select Icons...'}
+              {icons.length > 0 && <span style={{ marginLeft: '4px' }}>({icons.length} selected)</span>}
             </button>
-            {icon && (
+            {icons.length > 0 && (
               <button 
-                onClick={() => setIcon(null)}
+                onClick={() => setIcons([])}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -352,10 +367,16 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
 
         {showIconPicker && (
           <IconPicker 
-            title="Select Initial Icon"
-            currentIcons={icon ? [icon] : []} 
-            onToggle={(selectedIcon) => { setIcon(selectedIcon); setShowIconPicker(false); }}
-            onClear={() => { setIcon(null); setShowIconPicker(false); }}
+            title="Select Initial Icons"
+            currentIcons={icons} 
+            onToggle={(selectedIcon) => {
+              setIcons(prev => 
+                prev.includes(selectedIcon) 
+                  ? prev.filter(i => i !== selectedIcon) 
+                  : [...prev, selectedIcon]
+              );
+            }}
+            onClear={() => setIcons([])}
             onClose={() => setShowIconPicker(false)}
           />
         )}

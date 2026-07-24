@@ -18,8 +18,8 @@
   background: rgba(7, 54, 66, 0.8);
   border: 1px solid var(--border-glass);
   border-radius: 16px;
-  width: 380px; 
-  max-height: 380px;
+  width: 440px; 
+  max-height: 480px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
@@ -48,8 +48,8 @@
 
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
   padding: 12px;
   overflow-y: auto;
   flex: 1;
@@ -88,15 +88,15 @@
   min-width: 0;
   background: rgba(7, 54, 66, 0.5);
   border: 1px solid var(--border-glass);
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 14px 10px;
-  min-height: 95px;
+  padding: 6px 4px;
+  min-height: 50px;
   text-align: center;
 }
 
@@ -109,13 +109,13 @@
 
 .icon-item span {
   width: 100%;
-  font-size: 11px !important;
+  font-size: 9px !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 4px;
+  padding: 0 2px;
   color: var(--text-dim);
-  margin-top: 8px;
+  margin-top: 4px;
   font-weight: 600;
 }
 
@@ -124,9 +124,9 @@
 }
 
 .icon-item img, .icon-item .manual-desktop-icon {
-  width: 36px !important;
-  height: 36px !important;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+  width: 24px !important;
+  height: 24px !important;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
   transition: all 0.3s ease;
 }
 

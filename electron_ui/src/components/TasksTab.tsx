@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers } from './Icons';
 import CreateTaskModal from './CreateTaskModal';
+import PromptModal from './PromptModal';
 
 interface Task {
   id: string;
@@ -31,12 +32,19 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskText, setEditingTaskText] = useState('');
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState(-1);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   
   const newTaskInputRef = useRef<HTMLInputElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   useEffect(() => setSelectedIndex(0), [searchQuery]);
+
+  // Reset selected task when active tasks change
+  useEffect(() => {
+    setSelectedTaskIndex(-1);
+  }, [activeCategory, activeSubId, searchQuery]);
 
   useEffect(() => {
     const handleCreateNew = () => setShowCreateModal(true);
@@ -49,6 +57,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
       if (e.ctrlKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
         setIsSidebarOpen(true);
+        window.dispatchEvent(new CustomEvent('focus-global-search'));
       } else if (e.ctrlKey && e.key.toLowerCase() === 'h') {
         e.preventDefault();
         setIsSidebarOpen(false);
@@ -60,16 +69,22 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
 
   useEffect(() => {
     const handleGlobalTyping = (e: KeyboardEvent) => {
-      if (!isSidebarOpen) {
+      // If the sidebar is closed and we are NOT actively navigating tasks
+      if (!isSidebarOpen && selectedTaskIndex === -1) {
         e.preventDefault(); // Stop App.tsx from focusing the global search bar
         if (newTaskInputRef.current) {
           newTaskInputRef.current.focus();
         }
       }
+      // If we ARE navigating tasks, we still prevent default so it doesn't focus search,
+      // but we don't focus the new task input.
+      else if (!isSidebarOpen && selectedTaskIndex !== -1) {
+        e.preventDefault();
+      }
     };
     window.addEventListener('global-typing-intercept', handleGlobalTyping as EventListener);
     return () => window.removeEventListener('global-typing-intercept', handleGlobalTyping as EventListener);
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, selectedTaskIndex]);
   
   useEffect(() => {
     if (tasksData) {
@@ -249,36 +264,25 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     visibleItems.push({ type: 'general', id: null });
   }
   
-  let liveFolders = [];
-  if (sessionData?.folders) {
-    const folders = sessionData.folders || {};
-    const savedOrder = sessionData.folder_order || [];
-    const allKeys = Object.keys(folders);
-    const folderNames = [
-      ...savedOrder.filter((k: string) => k !== 'root' && allKeys.includes(k)),
-      ...allKeys.filter((k: string) => !savedOrder.includes(k) && k !== 'root'),
-      'root'
-    ];
-    liveFolders = isSidebarOpen && searchQuery 
-      ? folderNames.filter((fid) => {
-          const name = sessionData.folder_names?.[fid] || fid;
-          return name.toLowerCase().includes(searchQuery.toLowerCase());
-        })
-      : folderNames;
-  }
-  liveFolders.forEach(fid => visibleItems.push({ type: 'live', id: fid }));
+
   
   const templateItems = templates ? templates.filter(t => !t.isDivider).filter(t => isSidebarOpen && searchQuery ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) : true) : [];
   templateItems.forEach(t => visibleItems.push({ type: 'templates', id: t.name }));
 
   useEffect(() => {
-    if (!isSidebarOpen || !searchQuery) return;
+    if (!isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent | React.KeyboardEvent) => {
-      // Only process Ctrl+J / Ctrl+K or Enter
-      if (e.ctrlKey && e.key.toLowerCase() === 'j') {
+      // Don't hijack if focused on an input UNLESS it's the global search bar
+      const activeTag = document.activeElement?.tagName;
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      const isGlobalSearch = document.activeElement?.id === 'global-search-input';
+      
+      if (isInputFocused && !isGlobalSearch) return;
+
+      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key.toLowerCase() === 'j')) {
         e.preventDefault();
         setSelectedIndex(prev => (prev + 1) % visibleItems.length);
-      } else if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
         setSelectedIndex(prev => (prev - 1 + visibleItems.length) % visibleItems.length);
       } else if (e.key === 'Enter') {
@@ -293,10 +297,88 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSidebarOpen, searchQuery, selectedIndex, visibleItems]);
+  }, [isSidebarOpen, selectedIndex, visibleItems]);
+
+  useEffect(() => {
+    if (isSidebarOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        if (activeTasks.length > 0) {
+          setSelectedTaskIndex(prev => {
+            const next = prev + 1;
+            if (next >= activeTasks.length) {
+              newTaskInputRef.current?.focus();
+              return -1;
+            } else {
+              newTaskInputRef.current?.blur();
+              (document.activeElement as HTMLElement)?.blur();
+              return next;
+            }
+          });
+        }
+        return;
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (activeTasks.length > 0) {
+          setSelectedTaskIndex(prev => {
+            const next = prev - 1;
+            if (next < -1) {
+              newTaskInputRef.current?.blur();
+              (document.activeElement as HTMLElement)?.blur();
+              return activeTasks.length - 1;
+            } else if (next === -1) {
+              newTaskInputRef.current?.focus();
+              return -1;
+            } else {
+              newTaskInputRef.current?.blur();
+              (document.activeElement as HTMLElement)?.blur();
+              return next;
+            }
+          });
+        }
+        return;
+      }
+
+      const activeTag = document.activeElement?.tagName;
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      
+      if (isInputFocused) return;
+
+      if (e.key === 'Enter') {
+        if (selectedTaskIndex >= 0 && selectedTaskIndex < activeTasks.length) {
+          e.preventDefault();
+          const task = activeTasks[selectedTaskIndex];
+          if (e.ctrlKey) {
+            toggleTask(task.id);
+          } else {
+            setEditingTaskId(task.id);
+            setEditingTaskText(task.text);
+          }
+        }
+      } else if (e.key.toLowerCase() === 'd') {
+        if (selectedTaskIndex >= 0 && selectedTaskIndex < activeTasks.length) {
+          e.preventDefault();
+          const task = activeTasks[selectedTaskIndex];
+          setTaskToDelete(task.id);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSidebarOpen, selectedTaskIndex, activeTasks]);
+
+  useEffect(() => {
+    if (selectedTaskIndex >= 0) {
+      const el = document.getElementById(`task-item-${selectedTaskIndex}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedTaskIndex]);
 
   const isHighlighted = (type: string, id: string | null) => {
-    if (!isSidebarOpen || !searchQuery || visibleItems.length === 0) return false;
+    if (!isSidebarOpen || visibleItems.length === 0) return false;
     const current = visibleItems[selectedIndex];
     return current && current.type === type && current.id === id;
   };
@@ -338,54 +420,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             <IconInbox size={16} />
             <span style={{ flex: 1 }}>General Tasks</span>
             {getUnfinishedCount('general') > 0 && (
-              <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
+              <span style={{ backgroundColor: 'rgba(181, 137, 0, 0.2)', color: 'var(--accent-yellow)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
                 {getUnfinishedCount('general')}
               </span>
             )}
           </div>
           )}
 
-          {/* Live Desktops */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-              <IconRadio size={12} color="var(--accent-green)" /> LIVE DESKTOPS
-            </div>
-            {sessionData?.folders && liveFolders.map((folderId: string) => {
-                const name = sessionData.folder_names?.[folderId] || folderId;
-                const isActive = activeCategory === 'live' && activeSubId === folderId;
-                return (
-                  <div 
-                    key={folderId}
-                    className="interactive-element"
-                    onClick={() => { selectCategory('live', folderId); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('live', folderId); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
-                    tabIndex={0}
-                    style={{
-                      padding: '6px 12px',
-                      margin: '2px 0',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      backgroundColor: isActive || isHighlighted('live', folderId) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                      boxShadow: isHighlighted('live', folderId) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
-                      color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
-                      fontSize: '13px',
-                      fontWeight: isActive ? '700' : '500',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    {isActive ? <IconFolderOpen size={14} /> : <IconFolder size={14} />}
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                    {getUnfinishedCount('live', folderId) > 0 && (
-                      <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                        {getUnfinishedCount('live', folderId)}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
+
 
           {/* Templates */}
           <div>
@@ -416,13 +458,20 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                     gap: '8px'
                   }}
                 >
-                  {isActive ? <IconLayers size={14} color="var(--accent-blue)" /> : <IconLayers size={14} />}
+                  <span style={{ 
+                    backgroundColor: isActive ? 'var(--accent-blue)' : 'rgba(181, 137, 0, 0.15)', 
+                    color: isActive ? '#fff' : 'var(--accent-yellow)', 
+                    padding: '2px 6px', 
+                    borderRadius: '10px', 
+                    fontSize: '10px', 
+                    fontWeight: 'bold',
+                    minWidth: '14px',
+                    textAlign: 'center',
+                    lineHeight: '1'
+                  }}>
+                    {getUnfinishedCount('templates', template.name)}
+                  </span>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
-                  {getUnfinishedCount('templates', template.name) > 0 && (
-                    <span style={{ backgroundColor: 'rgba(7, 54, 66, 0.8)', color: 'var(--text-dim)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                      {getUnfinishedCount('templates', template.name)}
-                    </span>
-                  )}
                 </div>
               );
             })}
@@ -468,7 +517,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             )}
           </h2>
           <p style={{ margin: '4px 0 0 32px', color: 'var(--text-dim)', fontSize: '12px' }}>
-            {activeCategory === 'templates' ? 'Tasks defined here will be copied to Live Desktops when this template is deployed.' : 'Manage your active tasks and to-dos.'}
+            {activeCategory === 'templates' ? 'Manage the tasks associated with this template.' : 'Manage your active tasks and to-dos.'}
           </p>
         </div>
 
@@ -487,6 +536,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                       <Draggable key={task.id} draggableId={task.id} index={index}>
                         {(provided, snapshot) => (
                           <div 
+                            id={`task-item-${index}`}
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             onMouseEnter={() => setHoveredTaskId(task.id)}
@@ -499,11 +549,11 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                               gap: '8px',
                               padding: '8px 12px',
                               backgroundColor: snapshot.isDragging ? 'rgba(0, 43, 54, 0.8)' : 'rgba(0, 43, 54, 0.4)',
-                              border: snapshot.isDragging ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                              border: snapshot.isDragging || selectedTaskIndex === index ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                              boxShadow: selectedTaskIndex === index ? 'inset 0 0 0 1px var(--accent-blue)' : (snapshot.isDragging ? '0 8px 24px rgba(0,0,0,0.3)' : 'none'),
                               borderRadius: '8px',
                               transition: `${provided.draggableProps.style?.transition ? provided.draggableProps.style.transition + ', ' : ''}background-color 0.2s ease, border 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease`,
                               opacity: task.checked ? 0.6 : 1,
-                              boxShadow: snapshot.isDragging ? '0 8px 24px rgba(0,0,0,0.3)' : 'none',
                               minWidth: 0
                             }}
                           >
@@ -572,10 +622,10 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                             </div>
 
                             {/* Action Buttons */}
-                            <div style={{ display: 'flex', gap: '8px', opacity: hoveredTaskId === task.id && !snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s' }}>
+                            <div style={{ display: 'flex', gap: '8px', opacity: (hoveredTaskId === task.id || selectedTaskIndex === index) && !snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s' }}>
                               <div 
                                 className="action-btn"
-                                onClick={() => handleDeleteTask(task.id)}
+                                onClick={() => setTaskToDelete(task.id)}
                                 style={{ color: 'var(--accent-red)', cursor: 'pointer', padding: '4px' }}
                                 title="Delete"
                               >
@@ -649,6 +699,21 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             writeData(newData);
           }}
           onCancel={() => setShowCreateModal(false)}
+        />
+      )}
+
+      {taskToDelete && (
+        <PromptModal
+          title="Delete Task"
+          description="Are you sure you want to delete this task?"
+          defaultValue=""
+          isConfirm={true}
+          onSubmit={() => {
+            handleDeleteTask(taskToDelete);
+            setTaskToDelete(null);
+            setSelectedTaskIndex(prev => Math.min(prev, activeTasks.length - 2));
+          }}
+          onCancel={() => setTaskToDelete(null)}
         />
       )}
     </div>

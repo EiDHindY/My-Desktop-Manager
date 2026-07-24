@@ -105,6 +105,8 @@ def handle_event(parent, obj, event):
                     parent.toggle_collapse()
                 return True
             elif key == Qt.Key_R: parent.on_back(); return True
+            elif key == Qt.Key_E: parent.history_back(); return True
+            elif key == Qt.Key_T: parent.history_forward(); return True
             elif key == Qt.Key_J: parent.move_down(); return True
             elif key == Qt.Key_K: parent.move_up(); return True
             elif key == Qt.Key_Slash:

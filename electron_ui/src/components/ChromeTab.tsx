@@ -52,10 +52,18 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
 
       if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
         e.preventDefault();
-        setSelectedIndex(prev => (prev + 1) % filtered.length);
+        setSelectedIndex(prev => {
+          const next = (prev + 1) % filtered.length;
+          document.getElementById(`chrome-profile-${next}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return next;
+        });
       } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
         e.preventDefault();
-        setSelectedIndex(prev => (prev - 1 + filtered.length) % filtered.length);
+        setSelectedIndex(prev => {
+          const next = (prev - 1 + filtered.length) % filtered.length;
+          document.getElementById(`chrome-profile-${next}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return next;
+        });
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (filtered[selectedIndex]) {
@@ -103,16 +111,17 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
         const isSelected = index === selectedIndex;
         return (
           <div 
+            id={`chrome-profile-${index}`}
             key={profile.id}
             onClick={() => launchProfile(profile.id)}
             className={`unified-glass-card interactive-element ${isSelected ? 'lifted-card' : ''}`}
             style={{
               backgroundColor: isSelected ? 'rgba(38, 139, 210, 0.1)' : 'rgba(7, 54, 66, 0.45)',
               border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-              padding: '12px 16px',
+              padding: '8px 12px',
               display: 'flex',
               alignItems: 'center',
-              gap: '16px',
+              gap: '12px',
               cursor: 'pointer',
               transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               position: 'relative',
@@ -125,9 +134,9 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
           {isSelected && <div className="active-pillar" />}
           
           <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
             backgroundColor: 'rgba(88, 110, 117, 0.6)',
             display: 'flex',
             alignItems: 'center',
@@ -143,7 +152,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico';
-                (e.target as HTMLImageElement).style.padding = '8px';
+                (e.target as HTMLImageElement).style.padding = '6px';
               }}
             />
           </div>
@@ -152,7 +161,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
             <div style={{ 
               color: isSelected ? 'var(--accent-cyan)' : 'var(--text-main)', 
               fontWeight: '700', 
-              fontSize: '15px', 
+              fontSize: '14px', 
               whiteSpace: 'nowrap', 
               overflow: 'hidden', 
               textOverflow: 'ellipsis',
@@ -160,14 +169,14 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
               transition: 'color 0.2s',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '6px'
             }}>
               <span>{profile.name}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{
                   backgroundColor: isSelected ? 'rgba(38, 139, 210, 0.2)' : 'rgba(255, 255, 255, 0.05)',
                   color: isSelected ? 'var(--accent-blue)' : 'var(--text-dim)',
-                  padding: '2px 6px',
+                  padding: '1px 4px',
                   borderRadius: '4px',
                   fontSize: '10px',
                   fontFamily: 'monospace',

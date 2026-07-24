@@ -13,15 +13,15 @@ export function fetchDesktops(): Desktop[] {
     const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
     if (!desktopsOutput) return [];
     
-    const windowList = runCommand('wmctrl -l') || "";
+    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null";
+    const windowList = runCommand(cmd) || "";
     const windowCounts: Record<number, number> = {};
     windowList.split('\n').forEach(line => {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length >= 2) {
-            const desktopIdx = parseInt(parts[1]);
-            if (!isNaN(desktopIdx)) {
-                windowCounts[desktopIdx] = (windowCounts[desktopIdx] || 0) + 1;
-            }
+        const idx = parseInt(line.trim());
+        if (!isNaN(idx) && idx > 0) {
+            // kdotool returns 1-based indices, position is 0-based
+            const pos = idx - 1;
+            windowCounts[pos] = (windowCounts[pos] || 0) + 1;
         }
     });
 

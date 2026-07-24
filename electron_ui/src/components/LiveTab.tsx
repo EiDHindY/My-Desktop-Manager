@@ -40,7 +40,7 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, returnDesktop = null, setSessionData, onAction, onSwitch }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, returnDesktop?: string | null, setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, visitHistory = [], setSessionData, onAction, onSwitch }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, visitHistory?: string[], setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -81,7 +81,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
   }, []);
 
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, type: 'folder' | 'desktop', id: string, folderName?: string} | null>(null);
-  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string} | null>(null);
+  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, isConfirm?: boolean} | null>(null);
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [hoveredDesktop, setHoveredDesktop] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -138,6 +138,14 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
   }
   if (folders['root']) folderNames.push('root'); // Root always at bottom
 
+  const fuzzyMatch = (str: string, q: string) => {
+    let i = 0;
+    for (let j = 0; j < str.length && i < q.length; j++) {
+      if (str[j] === q[i]) i++;
+    }
+    return i === q.length;
+  };
+
   // Flattened list for keyboard navigation
   const visibleItems: { type: 'folder' | 'desktop', id: string, folderName?: string }[] = [];
   folderNames.forEach(folderName => {
@@ -145,15 +153,17 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
     if (hasScope) {
       // === SCOPED MODE: folder must match folderQuery ===
-      const folderMatches = folderQuery === '' || folderName.toLowerCase().includes(folderQuery);
+      const folderMatches = folderQuery === '' || fuzzyMatch(folderName.toLowerCase(), folderQuery);
       if (!folderMatches) return; // hide folders that don't match the folder segment
 
       const matchingDesktops = desktops.filter((id: string) => {
-        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
-        if (desktopQuery === '') return true;
         const pureId = id.split('___')[0];
+        const creationTime = sessionData?.creation_times?.[pureId] || 0;
+        const isRecentlyCreated = Date.now() - creationTime < 5 * 60 * 1000;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated) return false;
+        if (desktopQuery === '') return true;
         const name = desktopNames[pureId] || '';
-        return name.toLowerCase().includes(desktopQuery);
+        return fuzzyMatch(name.toLowerCase(), desktopQuery);
       });
 
       if (showOnlyActive && matchingDesktops.length === 0) return;
@@ -165,12 +175,14 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
     } else {
       // === NORMAL MODE (no space typed yet) ===
       const matchingDesktops = desktops.filter((id: string) => {
-        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         const pureId = id.split('___')[0];
+        const creationTime = sessionData?.creation_times?.[pureId] || 0;
+        const isRecentlyCreated = Date.now() - creationTime < 5 * 60 * 1000;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated) return false;
         const name = desktopNames[pureId] || '';
-        return name.toLowerCase().includes(folderQuery);
+        return fuzzyMatch(name.toLowerCase(), folderQuery);
       });
-      const folderMatches = folderName.toLowerCase().includes(folderQuery);
+      const folderMatches = fuzzyMatch(folderName.toLowerCase(), folderQuery);
 
       if (folderQuery && !folderMatches && matchingDesktops.length === 0) return;
       if (showOnlyActive && matchingDesktops.length === 0) return;
@@ -227,15 +239,27 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
   // Keyboard Navigation: Ctrl + J / K and Ctrl + Enter
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'j') {
+      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
         e.preventDefault();
         if (visibleItems.length > 0) {
-          setSelectedIndex(prev => (prev + 1) % visibleItems.length);
+          setSelectedIndex(prev => {
+            let i = (prev + 1) % visibleItems.length;
+            while (visibleItems[i] && visibleItems[i].type === 'folder' && i !== prev) {
+              i = (i + 1) % visibleItems.length;
+            }
+            return i;
+          });
         }
-      } else if (e.ctrlKey && e.key === 'k') {
+      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
         e.preventDefault();
         if (visibleItems.length > 0) {
-          setSelectedIndex(prev => (prev - 1 + visibleItems.length) % visibleItems.length);
+          setSelectedIndex(prev => {
+            let i = (prev - 1 + visibleItems.length) % visibleItems.length;
+            while (visibleItems[i] && visibleItems[i].type === 'folder' && i !== prev) {
+              i = (i - 1 + visibleItems.length) % visibleItems.length;
+            }
+            return i;
+          });
         }
       } else if (e.ctrlKey && e.key === 'Enter' && visibleItems[selectedIndex]) {
         e.preventDefault();
@@ -266,7 +290,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
     
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [visibleItems, selectedIndex, returnDesktop, windowCounts]);
+  }, [visibleItems, selectedIndex, visitHistory, windowCounts]);
 
   const toggleFolder = (folderName: string) => {
     if (expandedFolders.includes(folderName)) {
@@ -373,9 +397,11 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
       if (!folderMatches) return null;
 
       matchingDesktops = desktops.filter((id: string) => {
-        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
-        if (desktopQuery === '') return true;
         const pureId = id.split('___')[0];
+        const creationTime = sessionData?.creation_times?.[pureId] || 0;
+        const isRecentlyCreated = Date.now() - creationTime < 5 * 60 * 1000;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated) return false;
+        if (desktopQuery === '') return true;
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(desktopQuery);
       });
@@ -384,8 +410,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
     } else {
       // === NORMAL MODE ===
       matchingDesktops = desktops.filter((id: string) => {
-        if (showOnlyActive && (windowCounts[id.split('___')[0]] || 0) === 0) return false;
         const pureId = id.split('___')[0];
+        const creationTime = sessionData?.creation_times?.[pureId] || 0;
+        const isRecentlyCreated = Date.now() - creationTime < 5 * 60 * 1000;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated) return false;
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(folderQuery);
       });
@@ -418,27 +446,32 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
     const hasCurrent = sortedDesktops.some((id: string) => id.split("___")[0] === currentDesktop);
     const isSelected = visibleItems[selectedIndex]?.id === folderName;
+    const isFocusedFolder = isSelected;
 
     const innerContent = (providedDraggable?: any) => (
       <div 
         ref={providedDraggable?.innerRef} 
         {...providedDraggable?.draggableProps} 
-        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : (folderName !== 'root' && !searchQuery ? "dimmed-folder" : "")}`}
+        className={`${folderName !== 'root' ? "unified-glass-card" : ""} ${hasCurrent ? "has-current" : (folderName !== 'root' && !searchQuery ? "dimmed-folder" : "")} ${isFocusedFolder ? 'nav-focus-folder' : ''}`}
         style={{ 
           ...(providedDraggable?.draggableProps.style || {})
         }}
       >
         <div 
           {...providedDraggable?.dragHandleProps}
-          className="interactive-element"
+          className=""
           onContextMenu={(e) => handleContextMenu(e, 'folder', folderName)}
           onClick={() => toggleFolder(folderName)}
-          onMouseEnter={() => setHoveredFolder(folderName)}
-            onMouseLeave={() => setHoveredFolder(null)}
+          onMouseEnter={() => {
+            setHoveredFolder(folderName);
+            const idx = visibleItems.findIndex(i => i.id === folderName);
+            if (idx !== -1) setSelectedIndex(idx);
+          }}
+          onMouseLeave={() => setHoveredFolder(null)}
             style={{ 
               display: 'flex',
               padding: '6px 10px',
-              background: isSelected ? 'rgba(108, 113, 196, 0.08)' : 'transparent',
+              background: 'transparent',
               alignItems: 'center',
               color: '#c8d3f5',
               fontWeight: '600',
@@ -448,8 +481,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
               borderBottom: isExpanded ? '1px solid rgba(255, 255, 255, 0.03)' : '1px solid transparent'
             }}
           >
-          <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: hoveredFolder === folderName || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
-            {hoveredFolder === folderName && folderName !== 'root' ? <IconGrip color="var(--text-dim)" /> : (isExpanded ? <IconFolderOpen color="var(--accent-blue)" /> : <IconFolder color="var(--text-dim)" />)}
+          <span className="drag-handle" style={{ marginRight: '10px', display: 'flex', alignItems: 'center', opacity: isFocusedFolder || isExpanded ? 1 : 0.7, transition: 'opacity 0.2s' }}>
+            <span className={hasCurrent ? 'folder-has-current-icon' : ''} style={{ display: 'flex' }}>
+              {isFocusedFolder && folderName !== 'root' ? <IconGrip color="var(--text-dim)" /> : (isExpanded ? <IconFolderOpen color={hasCurrent ? "var(--accent-blue)" : "var(--text-dim)"} /> : <IconFolder color={hasCurrent ? "var(--accent-blue)" : "var(--text-dim)"} />)}
+            </span>
           </span>
           <span style={{ 
             flex: 1, 
@@ -463,7 +498,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             minWidth: 0
           }}>{label}</span>
           
-          {hoveredFolder === folderName && (
+          {isFocusedFolder && (
             <div 
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'New Desktop Name', defaultValue: 'New Desktop', command: `CREATE_LIVE_DESKTOP:${folderName}` }); }}
@@ -484,27 +519,6 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             </div>
           )}
 
-          {hoveredFolder === folderName && folderName !== 'root' && (
-            <div 
-              className="btn-hover"
-              onClick={(e) => { e.stopPropagation(); handleDeployAll(folderName); }}
-              style={{ 
-                backgroundColor: 'var(--accent-purple)', 
-                color: 'var(--bg-primary)', 
-                borderRadius: '4px', 
-                width: '24px', 
-                height: '24px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                marginRight: '10px'
-              }}
-              title="Summon All Desktops"
-            >
-              <IconRocket size={16} />
-            </div>
-          )}
-          
           {hoveredFolder === folderName && folderName !== 'root' && (
             <div 
               className="btn-hover"
@@ -546,7 +560,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                     const pureId = desktopId.split("___")[0];
                     const displayName = desktopNames[pureId] || (pureId.substring(0, 8) + '...');
                     const isActive = pureId === (currentDesktop || '').trim();
-                    const isReturn = pureId === (returnDesktop || '').trim();
+                    let historyShortcut: string | null = null;
+                    if (visitHistory.length > 0 && pureId === visitHistory[visitHistory.length - 1]) historyShortcut = 'R';
+                    else if (visitHistory.length > 1 && pureId === visitHistory[visitHistory.length - 2]) historyShortcut = 'E';
+                    else if (visitHistory.length > 2 && pureId === visitHistory[visitHistory.length - 3]) historyShortcut = 'T';
                     const winCount = windowCounts[pureId] || 0;
                     const hasWindows = winCount > 0;
                     const isSelected = visibleItems[selectedIndex]?.id === desktopId;
@@ -568,7 +585,8 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                         query={query}
                         displayName={displayName}
                         isActive={isActive}
-                        isReturn={isReturn}
+                        isReturn={historyShortcut === 'R'}
+                        historyShortcut={historyShortcut}
                         winCount={winCount}
                         hasWindows={hasWindows}
                         isSelected={isSelected}
@@ -583,9 +601,15 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                         folderName={folderName}
                         onContextMenu={handleContextMenu}
                         onSwitch={handleSwitchDesktop}
-                        onHover={setHoveredDesktop}
+                        onHover={(id) => {
+                          setHoveredDesktop(id);
+                          if (id) {
+                            const idx = visibleItems.findIndex(i => i.id === id);
+                            if (idx !== -1) setSelectedIndex(idx);
+                          }
+                        }}
                         onExecuteCommand={executeMenuCommand}
-                        onPrompt={(title, defaultVal, command) => setPromptConfig({ title, defaultValue: defaultVal, command })}
+                        onPrompt={(title, defaultVal, command, isConfirm) => setPromptConfig({ title, defaultValue: defaultVal, command, isConfirm })}
                         onShowIconPicker={setShowIconPicker}
                         hideActionButtons={isGridView}
                       />
@@ -709,9 +733,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
                   // Use PromptModal for confirmation to avoid KDE Wayland native dialog bugs
                   setPromptConfig({ 
-                    title: 'Type YES to delete desktop', 
-                    defaultValue: 'YES', 
-                    command: `CLEAR:${targetId}` 
+                    title: 'Are you sure you want to delete desktop?', 
+                    defaultValue: '', 
+                    command: `CLEAR:${targetId}`,
+                    isConfirm: true
                   });
                   setContextMenu(null);
                   
@@ -739,8 +764,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
         <PromptModal 
           title={promptConfig.title}
           defaultValue={promptConfig.defaultValue}
-          onSubmit={(value) => {
-            executeMenuCommand(`${promptConfig.command}:${value}`);
+          isConfirm={promptConfig.isConfirm}
+          onSubmit={async (value) => {
+            const finalCommand = promptConfig.isConfirm ? promptConfig.command : `${promptConfig.command}:${value}`;
+            executeMenuCommand(finalCommand);
             setPromptConfig(null);
           }}
           onCancel={() => setPromptConfig(null)}

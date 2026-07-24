@@ -218,7 +218,7 @@ async function performFetchDesktops(scanWindows = true) {
     // ─── LIGHTWEIGHT WINDOW DETECTION (Live tab only, lock-guarded) ───
     // Only runs when scanWindows=true (Live tab active) and no scan is already in progress.
     // Uses a single bash subprocess with kdotool get_desktop_for_window (cheap integer returns).
-    const activeKdotoolIndices = new Set();
+    const activeKdotoolIndices = {};
 
     if (scanWindows && !windowScanInProgress) {
       windowScanInProgress = true;
@@ -226,9 +226,12 @@ async function performFetchDesktops(scanWindows = true) {
         const winScanScript = `
 export PATH=$PATH:~/.local/bin
 for id in $(kdotool search --class '.*' 2>/dev/null); do
-  idx=$(kdotool get_desktop_for_window "$id" 2>/dev/null)
-  [[ "$idx" =~ ^[0-9]+$ ]] && [[ "$idx" -gt 0 ]] && echo "$idx"
-done 2>/dev/null | sort -u
+  wname=$(kdotool getwindowname "$id" 2>/dev/null)
+  if [ "$wname" != "Desktop Manager" ] && [ "$wname" != "Menu" ] && [ "$wname" != "" ]; then
+    idx=$(kdotool get_desktop_for_window "$id" 2>/dev/null)
+    [[ "$idx" =~ ^[0-9]+$ ]] && [[ "$idx" -gt 0 ]] && echo "$idx"
+  fi
+done 2>/dev/null
 `;
         const idxOutput = await new Promise((resolve) => {
           const child = spawn('bash', [], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -244,7 +247,9 @@ done 2>/dev/null | sort -u
 
         idxOutput.split('\n').forEach(line => {
           const idx = parseInt(line.trim());
-          if (!isNaN(idx) && idx > 0) activeKdotoolIndices.add(idx);
+          if (!isNaN(idx) && idx > 0) {
+            activeKdotoolIndices[idx] = (activeKdotoolIndices[idx] || 0) + 1;
+          }
         });
       } catch (e) {
         console.error('Window scan failed:', e);
@@ -257,7 +262,7 @@ done 2>/dev/null | sort -u
     let match;
     const desktops = {};
     const priorities = {};
-    const counts = {};
+    const counts = scanWindows ? {} : undefined;
     const appMap = {};
     let cacheUpdated = false;
 
@@ -305,7 +310,9 @@ done 2>/dev/null | sort -u
       desktops[uuid] = name;
       priorities[uuid] = priority;
       // pos is 0-based from qdbus; kdotool uses 1-based indices
-      counts[uuid] = activeKdotoolIndices.has(pos + 1) ? 1 : 0;
+      if (scanWindows) {
+        counts[uuid] = activeKdotoolIndices[pos + 1] || 0;
+      }
       appMap[uuid] = []; // app class scanning removed for performance
       desktopIcons[uuid] = (cached && cached.icons) ? cached.icons : [];
       desktopShortcuts[uuid] = (cached && cached.shortcut) ? cached.shortcut : null;

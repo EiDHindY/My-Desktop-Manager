@@ -785,6 +785,44 @@ class SwitcherMenu(QWidget):
         except Exception as e:
             subprocess.run(["notify-send", "Back Error", str(e)])
 
+    def history_back(self):
+        try:
+            if not os.path.exists(HISTORY_FILE): return
+            with open(HISTORY_FILE, 'r') as f: data = json.load(f)
+            index = data.get("index", -1)
+            stack = data.get("stack", [])
+            if index > 0:
+                new_index = index - 1
+                target = stack[new_index]
+                data["index"] = new_index
+                data["lock"] = True
+                data["target"] = target
+                with open(HISTORY_FILE, 'w') as f: json.dump(data, f)
+                self.switch_desktop(target)
+            else:
+                subprocess.run(["notify-send", "History", "No more backward history"])
+        except Exception as e:
+            subprocess.run(["notify-send", "History Back Error", str(e)])
+
+    def history_forward(self):
+        try:
+            if not os.path.exists(HISTORY_FILE): return
+            with open(HISTORY_FILE, 'r') as f: data = json.load(f)
+            index = data.get("index", -1)
+            stack = data.get("stack", [])
+            if index >= 0 and index < len(stack) - 1:
+                new_index = index + 1
+                target = stack[new_index]
+                data["index"] = new_index
+                data["lock"] = True
+                data["target"] = target
+                with open(HISTORY_FILE, 'w') as f: json.dump(data, f)
+                self.switch_desktop(target)
+            else:
+                subprocess.run(["notify-send", "History", "No more forward history"])
+        except Exception as e:
+            subprocess.run(["notify-send", "History Forward Error", str(e)])
+
     def _on_sigusr1(self, signum, frame):
         print(f"[SIGNAL] SIGUSR1 received. Setting summon_flag = True.", flush=True)
         self.summon_flag = True

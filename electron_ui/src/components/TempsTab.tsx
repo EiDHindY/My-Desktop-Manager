@@ -55,8 +55,17 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
   const filteredTemplates = useMemo(() => {
     return localTemplates.map(temp => {
       if (!query) return temp;
-      const nameMatch = temp.name.toLowerCase().includes(query);
-      const matchingTasks = temp.tasks?.filter(t => t.name.toLowerCase().includes(query)) || [];
+
+      const fuzzyMatch = (str: string, q: string) => {
+        let i = 0;
+        for (let j = 0; j < str.length && i < q.length; j++) {
+          if (str[j] === q[i]) i++;
+        }
+        return i === q.length;
+      };
+
+      const nameMatch = fuzzyMatch(temp.name.toLowerCase(), query);
+      const matchingTasks = temp.tasks?.filter(t => fuzzyMatch(t.name.toLowerCase(), query)) || [];
       if (nameMatch || matchingTasks.length > 0) {
         return { ...temp, tasks: nameMatch ? temp.tasks : matchingTasks };
       }
@@ -67,7 +76,9 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
     filteredTemplates.forEach(temp => {
-      items.push({ type: 'template', id: temp.filename, name: temp.name, filename: temp.filename });
+      if (!temp.isDivider) {
+        items.push({ type: 'template', id: temp.filename, name: temp.name, filename: temp.filename });
+      }
       const isExpanded = query ? true : expandedTemps.includes(temp.filename);
       if (isExpanded && temp.tasks) {
         temp.tasks.forEach(task => {
@@ -173,7 +184,11 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
         e.preventDefault();
         const item = flatItems[focusedIndex];
         if (item.type === 'template') {
-          handleDeployTemplate(item.id, item.name);
+          if (e.ctrlKey) {
+            handleDeployTemplate(item.id, item.name);
+          } else {
+            toggleExpand(item.id);
+          }
         } else if (item.type === 'task') {
           handleDeployTask(item.templateName!, item.taskId!);
         }
@@ -184,10 +199,46 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [flatItems, focusedIndex, showCreateModal, showIconPicker]);
 
+  const prevQueryRef = useRef(query);
+  
   // Reset focus when query changes
   useEffect(() => {
-    setFocusedIndex(0);
-  }, [query]);
+    if (prevQueryRef.current !== query) {
+      prevQueryRef.current = query;
+      if (!query) {
+        setFocusedIndex(0);
+        return;
+      }
+      
+      const lowerQuery = query.toLowerCase();
+      
+      const fuzzyMatch = (str: string, q: string) => {
+        let i = 0;
+        for (let j = 0; j < str.length && i < q.length; j++) {
+          if (str[j] === q[i]) i++;
+        }
+        return i === q.length;
+      };
+
+      // Find the best item to focus: prioritize an exact start match, then an includes match, then fuzzy match
+      const startsWithIndex = flatItems.findIndex(item => item.name.toLowerCase().startsWith(lowerQuery));
+      if (startsWithIndex !== -1) {
+        setFocusedIndex(startsWithIndex);
+      } else {
+        const includesIndex = flatItems.findIndex(item => item.name.toLowerCase().includes(lowerQuery));
+        if (includesIndex !== -1) {
+          setFocusedIndex(includesIndex);
+        } else {
+          const fuzzyIndex = flatItems.findIndex(item => fuzzyMatch(item.name.toLowerCase(), lowerQuery));
+          if (fuzzyIndex !== -1) {
+            setFocusedIndex(fuzzyIndex);
+          } else {
+            setFocusedIndex(0);
+          }
+        }
+      }
+    }
+  }, [query, flatItems]);
 
   // Auto-scroll into view
   useEffect(() => {
@@ -272,8 +323,6 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                               }}
                             >
                               <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
-                              <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: '1px' }}>{temp.name}</span>
-                              <div style={{ flex: 1, height: '1px', background: 'var(--accent-green)', opacity: 0.3 }} />
                               
                               <button 
                                 className="btn-hover"
@@ -281,9 +330,9 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                   e.stopPropagation(); 
                                   if (setPromptConfig) {
                                     setPromptConfig({
-                                      title: `Type YES to delete divider "${temp.name}"`,
-                                      defaultValue: 'YES',
-                                      command: `DELETE_TEMPLATE:${temp.filename}`,
+                                    title: `Are you sure you want to delete divider "${temp.name}"?`,
+                                    defaultValue: '',
+                                    command: `DELETE_TEMPLATE:${temp.filename}`,
                                       isConfirm: true
                                     });
                                   }
@@ -384,8 +433,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                           e.stopPropagation(); 
                           if (setPromptConfig) {
                             setPromptConfig({
-                              title: `Type YES to delete template "${temp.name}"`,
-                              defaultValue: 'YES',
+                              title: `Are you sure you want to delete template "${temp.name}"?`,
+                              defaultValue: '',
                               command: `DELETE_TEMPLATE:${temp.filename}`,
                               isConfirm: true
                             });
@@ -549,8 +598,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 e.stopPropagation(); 
                                 if (setPromptConfig) {
                                   setPromptConfig({
-                                    title: `Type YES to delete script "${task.name}"`,
-                                    defaultValue: 'YES',
+                                    title: `Are you sure you want to delete script "${task.name}"?`,
+                                    defaultValue: '',
                                     command: `DELETE_TEMPLATE_TASK:${temp.filename}:${task.id}`,
                                     isConfirm: true
                                   });
@@ -672,6 +721,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
             await window.electronAPI.executeCommand(cmd);
             
             setShowCreateModal(false);
+            setExpandedTemps(prev => prev.includes(filename) ? prev : [...prev, filename]);
             onAction?.();
           }}
         />
