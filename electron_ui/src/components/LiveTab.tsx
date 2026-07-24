@@ -467,7 +467,10 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             const idx = visibleItems.findIndex(i => i.id === folderName);
             if (idx !== -1) setSelectedIndex(idx);
           }}
-          onMouseLeave={() => setHoveredFolder(null)}
+          onMouseLeave={() => {
+            setHoveredFolder(null);
+            setSelectedIndex(-1);
+          }}
             style={{ 
               display: 'flex',
               padding: '6px 10px',
@@ -606,6 +609,8 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                           if (id) {
                             const idx = visibleItems.findIndex(i => i.id === id);
                             if (idx !== -1) setSelectedIndex(idx);
+                          } else {
+                            setSelectedIndex(-1);
                           }
                         }}
                         onExecuteCommand={executeMenuCommand}

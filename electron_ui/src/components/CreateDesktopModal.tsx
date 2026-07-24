@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface CreateDesktopModalProps {
   existingFolders: string[];
@@ -51,7 +52,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
     }
   };
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       top: 0,
@@ -285,6 +286,7 @@ export default function CreateDesktopModal({ existingFolders, onSubmit, onCancel
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }

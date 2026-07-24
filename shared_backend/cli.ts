@@ -21,7 +21,8 @@ import {
     handleDeleteTemplateTask,
     handleSetTemplateTaskIcon,
     handleSetTemplateTaskShortcut,
-    handleRenameTemplateScript
+    handleRenameTemplateScript,
+    handleMoveTemplateScript
 } from './helpers/command_handlers';
 import { saveSnapshot, applyTemplate } from './helpers/session_manager';
 
@@ -131,6 +132,12 @@ if (command.startsWith('RENAME:')) {
     const taskId = parts[1];
     const shortcut = parts.slice(2).join(":") || null;
     handleSetTemplateTaskShortcut(filename, taskId, shortcut);
+} else if (command.startsWith('MOVE_TEMPLATE_SCRIPT:')) {
+    const parts = command.substring(21).split(":");
+    const sourceFilename = parts[0];
+    const taskId = parts[1];
+    const targetFilename = parts[2];
+    handleMoveTemplateScript(sourceFilename, taskId, targetFilename);
 } else if (command.startsWith('SUMMON:')) {
     const pureId = command.substring(7).split("___")[0];
     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.freedesktop.DBus.Properties.Set org.kde.KWin.VirtualDesktopManager current "${pureId}"`);

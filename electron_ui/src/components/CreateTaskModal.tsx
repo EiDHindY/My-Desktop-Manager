@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface CreateTaskModalProps {
   existingLiveFolders: string[];
@@ -143,7 +144,7 @@ export default function CreateTaskModal({ existingLiveFolders, existingTemplates
     }
   };
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       top: 0,
@@ -519,6 +520,7 @@ export default function CreateTaskModal({ existingLiveFolders, existingTemplates
 
         <button type="submit" style={{ display: 'none' }} />
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }

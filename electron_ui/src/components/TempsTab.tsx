@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip, IconFileText, IconImport, IconType, IconMonitor } from './Icons';
+import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip, IconFileText, IconImport, IconType, IconMonitor, IconArrowRight } from './Icons';
 import IconPicker from './IconPicker';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import CreateTemplateScriptModal from './CreateTemplateScriptModal';
+import MoveScriptModal from './MoveScriptModal';
 
 interface Task {
   id: string;
@@ -38,6 +39,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [showIconPicker, setShowIconPicker] = useState<{ filename: string, taskId: string } | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [moveTargetScript, setMoveTargetScript] = useState<{temp: any, task: any} | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -594,6 +596,17 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                             </button>
                             <button 
                               className="btn-hover"
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setMoveTargetScript({ temp, task });
+                              }}
+                              style={{ backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', border: '1px solid rgba(38, 139, 210, 0.2)', width: '24px', height: '24px', padding: 0 }}
+                              title="Move Script"
+                            >
+                              <IconArrowRight size={12} />
+                            </button>
+                            <button 
+                              className="btn-hover"
                               onClick={async (e) => { 
                                 e.stopPropagation(); 
                                 if (setPromptConfig) {
@@ -722,6 +735,32 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
             
             setShowCreateModal(false);
             setExpandedTemps(prev => prev.includes(filename) ? prev : [...prev, filename]);
+            onAction?.();
+          }}
+        />
+      )}
+
+      {moveTargetScript && (
+        <MoveScriptModal
+          existingTemplates={localTemplates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
+          scriptName={moveTargetScript.task.name}
+          onCancel={() => setMoveTargetScript(null)}
+          onSubmit={async (templateName, isNewTemplate) => {
+            let targetFilename = templateName.toLowerCase().replace(/\s+/g, '_') + '.json';
+            
+            if (isNewTemplate) {
+              // @ts-ignore
+              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE:${templateName}"`);
+              await new Promise(r => setTimeout(r, 200));
+            }
+
+            const cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "MOVE_TEMPLATE_SCRIPT:${moveTargetScript.temp.filename}:${moveTargetScript.task.id}:${targetFilename}"`;
+            
+            // @ts-ignore
+            await window.electronAPI.executeCommand(cmd);
+            
+            setMoveTargetScript(null);
+            setExpandedTemps(prev => prev.includes(targetFilename) ? prev : [...prev, targetFilename]);
             onAction?.();
           }}
         />

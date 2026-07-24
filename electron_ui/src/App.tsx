@@ -6,6 +6,10 @@ import TasksTab from './components/TasksTab'
 import ChromeTab from './components/ChromeTab'
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
+import UniversalCreateModal from './components/UniversalCreateModal'
+import CreateTaskModal from './components/CreateTaskModal'
+import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
+import CreateNoteModal from './components/CreateNoteModal'
 
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
 import './App.css'
@@ -65,9 +69,9 @@ function App() {
   const prevDesktopRef = useRef<string | null>(null);
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('temps')
+  const [activeTab, setActiveTab] = useState('active')
   // Ref so loadData can read current tab without being recreated
-  const activeTabRef = useRef('temps')
+  const activeTabRef = useRef('active')
   const handleSetActiveTab = useCallback((tab: string) => {
     activeTabRef.current = tab
     setActiveTab(tab)
@@ -83,6 +87,10 @@ function App() {
   const dataRef = useRef<any>(null)
   const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean} | null>(null)
   const [showCreateDesktopModal, setShowCreateDesktopModal] = useState(false)
+  const [showUniversalCreate, setShowUniversalCreate] = useState(false)
+  const [showGlobalCreateTask, setShowGlobalCreateTask] = useState(false)
+  const [showGlobalCreateScript, setShowGlobalCreateScript] = useState(false)
+  const [showGlobalCreateNote, setShowGlobalCreateNote] = useState(false)
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(true);
@@ -263,6 +271,7 @@ function App() {
       const timer = setTimeout(() => {
         console.log("Snappy refresh triggered...");
         loadData(true);
+        loadTemplates();
       }, 1000); // Increased to 1000ms to ensure slow backend writes (like npx tsx) are finished
       return () => clearTimeout(timer);
     }
@@ -278,7 +287,7 @@ function App() {
       // Debounce: wait 500ms after KDE brings the window forward before firing the
       // window-scan subprocess. This prevents the scan from colliding with the
       // compositor transition, which was the root cause of the freeze.
-      focusDebounceTimer = setTimeout(() => loadData(true), 500);
+      focusDebounceTimer = setTimeout(() => { loadData(true); loadTemplates(); }, 500);
     };
     const handleBlur = () => {
       setIsFocused(false);
@@ -304,17 +313,27 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
+          const tabs = ['active', 'tasks', 'notes', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
+          const tabs = ['active', 'tasks', 'notes', 'temps', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
-        if (e.key.toLowerCase() === 'n') {
+        if (e.key.toLowerCase() === 'd') {
+          e.preventDefault();
+          handleSetActiveTab('temps');
+          return;
+        }
+        if (e.key.toLowerCase() === 'n' && !e.altKey && !e.shiftKey) {
+          e.preventDefault();
+          setShowUniversalCreate(true);
+          return;
+        }
+        if (e.key.toLowerCase() === 'n' && e.altKey) {
           if (activeTabRef.current === 'active') {
             e.preventDefault();
             setShowCreateDesktopModal(true);
@@ -390,7 +409,7 @@ function App() {
       if (isInput) return;
 
       // Auto-focus search on any alphanumeric key if not already in an input
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9\/]$/i.test(e.key)) {
         const interceptEvent = new CustomEvent('global-typing-intercept', { detail: { key: e.key }, cancelable: true });
         window.dispatchEvent(interceptEvent);
         if (!interceptEvent.defaultPrevented) {
@@ -603,7 +622,12 @@ function App() {
                 <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
                 <button 
                   className="btn-hover"
-                  onClick={() => setPromptConfig({ title: 'New Divider Name', defaultValue: 'Group Divider', command: 'CREATE_TEMPLATE_DIVIDER' })}
+                  onClick={async () => {
+                    const uniqueName = `Divider ${Date.now()}`;
+                    // @ts-ignore
+                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE_DIVIDER:${uniqueName}"`);
+                    setLastActionTime(Date.now());
+                  }}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
                   title="Add Group Divider"
                 >
@@ -713,7 +737,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['temps', 'active', 'notes', 'tasks', 'chrome']
+            {['active', 'tasks', 'notes', 'temps', 'chrome']
               .filter(tab => !searchQuery.startsWith('/') || tab.includes(searchQuery.slice(1).toLowerCase()))
               .map(tab => (
                 <div 
@@ -871,6 +895,108 @@ function App() {
             setLastActionTime(Date.now());
           }}
           onCancel={() => setShowCreateDesktopModal(false)}
+        />
+      )}
+
+      {showUniversalCreate && (
+        <UniversalCreateModal
+          onSelect={(choice) => {
+            setShowUniversalCreate(false);
+            if (choice === 'desktop') {
+              setShowCreateDesktopModal(true);
+            } else if (choice === 'script') {
+              setShowGlobalCreateScript(true);
+            } else if (choice === 'task') {
+              setShowGlobalCreateTask(true);
+            } else if (choice === 'note') {
+              setShowGlobalCreateNote(true);
+            }
+          }}
+          onCancel={() => setShowUniversalCreate(false)}
+        />
+      )}
+
+      {showGlobalCreateScript && (
+        <CreateTemplateScriptModal
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
+          onSubmit={async (scriptName, templateName, isNewTemplate, icon) => {
+            setShowGlobalCreateScript(false);
+            const command = isNewTemplate 
+              ? `CREATE_TEMPLATE_SCRIPT:"${templateName}":"${scriptName}":${icon ? `"${icon}"` : 'null'}:true`
+              : `CREATE_TEMPLATE_SCRIPT:"${templateName}":"${scriptName}":${icon ? `"${icon}"` : 'null'}:false`;
+            
+            // @ts-ignore
+            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" ${command}`);
+            setLastActionTime(Date.now());
+            loadTemplates();
+          }}
+          onCancel={() => setShowGlobalCreateScript(false)}
+        />
+      )}
+
+      {showGlobalCreateTask && (
+        <CreateTaskModal
+          existingLiveFolders={Object.keys(data?.session?.folders || {}).filter(k => k !== 'root').concat('root')}
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => t.name)}
+          initialCategory="general"
+          initialSubId={null}
+          onSubmit={(taskName, category, subId) => {
+            setShowGlobalCreateTask(false);
+            const newTask = {
+              id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              text: taskName,
+              checked: false
+            };
+            const newData = { ...(data?.tasks || { general: [], live: {}, templates: {} }) };
+            if (category === 'general') {
+              newData.general = [...newData.general, newTask];
+            } else if (category === 'live' && subId) {
+              if (!newData.live) newData.live = {};
+              if (!newData.live[subId]) newData.live[subId] = [];
+              newData.live[subId] = [...newData.live[subId], newTask];
+            } else if (category === 'templates' && subId) {
+              if (!newData.templates) newData.templates = {};
+              if (!newData.templates[subId]) newData.templates[subId] = [];
+              newData.templates[subId] = [...newData.templates[subId], newTask];
+            }
+            // @ts-ignore
+            window.electronAPI.writeJSON('tasks.json', newData);
+            setLastActionTime(Date.now());
+          }}
+          onCancel={() => setShowGlobalCreateTask(false)}
+        />
+      )}
+
+      {showGlobalCreateNote && (
+        <CreateNoteModal
+          existingLiveFolders={Object.keys(data?.session?.folders || {}).filter(k => k !== 'root').concat('root')}
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => t.name)}
+          initialCategory="general"
+          initialSubId={null}
+          onSubmit={(title, info, category, subId) => {
+            setShowGlobalCreateNote(false);
+            const newNote = {
+              id: `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              title,
+              info
+            };
+            const newData = { ...(data?.notes_new || { general: [], live: {}, templates: {}, folders: {}, folder_order: [] }) };
+            if (category === 'general') {
+              newData.general = [...newData.general, newNote];
+            } else if (category === 'live' && subId) {
+              if (!newData.live) newData.live = {};
+              if (!newData.live[subId]) newData.live[subId] = [];
+              newData.live[subId] = [...newData.live[subId], newNote];
+            } else if (category === 'templates' && subId) {
+              if (!newData.templates) newData.templates = {};
+              if (!newData.templates[subId]) newData.templates[subId] = [];
+              newData.templates[subId] = [...newData.templates[subId], newNote];
+            }
+            // @ts-ignore
+            window.electronAPI.writeJSON('notes_new.json', newData);
+            setLastActionTime(Date.now());
+          }}
+          onCancel={() => setShowGlobalCreateNote(false)}
         />
       )}
 

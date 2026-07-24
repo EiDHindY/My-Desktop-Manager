@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import IconPicker from './IconPicker';
-import { ManualIcon } from './Icons';
 
-interface CreateTemplateScriptModalProps {
+interface MoveScriptModalProps {
   existingTemplates: { filename: string, name: string }[];
-  onSubmit: (scriptName: string, templateName: string, isNewTemplate: boolean, icon: string | null) => void;
+  scriptName: string;
+  onSubmit: (templateName: string, isNewTemplate: boolean) => void;
   onCancel: () => void;
 }
 
-export default function CreateTemplateScriptModal({ existingTemplates, onSubmit, onCancel }: CreateTemplateScriptModalProps) {
-  const [scriptName, setScriptName] = useState('');
-  const [templateName, setTemplateName] = useState(existingTemplates.length > 0 ? existingTemplates[0].name : '');
-  const [icons, setIcons] = useState<string[]>([]);
-  const [showIconPicker, setShowIconPicker] = useState(false);
+export default function MoveScriptModal({ existingTemplates, scriptName, onSubmit, onCancel }: MoveScriptModalProps) {
+  const [templateName, setTemplateName] = useState('');
   
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -26,7 +21,6 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
           'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
         )) as HTMLElement[];
         
-        // Filter out elements that are not visible (e.g., hidden submit button)
         const visibleFocusable = focusableElements.filter(el => el.style.display !== 'none' && el.offsetWidth > 0);
         
         if (visibleFocusable.length === 0) return;
@@ -51,8 +45,9 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
     document.addEventListener('keydown', handleTab);
     return () => document.removeEventListener('keydown', handleTab);
   }, []);
-  const scriptInputRef = useRef<HTMLInputElement>(null);
+  
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const templateInputRef = useRef<HTMLInputElement>(null);
 
   const filteredTemplates = existingTemplates.filter(t => {
     const isExactMatch = existingTemplates.some(ex => ex.name.toLowerCase() === templateName.toLowerCase());
@@ -62,7 +57,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
 
   useEffect(() => {
     const focusInput = () => {
-      scriptInputRef.current?.focus();
+      templateInputRef.current?.focus();
     };
     focusInput();
     setTimeout(focusInput, 50);
@@ -86,16 +81,16 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
         e.stopImmediatePropagation();
         onCancel();
       } else if (e.key === 'Enter') {
-        if (showIconPicker || isDropdownOpen) return;
+        if (isDropdownOpen) return;
         if (document.activeElement?.tagName === 'BUTTON') return;
 
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        if (!scriptName.trim() || !templateName.trim()) return;
+        if (!templateName.trim()) return;
         const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === templateName.toLowerCase().trim());
-        onSubmit(scriptName.trim(), templateName.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
+        onSubmit(templateName.trim(), isNewTemplate);
       }
     };
 
@@ -103,16 +98,16 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown, true);
     };
-  }, [onCancel, scriptName, templateName, icons, showIconPicker, isDropdownOpen, existingTemplates, onSubmit]);
+  }, [onCancel, templateName, isDropdownOpen, existingTemplates, onSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      if (!scriptName.trim() || !templateName.trim()) return;
+      if (!templateName.trim()) return;
       
       const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === templateName.toLowerCase().trim());
-      onSubmit(scriptName.trim(), templateName.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
+      onSubmit(templateName.trim(), isNewTemplate);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -120,7 +115,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
     }
   };
 
-  return createPortal(
+  return (
     <div style={{
       position: 'fixed',
       top: 0,
@@ -151,10 +146,10 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
       >
         <div style={{ textAlign: 'center', marginBottom: '8px' }}>
           <h2 style={{ margin: 0, color: 'var(--text-main)', fontSize: '18px', fontWeight: '800', letterSpacing: '0.5px' }}>
-            Create Script
+            Move Script
           </h2>
           <p style={{ margin: '4px 0 0 0', color: 'var(--text-dim)', fontSize: '12px' }}>
-            Press Enter to create, Escape to cancel
+            Moving: <strong style={{color: 'var(--accent-blue)'}}>{scriptName}</strong>
           </p>
         </div>
 
@@ -165,36 +160,11 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
           }
         `}</style>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Script Name</label>
-          <input 
-            ref={scriptInputRef}
-            type="text" 
-            value={scriptName}
-            placeholder="e.g. my_script.sh"
-            onChange={(e) => setScriptName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 33, 43, 0.6)',
-              border: '1px solid var(--border-glass)',
-              color: '#e0e0e0',
-              outline: 'none',
-              fontSize: '14px',
-              transition: 'all 0.3s ease',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-            }}
-            className="search-input-hover prompt-modal-input"
-          />
-        </div>
-
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative', zIndex: 10 }} ref={dropdownRef}>
           <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Target Template Folder</label>
           <div style={{ position: 'relative' }}>
             <input 
+              ref={templateInputRef}
               type="text" 
               value={templateName}
               placeholder="Select or type new folder name"
@@ -232,9 +202,9 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
                     setTemplateName(finalFolder);
                     setIsDropdownOpen(false);
                   } else {
-                    if (!scriptName.trim() || !finalFolder.trim()) return;
+                    if (!finalFolder.trim()) return;
                     const isNewTemplate = !existingTemplates.find(t => t.name.toLowerCase() === finalFolder.toLowerCase().trim());
-                    onSubmit(scriptName.trim(), finalFolder.trim(), isNewTemplate, icons.length > 0 ? icons.join(',') : null);
+                    onSubmit(finalFolder.trim(), isNewTemplate);
                   }
                 } else if (e.key === 'Escape') {
                   e.nativeEvent.stopImmediatePropagation();
@@ -301,7 +271,6 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
                     onClick={() => {
                       setTemplateName(item.name);
                       setIsDropdownOpen(false);
-                      scriptInputRef.current?.focus();
                     }}
                     style={{
                       padding: '10px 12px',
@@ -319,71 +288,7 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
             </div>
           )}
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 'bold' }}>Script Icon (Optional)</label>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button 
-              onClick={() => setShowIconPicker(true)}
-              style={{
-                padding: '10px 16px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(0, 33, 43, 0.6)',
-                border: '1px solid var(--border-glass)',
-                color: '#e0e0e0',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '14px',
-                transition: 'all 0.3s ease',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-              }}
-              className="search-input-hover"
-            >
-              {icons.length > 0 ? (
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {icons.map(ic => <ManualIcon key={ic} icon={ic} size={16} />)}
-                </div>
-              ) : 'Select Icons...'}
-              {icons.length > 0 && <span style={{ marginLeft: '4px' }}>({icons.length} selected)</span>}
-            </button>
-            {icons.length > 0 && (
-              <button 
-                onClick={() => setIcons([])}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-dim)',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  textDecoration: 'underline'
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-
-        {showIconPicker && (
-          <IconPicker 
-            title="Select Initial Icons"
-            currentIcons={icons} 
-            onToggle={(selectedIcon) => {
-              setIcons(prev => 
-                prev.includes(selectedIcon) 
-                  ? prev.filter(i => i !== selectedIcon) 
-                  : [...prev, selectedIcon]
-              );
-            }}
-            onClear={() => setIcons([])}
-            onClose={() => setShowIconPicker(false)}
-          />
-        )}
-
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }

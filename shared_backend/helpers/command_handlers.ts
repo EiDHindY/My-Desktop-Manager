@@ -884,3 +884,37 @@ export function handleSetTemplateTaskShortcut(filename: string, taskId: string, 
         console.error("Set Template Task Shortcut error:", e);
     }
 }
+
+export function handleMoveTemplateScript(sourceFilename: string, taskId: string, targetFilename: string) {
+    try {
+        const templatesDir = join(process.env.HOME || '', '.config', 'desktop-manager', 'templates');
+        const sourcePath = join(templatesDir, sourceFilename);
+        const targetPath = join(templatesDir, targetFilename);
+
+        if (existsSync(sourcePath) && existsSync(targetPath)) {
+            const sourceData = JSON.parse(readFileSync(sourcePath, 'utf-8'));
+            const targetData = JSON.parse(readFileSync(targetPath, 'utf-8'));
+
+            if (sourceData.tasks) {
+                const taskIndex = sourceData.tasks.findIndex((t: any) => t.id === taskId);
+                if (taskIndex !== -1) {
+                    const [task] = sourceData.tasks.splice(taskIndex, 1);
+                    
+                    if (!targetData.tasks) {
+                        targetData.tasks = [];
+                    }
+                    targetData.tasks.push(task);
+
+                    writeFileSync(sourcePath, JSON.stringify(sourceData, null, 2));
+                    writeFileSync(targetPath, JSON.stringify(targetData, null, 2));
+                    
+                    runCommand(`notify-send "Desktop Manager" "🚚 Script moved successfully!"`);
+                }
+            }
+        } else {
+            console.error("Move Template Script error: Source or target template does not exist.");
+        }
+    } catch (e) {
+        console.error("Move Template Script error:", e);
+    }
+}
