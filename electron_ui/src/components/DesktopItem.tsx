@@ -91,6 +91,33 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
               )}
             </div>
 
+            <div style={{ width: '28px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '8px' }}>
+              {historyShortcut && !isActive && (
+                <div 
+                  className="btn-hover"
+                  onClick={(e) => { e.stopPropagation(); onSwitch(pureId); }}
+                  style={{ 
+                    backgroundColor: 'rgba(108, 113, 196, 0.25)', 
+                    color: 'var(--accent-purple)', 
+                    width: '24px', 
+                    height: '24px', 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(108, 113, 196, 0.5)',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    fontFamily: 'monospace',
+                    boxShadow: '0 0 6px rgba(108, 113, 196, 0.3)'
+                  }}
+                  title={`Switch to this desktop (Ctrl+${historyShortcut})`}
+                >
+                  {historyShortcut}
+                </div>
+              )}
+            </div>
+
             <div style={{ marginRight: '10px', flexShrink: 0, display: 'flex', alignItems: 'center', opacity: isFocused || hasWindows || isActive ? 1 : 0.6, minWidth: '16px', justifyContent: 'center' }}>
               {isDeleting ? (
                 <IconLoader size={14} color="var(--accent-red)" />
@@ -132,47 +159,22 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                     onPrompt('Are you sure you want to delete desktop?', '', `CLEAR:${desktopId}`, true); 
                   }}
                   style={{ 
-                    backgroundColor: 'rgba(220, 50, 47, 0.1)', 
-                    color: 'var(--accent-red)', 
-                    width: '24px', 
-                    height: '24px', 
+                    backgroundColor: 'rgba(220, 50, 47, 0.05)', 
+                    color: 'rgba(220, 50, 47, 0.6)', 
+                    width: '20px', 
+                    height: '20px', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '1px solid rgba(220, 50, 47, 0.2)'
+                    border: '1px solid rgba(220, 50, 47, 0.1)',
+                    borderRadius: '4px'
                   }}
                   title="Delete"
                 >
-                  <IconTrash size={14} />
+                  <IconTrash size={12} />
                 </div>
               </div>
             )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', flexShrink: 0 }}>
-              {historyShortcut && !isActive && (
-                <div 
-                  className="btn-hover"
-                  onClick={(e) => { e.stopPropagation(); onSwitch(pureId); }}
-                  style={{ 
-                    backgroundColor: 'rgba(108, 113, 196, 0.1)', 
-                    color: 'var(--accent-purple)', 
-                    width: '24px', 
-                    height: '24px', 
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid rgba(108, 113, 196, 0.2)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    fontFamily: 'monospace'
-                  }}
-                  title={`Switch to this desktop (Ctrl+${historyShortcut})`}
-                >
-                  {historyShortcut}
-                </div>
-              )}
-            </div>
           </div>
         );
 

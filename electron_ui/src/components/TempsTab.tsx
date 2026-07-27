@@ -222,23 +222,22 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
         return i === q.length;
       };
 
-      // Find the best item to focus: prioritize an exact start match, then an includes match, then fuzzy match
-      const startsWithIndex = flatItems.findIndex(item => item.name.toLowerCase().startsWith(lowerQuery));
-      if (startsWithIndex !== -1) {
-        setFocusedIndex(startsWithIndex);
-      } else {
-        const includesIndex = flatItems.findIndex(item => item.name.toLowerCase().includes(lowerQuery));
-        if (includesIndex !== -1) {
-          setFocusedIndex(includesIndex);
-        } else {
-          const fuzzyIndex = flatItems.findIndex(item => fuzzyMatch(item.name.toLowerCase(), lowerQuery));
-          if (fuzzyIndex !== -1) {
-            setFocusedIndex(fuzzyIndex);
-          } else {
-            setFocusedIndex(0);
-          }
-        }
+      // Find the best item to focus: prioritize tasks over templates, then start match, includes, and fuzzy
+      const findBestIndex = (targetType: string) => {
+        const startsWith = flatItems.findIndex(item => item.type === targetType && item.name.toLowerCase().startsWith(lowerQuery));
+        if (startsWith !== -1) return startsWith;
+        const includes = flatItems.findIndex(item => item.type === targetType && item.name.toLowerCase().includes(lowerQuery));
+        if (includes !== -1) return includes;
+        const fuzzy = flatItems.findIndex(item => item.type === targetType && fuzzyMatch(item.name.toLowerCase(), lowerQuery));
+        return fuzzy;
+      };
+
+      let bestIndex = findBestIndex('task');
+      if (bestIndex === -1) {
+        bestIndex = findBestIndex('template');
       }
+      
+      setFocusedIndex(bestIndex !== -1 ? bestIndex : 0);
     }
   }, [query, flatItems]);
 

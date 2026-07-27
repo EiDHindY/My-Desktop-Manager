@@ -388,7 +388,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
       {/* Sidebar */}
       {isSidebarOpen && (
         <div style={{
-          width: '240px',
+          width: '180px',
           backgroundColor: 'rgba(0, 33, 43, 0.4)',
           borderRight: '1px solid var(--border-glass)',
           display: 'flex',

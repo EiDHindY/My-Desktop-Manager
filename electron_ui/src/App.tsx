@@ -313,13 +313,13 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['active', 'tasks', 'notes', 'temps', 'chrome'];
+          const tabs = ['temps', 'active', 'tasks', 'notes', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['active', 'tasks', 'notes', 'temps', 'chrome'];
+          const tabs = ['temps', 'active', 'tasks', 'notes', 'chrome'];
           handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
           return;
         }
@@ -737,7 +737,7 @@ function App() {
         }}>
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            {['active', 'tasks', 'notes', 'temps', 'chrome']
+            {['temps', 'active', 'tasks', 'notes', 'chrome']
               .filter(tab => !searchQuery.startsWith('/') || tab.includes(searchQuery.slice(1).toLowerCase()))
               .map(tab => (
                 <div 
