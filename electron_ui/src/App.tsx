@@ -910,6 +910,8 @@ function App() {
               setShowGlobalCreateTask(true);
             } else if (choice === 'note') {
               setShowGlobalCreateNote(true);
+            } else if (choice === 'deploy') {
+              handleSetActiveTab('temps');
             }
           }}
           onCancel={() => setShowUniversalCreate(false)}

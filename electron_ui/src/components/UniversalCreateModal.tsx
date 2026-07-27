@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { IconMonitor, IconTerminal, IconList, IconFileText } from './Icons';
+import { IconMonitor, IconTerminal, IconList, IconFileText, IconRocket } from './Icons';
 
 interface UniversalCreateModalProps {
-  onSelect: (choice: 'desktop' | 'script' | 'task' | 'note') => void;
+  onSelect: (choice: 'desktop' | 'script' | 'task' | 'note' | 'deploy') => void;
   onCancel: () => void;
 }
 
@@ -16,10 +16,12 @@ export default function UniversalCreateModal({ onSelect, onCancel }: UniversalCr
     { id: 'script' as const, label: 'Script', icon: <IconTerminal size={16} /> },
     { id: 'task' as const, label: 'Tasks', icon: <IconList size={16} /> },
     { id: 'note' as const, label: 'Notes', icon: <IconFileText size={16} /> },
+    { id: 'deploy' as const, label: 'Deploy', icon: <IconRocket size={16} /> },
   ];
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const len = options.length;
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
@@ -29,22 +31,22 @@ export default function UniversalCreateModal({ onSelect, onCancel }: UniversalCr
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setFocusedIndex(prev => (prev + 2) % 4);
+        setFocusedIndex(prev => (prev + 2) % len);
       } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setFocusedIndex(prev => (prev + 2) % 4);
+        setFocusedIndex(prev => (prev - 2 + len) % len);
       } else if (e.key === 'ArrowRight' || (e.ctrlKey && e.key.toLowerCase() === 'l')) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setFocusedIndex(prev => (prev % 2 === 0) ? prev + 1 : prev - 1);
+        setFocusedIndex(prev => (prev + 1) % len);
       } else if (e.key === 'ArrowLeft' || (e.ctrlKey && e.key.toLowerCase() === 'h')) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setFocusedIndex(prev => (prev % 2 === 1) ? prev - 1 : prev + 1);
+        setFocusedIndex(prev => (prev - 1 + len) % len);
       } else if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
@@ -54,7 +56,7 @@ export default function UniversalCreateModal({ onSelect, onCancel }: UniversalCr
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [focusedIndex, onCancel, onSelect]);
+  }, [focusedIndex, onCancel, onSelect, options]);
 
   return createPortal(
     <div style={{
