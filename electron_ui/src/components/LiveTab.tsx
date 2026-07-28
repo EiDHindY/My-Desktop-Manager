@@ -158,7 +158,9 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
       const matchingDesktops = desktops.filter((id: string) => {
         const pureId = id.split('___')[0];
-        if (showOnlyActive && (windowCounts[pureId] || 0) === 0) return false;
+        const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+        const isCurrent = pureId === currentDesktop;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
         if (desktopQuery === '') return true;
         const name = desktopNames[pureId] || '';
         return fuzzyMatch(name.toLowerCase(), desktopQuery);
@@ -174,7 +176,9 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
       // === NORMAL MODE (no space typed yet) ===
       const matchingDesktops = desktops.filter((id: string) => {
         const pureId = id.split('___')[0];
-        if (showOnlyActive && (windowCounts[pureId] || 0) === 0) return false;
+        const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+        const isCurrent = pureId === currentDesktop;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
         const name = desktopNames[pureId] || '';
         return fuzzyMatch(name.toLowerCase(), folderQuery);
       });
@@ -394,7 +398,9 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
       matchingDesktops = desktops.filter((id: string) => {
         const pureId = id.split('___')[0];
-        if (showOnlyActive && (windowCounts[pureId] || 0) === 0) return false;
+        const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+        const isCurrent = pureId === currentDesktop;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
         if (desktopQuery === '') return true;
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(desktopQuery);
@@ -405,7 +411,9 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
       // === NORMAL MODE ===
       matchingDesktops = desktops.filter((id: string) => {
         const pureId = id.split('___')[0];
-        if (showOnlyActive && (windowCounts[pureId] || 0) === 0) return false;
+        const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+        const isCurrent = pureId === currentDesktop;
+        if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
         const name = desktopNames[pureId] || '';
         return name.toLowerCase().includes(folderQuery);
       });
