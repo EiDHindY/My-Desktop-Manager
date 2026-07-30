@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { IconMonitor, IconTerminal, IconList, IconFileText, IconRocket } from './Icons';
+import { IconMonitor, IconTerminal, IconList, IconFileText } from './Icons';
 
 interface UniversalCreateModalProps {
-  onSelect: (choice: 'desktop' | 'script' | 'task' | 'note' | 'deploy') => void;
+  onSelect: (choice: 'desktop' | 'script' | 'task' | 'note') => void;
   onCancel: () => void;
 }
 
@@ -16,7 +16,6 @@ export default function UniversalCreateModal({ onSelect, onCancel }: UniversalCr
     { id: 'script' as const, label: 'Script', icon: <IconTerminal size={16} /> },
     { id: 'task' as const, label: 'Tasks', icon: <IconList size={16} /> },
     { id: 'note' as const, label: 'Notes', icon: <IconFileText size={16} /> },
-    { id: 'deploy' as const, label: 'Deploy', icon: <IconRocket size={16} /> },
   ];
 
   useEffect(() => {

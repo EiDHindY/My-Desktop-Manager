@@ -11,7 +11,7 @@ import CreateTaskModal from './components/CreateTaskModal'
 import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
 import CreateNoteModal from './components/CreateNoteModal'
 
-import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus } from './components/Icons'
+import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin } from './components/Icons'
 import './App.css'
 
 const getThemeColor = (tab: string, type: 'var' | 'hex' = 'var') => {
@@ -58,6 +58,9 @@ function App() {
   }, []);
 
   const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
+  const [isPinned, setIsPinned] = useState(true) // Default to true because KWin Window Rule forces it on launch
+
+
   const currentDesktopRef = useRef<string | null>(null)
   useEffect(() => { currentDesktopRef.current = currentDesktop }, [currentDesktop])
   
@@ -72,9 +75,16 @@ function App() {
   const [activeTab, setActiveTab] = useState('active')
   // Ref so loadData can read current tab without being recreated
   const activeTabRef = useRef('active')
+  const lastSection1TabRef = useRef('active');
+  const lastSection2TabRef = useRef('temps');
   const handleSetActiveTab = useCallback((tab: string) => {
     activeTabRef.current = tab
     setActiveTab(tab)
+    if (['active', 'tasks', 'notes'].includes(tab)) {
+      lastSection1TabRef.current = tab;
+    } else if (['temps', 'chrome'].includes(tab)) {
+      lastSection2TabRef.current = tab;
+    }
   }, [])
   const [searchQuery, setSearchQuery] = useState('')
   const [lastActionTime, _setLastActionTimeState] = useState(0)
@@ -313,14 +323,16 @@ function App() {
       if (e.ctrlKey) {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const tabs = ['temps', 'active', 'tasks', 'notes', 'chrome'];
-          handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + 1) % tabs.length]);
+          const tabs = ['active', 'tasks', 'notes'];
+          const currentIndex = tabs.indexOf(activeTabRef.current);
+          handleSetActiveTab(currentIndex === -1 ? 'active' : tabs[(currentIndex + 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'q') {
           e.preventDefault();
-          const tabs = ['temps', 'active', 'tasks', 'notes', 'chrome'];
-          handleSetActiveTab(tabs[(tabs.indexOf(activeTabRef.current) + tabs.length - 1) % tabs.length]);
+          const tabs = ['active', 'tasks', 'notes'];
+          const currentIndex = tabs.indexOf(activeTabRef.current);
+          handleSetActiveTab(currentIndex === -1 ? 'active' : tabs[(currentIndex + tabs.length - 1) % tabs.length]);
           return;
         }
         if (e.key.toLowerCase() === 'd') {
@@ -348,7 +360,10 @@ function App() {
           e.preventDefault();
           const rD = returnDesktopRef.current;
           const cD = currentDesktopRef.current;
-          handleSetActiveTab('active');
+          const elToFocus = document.activeElement as HTMLElement;
+          if (activeTabRef.current !== 'notes') {
+            handleSetActiveTab('active');
+          }
           if (rD) {
             setLastActionTime(Date.now());
             const pureId = rD.split("___")[0];
@@ -361,11 +376,16 @@ function App() {
               if (cD && pureId === cD) return prev;
               return [...prev, cD as string].slice(-50);
             });
+            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
           }
           return;
         }
         if (e.key.toLowerCase() === 'e') {
           e.preventDefault();
+          const elToFocus = document.activeElement as HTMLElement;
+          if (activeTabRef.current !== 'notes') {
+            handleSetActiveTab('active');
+          }
           setVisitHistory(currentHist => {
             if (currentHist.length === 0) return currentHist;
             const target = currentHist[Math.max(0, currentHist.length - 2)];
@@ -376,12 +396,17 @@ function App() {
               // @ts-ignore
               window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
             }
+            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
             return currentHist;
           });
           return;
         }
         if (e.key.toLowerCase() === 't') {
           e.preventDefault();
+          const elToFocus = document.activeElement as HTMLElement;
+          if (activeTabRef.current !== 'notes') {
+            handleSetActiveTab('active');
+          }
           setVisitHistory(currentHist => {
             if (currentHist.length === 0) return currentHist;
             const target = currentHist[Math.max(0, currentHist.length - 3)];
@@ -392,8 +417,22 @@ function App() {
               // @ts-ignore
               window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
             }
+            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
             return currentHist;
           });
+          return;
+        }
+        if (e.key.toLowerCase() === 'z' && e.metaKey) {
+          // @ts-ignore
+          if (window.electronAPI) {
+            // @ts-ignore
+            window.electronAPI.nativeAction('toggle-pin').then(() => setIsPinned(prev => !prev));
+          }
+          return;
+        }
+        if (e.shiftKey && e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('toggle-sidebar'));
           return;
         }
       }
@@ -551,16 +590,22 @@ function App() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchQuery.startsWith('/')) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.nativeEvent.stopImmediatePropagation();
-                  const query = searchQuery.slice(1).toLowerCase();
-                  const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
-                  const matchedTab = tabs.find(t => t.includes(query));
-                  if (matchedTab) {
-                    handleSetActiveTab(matchedTab);
-                    setSearchQuery('');
+                if (e.key === 'Enter') {
+                  if (searchQuery.startsWith('/')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.nativeEvent.stopImmediatePropagation();
+                    const query = searchQuery.slice(1).toLowerCase();
+                    const tabs = ['temps', 'active', 'notes', 'tasks', 'chrome'];
+                    const matchedTab = tabs.find(t => t.includes(query));
+                    if (matchedTab) {
+                      handleSetActiveTab(matchedTab);
+                      setSearchQuery('');
+                    }
+                  } else {
+                    // Let the event bubble up to the active tab to execute the selected item,
+                    // then clear the search query so it's wiped clean for next time.
+                    setTimeout(() => setSearchQuery(''), 0);
                   }
                 }
               }}
@@ -585,6 +630,36 @@ function App() {
 
         {/* Actions and Stats Summary */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '28px' }}>
+          {/* Pin Window Toggle */}
+          <button 
+            className="btn-hover"
+            onClick={async () => {
+              // @ts-ignore
+              if (window.electronAPI) {
+                // @ts-ignore
+                await window.electronAPI.nativeAction('toggle-pin');
+                setIsPinned(prev => !prev);
+              }
+            }}
+            style={{ 
+              width: '28px', 
+              height: '28px', 
+              borderRadius: '6px', 
+              border: '1px solid var(--border-glass)', 
+              backgroundColor: !isPinned ? 'rgba(38, 139, 210, 0.2)' : 'transparent', 
+              color: !isPinned ? 'var(--accent-blue)' : 'var(--text-dim)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              flexShrink: 0, 
+              padding: 0, 
+              transition: 'all 0.3s ease' 
+            }}
+            title="Toggle Keep Above Others (Windows+Z)"
+          >
+            <IconPin size={14} fill={!isPinned ? 'currentColor' : 'none'} />
+          </button>
+
           {/* Action Buttons (Tasks and Notes Tabs) */}
           {(activeTab === 'tasks' || activeTab === 'notes') && (
             <>
@@ -731,7 +806,7 @@ function App() {
           justifyContent: 'space-between',
           padding: '0 8px', 
           borderBottom: '1px solid var(--border-glass)', 
-          backgroundColor: `${getThemeColor(activeTab, 'hex')}15`, // Very subtle tint of the active tab color
+          backgroundColor: isFocused ? `${getThemeColor(activeTab, 'hex')}15` : 'rgba(88, 110, 117, 0.1)', // Very subtle tint of the active tab color
           height: '32px',
           transition: 'background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
         }}>
@@ -743,11 +818,13 @@ function App() {
                 <div 
                 key={tab}
                 onClick={() => handleSetActiveTab(tab)}
-                className="interactive-element"
+                className={`interactive-element ${activeTab === tab && isFocused ? 'tab-active-focused' : ''}`}
                   style={{ 
+                    '--tab-color': getThemeColor(tab),
+                    '--tab-bg': `${getThemeColor(tab, 'hex')}1A`,
                     padding: '4px 10px', 
-                    color: activeTab === tab ? getThemeColor(tab) : 'var(--text-dim)',
-                    backgroundColor: activeTab === tab ? `${getThemeColor(tab, 'hex')}1A` : 'transparent',
+                    color: activeTab === tab ? (isFocused ? getThemeColor(tab) : 'var(--text-main)') : 'var(--text-dim)',
+                    backgroundColor: activeTab === tab ? (isFocused ? 'transparent' : 'rgba(255, 255, 255, 0.05)') : 'transparent',
                     borderRadius: '6px',
                     fontWeight: '800',
                     fontSize: '11px',
@@ -755,9 +832,9 @@ function App() {
                     letterSpacing: '0.5px',
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer',
-                    border: activeTab === tab ? `1px solid ${getThemeColor(tab, 'hex')}33` : '1px solid transparent',
+                    border: activeTab === tab ? (isFocused ? `1px solid transparent` : '1px solid var(--border-glass)') : '1px solid transparent',
                     position: 'relative'
-                  }}
+                  } as React.CSSProperties}
               >
                 {tab}
                 {tab === 'temps' && totalScripts > 0 && (
@@ -819,8 +896,12 @@ function App() {
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
-              {activeTab === 'notes' && <NotesTab notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
-              {activeTab === 'tasks' && <TasksTab tasksData={data?.tasks} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />}
+              <div style={{ display: activeTab === 'notes' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />
+              </div>
+              <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <TasksTab isActive={activeTab === 'tasks'} tasksData={data?.tasks} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />
+              </div>
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 
             </>
@@ -928,7 +1009,7 @@ function App() {
               : `CREATE_TEMPLATE_SCRIPT:"${templateName}":"${scriptName}":${icon ? `"${icon}"` : 'null'}:false`;
             
             // @ts-ignore
-            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" ${command}`);
+            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" '${command}'`);
             setLastActionTime(Date.now());
             loadTemplates();
           }}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers } from './Icons';
+import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconSlash } from './Icons';
 import CreateTaskModal from './CreateTaskModal';
 import PromptModal from './PromptModal';
 
@@ -17,7 +17,9 @@ interface TasksData {
   expanded_categories: string[];
 }
 
-export default function TasksTab({ tasksData, sessionData, templates, searchQuery = '', onAction }: { tasksData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void }) {
+export default function TasksTab({ isActive, tasksData, sessionData, templates, searchQuery = '', onAction }: { isActive: boolean, tasksData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void }) {
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const [data, setData] = useState<TasksData>({
     general: [],
     live: {},
@@ -47,12 +49,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
   }, [activeCategory, activeSubId, searchQuery]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleCreateNew = () => setShowCreateModal(true);
     window.addEventListener('tasks-create-new', handleCreateNew as EventListener);
     return () => window.removeEventListener('tasks-create-new', handleCreateNew as EventListener);
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleKeyDown = (e: KeyboardEvent | React.KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
@@ -65,9 +69,10 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleGlobalTyping = (e: KeyboardEvent) => {
       // If the sidebar is closed and we are NOT actively navigating tasks
       if (!isSidebarOpen && selectedTaskIndex === -1) {
@@ -84,7 +89,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     };
     window.addEventListener('global-typing-intercept', handleGlobalTyping as EventListener);
     return () => window.removeEventListener('global-typing-intercept', handleGlobalTyping as EventListener);
-  }, [isSidebarOpen, selectedTaskIndex]);
+  }, [isActive, isSidebarOpen, selectedTaskIndex]);
   
   useEffect(() => {
     if (tasksData) {
@@ -267,10 +272,11 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
 
   
   const templateItems = templates ? templates.filter(t => !t.isDivider).filter(t => isSidebarOpen && searchQuery ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) : true) : [];
+  templateItems.sort((a, b) => getUnfinishedCount('templates', b.name) - getUnfinishedCount('templates', a.name));
   templateItems.forEach(t => visibleItems.push({ type: 'templates', id: t.name }));
 
   useEffect(() => {
-    if (!isSidebarOpen) return;
+    if (!isActive || !isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent | React.KeyboardEvent) => {
       // Don't hijack if focused on an input UNLESS it's the global search bar
       const activeTag = document.activeElement?.tagName;
@@ -297,10 +303,10 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSidebarOpen, selectedIndex, visibleItems]);
+  }, [isActive, isSidebarOpen, selectedIndex, visibleItems]);
 
   useEffect(() => {
-    if (isSidebarOpen) return;
+    if (!isActive || isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'j') {
         e.preventDefault();
@@ -366,7 +372,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSidebarOpen, selectedTaskIndex, activeTasks]);
+  }, [isActive, isSidebarOpen, selectedTaskIndex, activeTasks]);
 
   useEffect(() => {
     if (selectedTaskIndex >= 0) {
@@ -384,18 +390,22 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
   };
 
   return (
-        <div style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
+        <div id="tasks-tab-container" style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
       {/* Sidebar */}
-      {isSidebarOpen && (
-        <div style={{
-          width: '180px',
-          backgroundColor: 'rgba(0, 33, 43, 0.4)',
-          borderRight: '1px solid var(--border-glass)',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '16px 12px',
-          overflowY: 'auto'
-        }}>
+      <div style={{
+        width: isSidebarOpen ? '180px' : '0px',
+        opacity: isSidebarOpen ? 1 : 0,
+        backgroundColor: 'rgba(0, 33, 43, 0.4)',
+        borderRight: isSidebarOpen ? '1px solid var(--border-glass)' : '0px solid transparent',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: isSidebarOpen ? '16px 12px' : '16px 0',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        visibility: isSidebarOpen ? 'visible' : 'hidden',
+        whiteSpace: 'nowrap'
+      }}>
           {/* General Tasks */}
           {(!isSidebarOpen || !searchQuery || 'general tasks'.includes(searchQuery.toLowerCase())) && (
           <div 
@@ -404,36 +414,40 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
             tabIndex={0}
             style={{
-              padding: '8px 12px',
+              padding: '6px 12px',
+              margin: '2px 0',
               borderRadius: '6px',
               cursor: 'pointer',
               backgroundColor: activeCategory === 'general' || isHighlighted('general', null) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
               boxShadow: isHighlighted('general', null) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
               color: activeCategory === 'general' ? 'var(--accent-blue)' : 'var(--text-main)',
+              fontSize: '13px',
               fontWeight: activeCategory === 'general' ? '700' : '500',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              marginBottom: '16px'
+              gap: '8px'
             }}
           >
-            <IconInbox size={16} />
-            <span style={{ flex: 1 }}>General Tasks</span>
-            {getUnfinishedCount('general') > 0 && (
-              <span style={{ backgroundColor: 'rgba(181, 137, 0, 0.2)', color: 'var(--accent-yellow)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                {getUnfinishedCount('general')}
-              </span>
-            )}
+            <span style={{ 
+              backgroundColor: activeCategory === 'general' ? 'var(--accent-blue)' : (getUnfinishedCount('general') === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(181, 137, 0, 0.15)'), 
+              color: activeCategory === 'general' ? '#fff' : (getUnfinishedCount('general') === 0 ? 'var(--text-dim)' : 'var(--accent-yellow)'), 
+              padding: '2px 6px', 
+              borderRadius: '10px', 
+              fontSize: '10px', 
+              fontWeight: 'bold',
+              minWidth: '14px',
+              textAlign: 'center',
+              lineHeight: '1'
+            }}>
+              {getUnfinishedCount('general')}
+            </span>
+            <IconSlash size={14} />
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>General Tasks</span>
           </div>
           )}
 
-
-
           {/* Templates */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-              <IconLayers size={12} color="var(--accent-yellow)" /> TEMPLATES
-            </div>
             {templateItems.map((template: any) => {
               const isActive = activeCategory === 'templates' && activeSubId === template.name;
               return (
@@ -459,8 +473,8 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                   }}
                 >
                   <span style={{ 
-                    backgroundColor: isActive ? 'var(--accent-blue)' : 'rgba(181, 137, 0, 0.15)', 
-                    color: isActive ? '#fff' : 'var(--accent-yellow)', 
+                    backgroundColor: isActive ? 'var(--accent-blue)' : (getUnfinishedCount('templates', template.name) === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(181, 137, 0, 0.15)'), 
+                    color: isActive ? '#fff' : (getUnfinishedCount('templates', template.name) === 0 ? 'var(--text-dim)' : 'var(--accent-yellow)'), 
                     padding: '2px 6px', 
                     borderRadius: '10px', 
                     fontSize: '10px', 
@@ -477,7 +491,37 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             })}
           </div>
         </div>
-      )}
+
+      {/* Sidebar Toggle Area */}
+      <div
+        className="sidebar-toggle-zone"
+        style={{ left: isSidebarOpen ? '170px' : '0px' }}
+      >
+        <div
+          className="sidebar-toggle"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          style={{
+            position: 'absolute',
+            left: isSidebarOpen ? '10px' : '0px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '12px',
+            height: '48px',
+            border: '1px solid var(--border-glass)',
+            borderLeft: isSidebarOpen ? 'none' : '1px solid var(--border-glass)',
+            borderRadius: isSidebarOpen ? '0 6px 6px 0' : '0 6px 6px 0',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <div style={{ transform: isSidebarOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}>
+            <IconChevronRight size={12} />
+          </div>
+        </div>
+      </div>
 
       {/* Main Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', minWidth: 0 }}>
@@ -502,7 +546,7 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
             </div>
             {activeCategory === 'general' && (
               <>
-                <IconInbox size={18} color="var(--accent-blue)" /> General Tasks
+                <IconSlash size={18} color="var(--accent-blue)" /> General Tasks
               </>
             )}
             {activeCategory === 'live' && (
@@ -591,7 +635,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
                                     }
                                     if (e.key === 'Escape') setEditingTaskId(null);
                                   }}
-                                  onBlur={() => handleSaveEdit(task.id)}
+                                  onBlur={() => {
+                                    if (!isActiveRef.current) return;
+                                    setTimeout(() => {
+                                      const container = document.getElementById('tasks-tab-container');
+                                      if (container && !container.contains(document.activeElement)) return;
+                                      handleSaveEdit(task.id);
+                                    }, 0);
+                                  }}
                                   style={{
                                     width: '100%',
                                     minHeight: '60px',
@@ -645,13 +696,14 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
         </div>
 
         {/* Quick Add Input */}
-        <div style={{ marginTop: '12px', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-blue)', display: 'flex' }}>
+        <div className="new-item-container" style={{ marginTop: '12px', position: 'relative' }}>
+          <div className="new-item-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex' }}>
             <IconPlus size={14} />
           </div>
           <input
             ref={newTaskInputRef}
             type="text"
+            className="new-item-input"
             value={newTaskText}
             onChange={e => setNewTaskText(e.target.value)}
             onKeyDown={handleAddTask}
@@ -660,7 +712,6 @@ export default function TasksTab({ tasksData, sessionData, templates, searchQuer
               width: '100%',
               height: '36px',
               backgroundColor: 'rgba(0, 43, 54, 0.6)',
-              border: '1px solid var(--accent-blue)',
               borderRadius: '8px',
               padding: '0 12px 0 36px',
               color: 'var(--text-main)',

@@ -14,5 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDesktopsUpdated: (callback) => {
     ipcRenderer.removeAllListeners('desktops-updated'); // prevent duplicate listeners
     ipcRenderer.on('desktops-updated', (_event, data) => callback(data));
+  },
+  onPinStatusChanged: (callback) => {
+    ipcRenderer.removeAllListeners('pin-status-changed');
+    ipcRenderer.on('pin-status-changed', (_event, isAlwaysOnTop) => callback(isAlwaysOnTop));
   }
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconCopy } from './Icons';
+import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconCopy, IconMinus, IconSlash } from './Icons';
 import CreateNoteModal from './CreateNoteModal';
 import PromptModal from './PromptModal';
 
@@ -17,7 +17,9 @@ interface NotesData {
   expanded_categories: string[];
 }
 
-export default function NotesTab({ notesData, sessionData, templates, searchQuery = '', onAction }: { notesData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void }) {
+export default function NotesTab({ isActive, notesData, sessionData, templates, searchQuery = '', onAction }: { isActive: boolean, notesData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void }) {
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const [data, setData] = useState<NotesData>({
     general: [],
     live: {},
@@ -44,12 +46,14 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   useEffect(() => setSelectedIndex(0), [searchQuery]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleCreateNew = () => setShowCreateModal(true);
     window.addEventListener('notes-create-new', handleCreateNew as EventListener);
     return () => window.removeEventListener('notes-create-new', handleCreateNew as EventListener);
-  }, []);
+  }, [isActive]);
   
   useEffect(() => {
+    if (!isActive) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
@@ -60,13 +64,39 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
         setIsSidebarOpen(false);
       }
     };
+    
+    const handleToggleSidebar = () => {
+      setIsSidebarOpen(prev => !prev);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    window.addEventListener('toggle-sidebar', handleToggleSidebar);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('toggle-sidebar', handleToggleSidebar);
+    };
+  }, [isActive]);
   
-  // Removed click outside logic
+  useEffect(() => {
+    if (!isActive) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const container = document.getElementById('notes-tab-container');
+      if (container && !container.contains(e.target as Node)) {
+        return;
+      }
+      if (editingNoteId) {
+        const el = document.getElementById(`editing-note-${editingNoteId}`);
+        if (el && !el.contains(e.target as Node)) {
+          handleSaveEdit(editingNoteId);
+        }
+      }
+    };
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [isActive, editingNoteId, data, editingNoteTitle, editingNoteInfo, activeCategory, activeSubId]);
 
   useEffect(() => {
+    if (!isActive) return;
     const handleGlobalTyping = (e: any) => {
       // If the sidebar is closed and we are NOT actively navigating notes
       if (!isSidebarOpen && selectedNoteIndex === -1) {
@@ -83,7 +113,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
     };
     window.addEventListener('global-typing-intercept', handleGlobalTyping);
     return () => window.removeEventListener('global-typing-intercept', handleGlobalTyping);
-  }, [isSidebarOpen, selectedNoteIndex]);
+  }, [isActive, isSidebarOpen, selectedNoteIndex]);
 
   
   useEffect(() => {
@@ -135,6 +165,12 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
 
       writeData(newData);
       setNewNoteText('');
+      setEditingNoteId(newNote.id);
+      setEditingNoteTitle(newNote.title);
+      setEditingNoteInfo(newNote.info || '');
+      setTimeout(() => {
+        document.getElementById(`note-textarea-${newNote.id}`)?.focus();
+      }, 50);
     }
   };
 
@@ -161,7 +197,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
     writeData(newData);
   };
 
-  const handleSaveEdit = (noteId: string) => {
+  const handleSaveEdit = (noteId: string, collapse = true) => {
     if (!editingNoteTitle.trim()) return;
     const newData = { ...data };
     let notesList: Note[] = [];
@@ -177,7 +213,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
       notesList[noteIndex] = { ...notesList[noteIndex], title: editingNoteTitle.trim(), info: editingNoteInfo };
       writeData(newData);
     }
-    setEditingNoteId(null);
+    if (collapse) setEditingNoteId(null);
   };
 
   const onDragEnd = (result: any) => {
@@ -254,10 +290,11 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
 
   
   const templateItems = templates ? templates.filter(t => !t.isDivider).filter(t => isSidebarOpen && searchQuery ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) : true) : [];
+  templateItems.sort((a, b) => getUnfinishedCount('templates', b.name) - getUnfinishedCount('templates', a.name));
   templateItems.forEach(t => visibleItems.push({ type: 'templates', id: t.name }));
 
   useEffect(() => {
-    if (!isSidebarOpen) return;
+    if (!isActive || !isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent | React.KeyboardEvent) => {
       // Don't hijack if focused on an input UNLESS it's the global search bar
       const activeTag = document.activeElement?.tagName;
@@ -284,7 +321,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown as any);
     return () => window.removeEventListener('keydown', handleKeyDown as any);
-  }, [isSidebarOpen, selectedIndex, visibleItems]);
+  }, [isActive, isSidebarOpen, selectedIndex, visibleItems]);
 
   // Reset selected note when active notes change
   useEffect(() => {
@@ -292,7 +329,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   }, [activeCategory, activeSubId, searchQuery]);
 
   useEffect(() => {
-    if (isSidebarOpen) return;
+    if (!isActive || isSidebarOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key.toLowerCase() === 'j') {
         e.preventDefault();
@@ -338,12 +375,25 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
       if (isInputFocused) return;
 
       if (e.key === 'Enter') {
-        if (selectedNoteIndex >= 0 && selectedNoteIndex < activeNotes.length) {
+        if (e.ctrlKey) {
+          if (editingNoteId) {
+            e.preventDefault();
+            handleSaveEdit(editingNoteId);
+          }
+        } else {
+          if (selectedNoteIndex >= 0 && selectedNoteIndex < activeNotes.length) {
+            e.preventDefault();
+            if (editingNoteId) handleSaveEdit(editingNoteId);
+            const note = activeNotes[selectedNoteIndex];
+            setEditingNoteId(note.id);
+            setEditingNoteTitle(note.title);
+            setEditingNoteInfo(note.info || '');
+          }
+        }
+      } else if (e.key.toLowerCase() === 's' && e.ctrlKey) {
+        if (editingNoteId) {
           e.preventDefault();
-          const note = activeNotes[selectedNoteIndex];
-          setEditingNoteId(note.id);
-          setEditingNoteTitle(note.title);
-          setEditingNoteInfo(note.info || '');
+          handleSaveEdit(editingNoteId, false);
         }
       } else if (e.key.toLowerCase() === 'c') {
         if (selectedNoteIndex >= 0 && selectedNoteIndex < activeNotes.length) {
@@ -365,7 +415,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSidebarOpen, selectedNoteIndex, activeNotes]);
+  }, [isActive, isSidebarOpen, selectedNoteIndex, activeNotes]);
 
   useEffect(() => {
     if (selectedNoteIndex >= 0) {
@@ -383,18 +433,22 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
+    <div id="notes-tab-container" style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
       {/* Sidebar */}
-      {isSidebarOpen && (
-        <div style={{
-          width: '180px',
-          backgroundColor: 'rgba(0, 33, 43, 0.4)',
-          borderRight: '1px solid var(--border-glass)',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '16px 12px',
-          overflowY: 'auto'
-        }}>
+      <div style={{
+        width: isSidebarOpen ? '180px' : '0px',
+        opacity: isSidebarOpen ? 1 : 0,
+        backgroundColor: 'rgba(0, 33, 43, 0.4)',
+        borderRight: isSidebarOpen ? '1px solid var(--border-glass)' : '0px solid transparent',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: isSidebarOpen ? '16px 12px' : '16px 0',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        visibility: isSidebarOpen ? 'visible' : 'hidden',
+        whiteSpace: 'nowrap'
+      }}>
           {/* General Notes */}
           {(!isSidebarOpen || !searchQuery || 'general notes'.includes(searchQuery.toLowerCase())) && (
           <div 
@@ -403,36 +457,40 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
             onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
             tabIndex={0}
             style={{
-              padding: '8px 12px',
+              padding: '6px 12px',
+              margin: '2px 0',
               borderRadius: '6px',
               cursor: 'pointer',
               backgroundColor: activeCategory === 'general' || isHighlighted('general', null) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
               boxShadow: isHighlighted('general', null) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
               color: activeCategory === 'general' ? 'var(--accent-blue)' : 'var(--text-main)',
+              fontSize: '13px',
               fontWeight: activeCategory === 'general' ? '700' : '500',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              marginBottom: '16px'
+              gap: '8px'
             }}
           >
-            <IconInbox size={16} />
-            <span style={{ flex: 1 }}>General Notes</span>
-            {getUnfinishedCount('general') > 0 && (
-              <span style={{ backgroundColor: 'rgba(220, 50, 47, 0.2)', color: 'var(--accent-red)', padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 'bold' }}>
-                {getUnfinishedCount('general')}
-              </span>
-            )}
+            <span style={{ 
+              backgroundColor: activeCategory === 'general' ? 'var(--accent-blue)' : (getUnfinishedCount('general') === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(42, 161, 152, 0.15)'), 
+              color: activeCategory === 'general' ? '#fff' : (getUnfinishedCount('general') === 0 ? 'var(--text-dim)' : 'var(--accent-cyan)'), 
+              padding: '2px 6px', 
+              borderRadius: '10px', 
+              fontSize: '10px', 
+              fontWeight: 'bold',
+              minWidth: '14px',
+              textAlign: 'center',
+              lineHeight: '1'
+            }}>
+              {getUnfinishedCount('general')}
+            </span>
+            <IconSlash size={14} />
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>General Notes</span>
           </div>
           )}
 
-
-
           {/* Templates */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', paddingLeft: '4px' }}>
-              <IconLayers size={12} color="var(--accent-yellow)" /> TEMPLATES
-            </div>
             {templateItems.map((template: any) => {
               const isActive = activeCategory === 'templates' && activeSubId === template.name;
               return (
@@ -458,8 +516,8 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
                   }}
                 >
                   <span style={{ 
-                    backgroundColor: isActive ? 'var(--accent-blue)' : 'rgba(42, 161, 152, 0.15)', 
-                    color: isActive ? '#fff' : 'var(--accent-cyan)', 
+                    backgroundColor: isActive ? 'var(--accent-blue)' : (getUnfinishedCount('templates', template.name) === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(42, 161, 152, 0.15)'), 
+                    color: isActive ? '#fff' : (getUnfinishedCount('templates', template.name) === 0 ? 'var(--text-dim)' : 'var(--accent-cyan)'), 
                     padding: '2px 6px', 
                     borderRadius: '10px', 
                     fontSize: '10px', 
@@ -476,7 +534,37 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
             })}
           </div>
         </div>
-      )}
+
+      {/* Sidebar Toggle Area */}
+      <div
+        className="sidebar-toggle-zone"
+        style={{ left: isSidebarOpen ? '170px' : '0px' }}
+      >
+        <div
+          className="sidebar-toggle"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          style={{
+            position: 'absolute',
+            left: isSidebarOpen ? '10px' : '0px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '12px',
+            height: '48px',
+            border: '1px solid var(--border-glass)',
+            borderLeft: isSidebarOpen ? 'none' : '1px solid var(--border-glass)',
+            borderRadius: isSidebarOpen ? '0 6px 6px 0' : '0 6px 6px 0',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <div style={{ transform: isSidebarOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}>
+            <IconChevronRight size={12} />
+          </div>
+        </div>
+      </div>
 
       {/* Main Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 20px', minWidth: 0 }}>
@@ -501,7 +589,7 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
             </div>
             {activeCategory === 'general' && (
               <>
-                <IconInbox size={18} color="var(--accent-blue)" /> General Notes
+                <IconSlash size={18} color="var(--accent-blue)" /> General Notes
               </>
             )}
             {activeCategory === 'live' && (
@@ -540,11 +628,22 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
                             {...provided.draggableProps}
                             onMouseEnter={() => setHoveredNoteId(note.id)}
                             onMouseLeave={() => setHoveredNoteId(null)}
+                            onBlur={(e) => {
+                              if (!isActiveRef.current) return;
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                if (!document.hasFocus()) return;
+                                setTimeout(() => {
+                                  const container = document.getElementById('notes-tab-container');
+                                  if (container && !container.contains(document.activeElement)) return;
+                                  handleSaveEdit(note.id);
+                                }, 0);
+                              }
+                            }}
                             className="interactive-element"
                             style={{
                               ...provided.draggableProps.style,
                               display: 'flex',
-                              alignItems: 'center',
+                              flexDirection: 'column',
                               gap: '8px',
                               padding: '8px 12px',
                               backgroundColor: snapshot.isDragging ? 'rgba(0, 43, 54, 0.8)' : 'rgba(0, 43, 54, 0.4)',
@@ -555,121 +654,163 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
                               minWidth: 0
                             }}
                           >
-                            <div 
-                              {...provided.dragHandleProps}
-                              style={{ color: 'var(--text-dim)', cursor: 'grab', opacity: hoveredNoteId === note.id || snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s', display: 'flex' }}
-                            >
-                              <IconGrip size={14} />
-                            </div>
-                            
-                            <div 
-                              style={{ flex: 1, overflow: 'hidden', minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}
-                              onBlur={(e) => {
-                                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                  handleSaveEdit(note.id);
-                                }
-                              }}
-                            >
-                              {editingNoteId === note.id ? (
-                                <div 
-                                  style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
-                                  onBlur={(e) => {
-                                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                      handleSaveEdit(note.id);
-                                    }
-                                  }}
-                                >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                              <div 
+                                {...provided.dragHandleProps}
+                                style={{ color: 'var(--text-dim)', cursor: 'grab', opacity: hoveredNoteId === note.id || snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s', display: 'flex' }}
+                              >
+                                <IconGrip size={14} />
+                              </div>
+                              
+                              <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+                                {editingNoteId === note.id ? (
                                   <input 
-                                    autoFocus
                                     value={editingNoteTitle}
                                     placeholder="Note Title"
                                     onChange={(e) => setEditingNoteTitle(e.target.value)}
                                     onKeyDown={(e) => {
-                                      if (e.key === 'Escape') setEditingNoteId(null);
+                                      if (e.key === 'Escape') {
+                                        setEditingNoteId(null);
+                                      } else if (e.key === 'Enter' && e.ctrlKey) {
+                                        handleSaveEdit(note.id);
+                                      } else if (e.key.toLowerCase() === 's' && e.ctrlKey) {
+                                        e.preventDefault();
+                                        handleSaveEdit(note.id, false);
+                                      }
                                     }}
                                     style={{
                                       width: '100%',
                                       backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                      border: '1px solid var(--accent-blue)',
-                                      borderRadius: '4px',
-                                      padding: '6px 8px',
+                                      border: '1px solid var(--border-glass)',
+                                      borderRadius: '6px',
+                                      padding: '8px 12px',
                                       color: 'var(--text-main)',
                                       fontSize: '14px',
                                       fontWeight: 'bold',
                                       outline: 'none',
-                                      boxSizing: 'border-box'
-                                    }}
-                                  />
-                                  <textarea 
-                                    value={editingNoteInfo}
-                                    placeholder="Note Details"
-                                    onChange={(e) => setEditingNoteInfo(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Escape') setEditingNoteId(null);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      minHeight: '80px',
-                                      backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                                      border: '1px solid var(--accent-blue)',
-                                      borderRadius: '4px',
-                                      padding: '6px 8px',
-                                      color: 'var(--text-dim)',
-                                      fontSize: '13px',
-                                      outline: 'none',
                                       boxSizing: 'border-box',
-                                      resize: 'vertical',
-                                      fontFamily: 'inherit'
+                                      boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.2)'
                                     }}
                                   />
-                                </div>
-                              ) : (
+                                ) : (
+                                  <div 
+                                    onClick={() => {
+                                      setEditingNoteId(note.id);
+                                      setEditingNoteTitle(note.title);
+                                      setEditingNoteInfo(note.info || '');
+                                    }}
+                                    style={{ 
+                                      color: 'var(--text-main)', 
+                                      fontSize: '14px',
+                                      fontWeight: 'bold',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {note.title}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div style={{ display: 'flex', gap: '8px', opacity: (hoveredNoteId === note.id || selectedNoteIndex === index || copiedNoteId === note.id || editingNoteId === note.id) && !snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s' }}>
+                                {editingNoteId === note.id && (editingNoteTitle !== note.title || editingNoteInfo !== (note.info || '')) && (
+                                  <div 
+                                    className="action-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSaveEdit(note.id, false);
+                                    }}
+                                    style={{ color: 'var(--accent-green)', cursor: 'pointer', padding: '4px' }}
+                                    title="Save Note"
+                                  >
+                                    <IconCheck size={14} />
+                                  </div>
+                                )}
+                                {editingNoteId === note.id && (
+                                  <div 
+                                    className="action-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSaveEdit(note.id);
+                                    }}
+                                    style={{ color: 'var(--text-main)', cursor: 'pointer', padding: '4px' }}
+                                    title="Collapse Note"
+                                  >
+                                    <IconMinus size={14} />
+                                  </div>
+                                )}
                                 <div 
-                                  onClick={() => {
-                                    setEditingNoteId(note.id);
-                                    setEditingNoteTitle(note.title);
-                                    setEditingNoteInfo(note.info || '');
+                                  className="action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (note.info) {
+                                      navigator.clipboard.writeText(note.info);
+                                      setCopiedNoteId(note.id);
+                                      setTimeout(() => setCopiedNoteId(null), 2000);
+                                    }
                                   }}
-                                  style={{ 
-                                    color: 'var(--text-main)', 
-                                    fontSize: '14px',
-                                    fontWeight: 'bold',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    cursor: 'pointer'
-                                  }}
+                                  style={{ color: copiedNoteId === note.id ? 'var(--accent-green)' : 'var(--text-main)', cursor: 'pointer', padding: '4px' }}
+                                  title="Copy Note Info"
                                 >
-                                  {note.title}
+                                  {copiedNoteId === note.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
                                 </div>
-                              )}
+                                <div 
+                                  className="action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNoteToDelete(note.id);
+                                  }}
+                                  style={{ color: 'var(--accent-red)', cursor: 'pointer', padding: '4px' }}
+                                  title="Delete"
+                                >
+                                  <IconTrash size={14} />
+                                </div>
+                              </div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div style={{ display: 'flex', gap: '8px', opacity: (hoveredNoteId === note.id || selectedNoteIndex === index || copiedNoteId === note.id) && !snapshot.isDragging ? 1 : 0, transition: 'opacity 0.2s' }}>
-                              <div 
-                                className="action-btn"
-                                onClick={() => {
-                                  if (note.info) {
-                                    navigator.clipboard.writeText(note.info);
-                                    setCopiedNoteId(note.id);
-                                    setTimeout(() => setCopiedNoteId(null), 2000);
+                            {editingNoteId === note.id && (
+                              <textarea 
+                                id={`note-textarea-${note.id}`}
+                                ref={(el) => {
+                                  if (el) {
+                                    el.style.height = '0px';
+                                    el.style.height = el.scrollHeight + 'px';
                                   }
                                 }}
-                                style={{ color: copiedNoteId === note.id ? 'var(--accent-green)' : 'var(--text-main)', cursor: 'pointer', padding: '4px' }}
-                                title="Copy Note Info"
-                              >
-                                {copiedNoteId === note.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
-                              </div>
-                              <div 
-                                className="action-btn"
-                                onClick={() => setNoteToDelete(note.id)}
-                                style={{ color: 'var(--accent-red)', cursor: 'pointer', padding: '4px' }}
-                                title="Delete"
-                              >
-                                <IconTrash size={14} />
-                              </div>
-                            </div>
+                                value={editingNoteInfo}
+                                placeholder="Note Details"
+                                onChange={(e) => setEditingNoteInfo(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    setEditingNoteId(null);
+                                  } else if (e.key === 'Enter' && e.ctrlKey) {
+                                    handleSaveEdit(note.id);
+                                  } else if (e.key.toLowerCase() === 's' && e.ctrlKey) {
+                                    e.preventDefault();
+                                    handleSaveEdit(note.id, false);
+                                  }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  minHeight: '80px',
+                                  backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                                  border: '1px solid var(--border-glass)',
+                                  borderRadius: '6px',
+                                  padding: '8px 12px',
+                                  color: 'var(--text-dim)',
+                                  fontSize: '13px',
+                                  outline: 'none',
+                                  boxSizing: 'border-box',
+                                  resize: 'vertical',
+                                  overflow: 'auto',
+                                  fontFamily: 'inherit',
+                                  boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.2)'
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                       </Draggable>
@@ -683,13 +824,14 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
         </div>
 
         {/* Quick Add Input */}
-        <div style={{ marginTop: '12px', position: 'relative' }}>
-          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-blue)', display: 'flex' }}>
+        <div className="new-item-container" style={{ marginTop: '12px', position: 'relative' }}>
+          <div className="new-item-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex' }}>
             <IconPlus size={14} />
           </div>
           <input
             ref={newNoteInputRef}
             type="text"
+            className="new-item-input"
             value={newNoteText}
             onChange={e => setNewNoteText(e.target.value)}
             onKeyDown={handleAddNote}
@@ -698,7 +840,6 @@ export default function NotesTab({ notesData, sessionData, templates, searchQuer
               width: '100%',
               height: '36px',
               backgroundColor: 'rgba(0, 43, 54, 0.6)',
-              border: '1px solid var(--accent-blue)',
               borderRadius: '8px',
               padding: '0 12px 0 36px',
               color: 'var(--text-main)',

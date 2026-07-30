@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { fetchDesktops } from './helpers/desktop_utils';
-import { runCommand, launchAppsForDesktop } from './helpers/kwin_utils';
+import { runCommand, launchAppsForDesktop, closeWindowsOnDesktopByUUID } from './helpers/kwin_utils';
 import { updateLabel, updateIcon, updateShortcut } from './helpers/label_cache';
 import { 
     handleCreateLiveDesktop, 
@@ -94,10 +94,27 @@ if (command.startsWith('RENAME:')) {
     handleUngroupDesktop(command, sessionPath);
 } else if (command.startsWith('IMPORT_FOLDER:')) {
     handleImportFolder(command.substring(14));
-} else if (command.startsWith('CREATE_TEMPLATE:')) {
-    handleCreateTemplate(command.substring(16));
+} else if (command.startsWith('CREATE_TEMPLATE_SCRIPT:')) {
+    const match = command.match(/^CREATE_TEMPLATE_SCRIPT:"([^"]+)":"([^"]+)":(null|"[^"]+"):([^:]+)$/);
+    if (match) {
+        const templateName = match[1];
+        const scriptName = match[2];
+        const iconName = match[3] === 'null' ? undefined : match[3].replace(/^"|"$/g, '');
+        const isNew = match[4] === 'true';
+
+        if (isNew) {
+            handleCreateTemplate(templateName);
+        }
+        
+        const filename = templateName.toLowerCase().replace(/\s+/g, '_') + '.json';
+        handleCreateScriptAndAddToTemplate(filename, scriptName, iconName);
+    } else {
+        console.error("Failed to parse CREATE_TEMPLATE_SCRIPT: " + command);
+    }
 } else if (command.startsWith('CREATE_TEMPLATE_DIVIDER:')) {
     handleCreateTemplate(command.substring(24), true);
+} else if (command.startsWith('CREATE_TEMPLATE:')) {
+    handleCreateTemplate(command.substring(16));
 } else if (command.startsWith('IMPORT_SCRIPT_TO_TEMPLATE:')) {
     const parts = command.substring(26).split(":");
     const filename = parts[0];
@@ -144,6 +161,9 @@ if (command.startsWith('RENAME:')) {
     
     // Also execute any startup apps associated with this desktop
     launchAppsForDesktop(pureId);
+} else if (command.startsWith('CLOSE_WINDOWS_UUID:')) {
+    const uuid = command.substring(19);
+    closeWindowsOnDesktopByUUID(uuid);
 } else if (command.startsWith('CLOSE_WINDOWS:')) {
     let target = command.substring(14).split("___")[0];
     let finalIdx: string | null = null;

@@ -338,3 +338,71 @@ body.keyboard-nav * {
 .dropdown-item:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
+
+@keyframes borderTrace {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.tab-active-focused {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: transparent !important;
+}
+
+.tab-active-focused::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  background: conic-gradient(transparent 70%, var(--tab-color) 100%);
+  animation: borderTrace 2s linear infinite;
+  z-index: -2;
+}
+
+.tab-active-focused::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  background: var(--tab-bg);
+  border-radius: 6px;
+  z-index: -1;
+}
+
+.new-item-container .new-item-icon {
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+.new-item-container:focus-within .new-item-icon {
+  color: var(--accent-blue) !important;
+}
+.new-item-input {
+  border: 1px solid var(--border-glass) !important;
+  transition: border-color 0.2s ease;
+}
+.new-item-input:focus {
+  border-color: var(--accent-blue) !important;
+}
+
+.sidebar-toggle-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 9;
+}
+.sidebar-toggle {
+  opacity: 0;
+  color: var(--text-dim);
+  background-color: var(--bg-main);
+}
+.sidebar-toggle-zone:hover .sidebar-toggle {
+  opacity: 1;
+}
+.sidebar-toggle:hover {
+  color: var(--accent-blue);
+  background-color: rgba(38, 139, 210, 0.1) !important;
+}

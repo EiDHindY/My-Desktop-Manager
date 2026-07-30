@@ -63,8 +63,33 @@ export function closeWindowsOnDesktop(kwinIdx: string) {
                 `d=$(kdotool get_desktop_for_window $id 2>/dev/null); ` +
                 `if [ "$d" = "${kwinIdx}" ]; then ` +
                 `name=$(kdotool getwindowname $id 2>/dev/null); ` +
-                `if [[ -n "$name" && "$name" != "Desktop Manager" && "$name" != "Menu" && "$name" != "Rename Desktop" && "$name" != "Chrome Launcher" && "$name" != "plasma-desktop" && "$name" != "Plasma" ]]; then ` +
+                `if [ -n "$name" ] && [ "$name" != "Desktop Manager" ] && [ "$name" != "Menu" ] && [ "$name" != "Rename Desktop" ] && [ "$name" != "Chrome Launcher" ] && [ "$name" != "plasma-desktop" ] && [ "$name" != "Plasma" ]; then ` +
                 `kdotool windowclose $id 2>/dev/null; ` +
                 `fi; fi; done`;
-    runCommand(cmd);
+    try {
+        require('child_process').execSync(cmd, { stdio: 'ignore' });
+    } catch (e) {}
 }
+
+/**
+ * Closes all windows on a specific desktop by its UUID (dynamically finds current index).
+ */
+export function closeWindowsOnDesktopByUUID(uuid: string) {
+    const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
+    if (!desktopsOutput) return;
+
+    const regex = /\[Argument: \(uss\) (\d+), "([^"]+)", "([^"]+)"\]/g;
+    let match;
+    let kwinIdx: string | null = null;
+    while ((match = regex.exec(desktopsOutput)) !== null) {
+        if (match[2] === uuid) {
+            kwinIdx = (parseInt(match[1]) + 1).toString();
+            break;
+        }
+    }
+
+    if (kwinIdx) {
+        closeWindowsOnDesktop(kwinIdx);
+    }
+}
+

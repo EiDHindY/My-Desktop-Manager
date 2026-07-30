@@ -567,5 +567,12 @@ if file_path:
     }
   }
 
+  if (action === 'toggle-pin') {
+    try {
+      await execAsync(`qdbus-qt6 org.kde.kglobalaccel /component/kwin invokeShortcut "Window Above Other Windows"`);
+    } catch(e) { console.error(e); }
+    return true;
+  }
+
   return null;
 });

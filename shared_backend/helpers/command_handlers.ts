@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, accessSync, constants, mkdirSync, renameSync } from 'fs';
 import { join, basename, extname, dirname } from 'path';
 import { execSync } from 'child_process';
-import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop } from './kwin_utils';
+import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop, closeWindowsOnDesktopByUUID } from './kwin_utils';
 import { Desktop } from './desktop_utils';
 import { updateLabel, removeLabel, updateIcon, updateShortcut } from './label_cache';
 
@@ -39,24 +39,20 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
     undoStack.push({ id, oldName: desktopMap.get(rawOutput) || "" });
     
     try {
-        // 1. Remove label from cache FIRST to prevent restoration logic in fetchDesktops from kicking in
-        log(`Removing label for ${id}`);
-        removeLabel(id);
+        // 1. Rename desktop to 'Empty' via KWin DBus
+        log(`Renaming desktop ${id} to Empty`);
+        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
+        
+        // 2. Update label cache to Empty
+        log(`Updating label for ${id} to Empty`);
+        updateLabel(id, "Empty");
 
         // 2. Update session.json for immediate persistence
         if (existsSync(sessionPath)) {
             log(`Updating session.json at ${sessionPath}`);
             const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-            if (data.folders) {
-                for (const f of Object.keys(data.folders)) {
-                    const originalLen = data.folders[f].length;
-                    // Filter by UUID part instead of full string
-                    data.folders[f] = data.folders[f].filter((i: string) => i.split("___")[0] !== id);
-                    if (data.folders[f].length !== originalLen) {
-                        log(`Removed ${id} from folder ${f}`);
-                    }
-                }
-            }
+            // We deliberately KEEP it in the folder it was assigned to (if any).
+            // This way it acts as a reusable empty slot in that folder.
             if (data.desktop_notes) {
                 if (data.desktop_notes[id]) {
                     delete data.desktop_notes[id];
@@ -71,18 +67,13 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
             log(`Successfully wrote session.json`);
         }
 
-        // 3. Perform rename
-        log(`Running qdbus rename command for ${id}`);
-        runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
-        
-        // 4. Kill windows in background
-        if (kwinIdx !== null) {
-            log(`Triggering window closing on desktop ${kwinIdx} (0-based) in background`);
-            // cli.ts now handles the 0->1 conversion
-            runCommand(`(npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" CLOSE_WINDOWS:${kwinIdx} && notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} cleaned up") &`);
-        } else {
-            runCommand(`notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} removed from list"`);
-        }
+        // 3. Kill windows synchronously BEFORE removing desktop
+        log(`Triggering synchronous window closing on desktop uuid ${id}`);
+        runCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" CLOSE_WINDOWS_UUID:${id}`);
+
+        // 4. Do NOT perform physical removal
+        log(`Desktop ${id} renamed to Empty and windows closed.`);
+        runCommand(`notify-send "Desktop Manager" "✅ Desktop ${id.substring(0,8)} wiped and renamed to Empty"`);
     } catch (e: any) {
         log(`ERROR in handleClear: ${e.message}\n${e.stack}`);
         runCommand(`notify-send "Desktop Manager" "❌ Deletion failed: ${e.message}"`);
@@ -209,7 +200,7 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
             updateLabel(dest.uuid, t.name);
             
             const entry = `${dest.uuid}___${dest.position}`;
-            for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
+            for (const f of Object.keys(session.folders)) session.folders[f] = session.folders[f].filter((id: string) => id.split('___')[0] !== dest.uuid);
             
             if (!session.folders[folderName].includes(entry)) {
                 session.folders[folderName].push(entry);
@@ -221,10 +212,14 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
                 updateIcon(dest.uuid, t.icons.join(','));
             } else if (t.icon) {
                 updateIcon(dest.uuid, t.icon);
+            } else {
+                updateIcon(dest.uuid, null);
             }
             
             if (t.shortcut) {
                 updateShortcut(dest.uuid, t.shortcut);
+            } else {
+                updateShortcut(dest.uuid, null);
             }
             
             session.creation_times[dest.uuid] = Date.now();
@@ -354,6 +349,8 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         const [nameOnly] = name.split('|');
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${dest.uuid}" "${nameOnly.replace(/"/g, '\\"')}"`);
         updateLabel(dest.uuid, name);
+        updateIcon(dest.uuid, null);
+        updateShortcut(dest.uuid, null);
         name = nameOnly; // for the notification below
 
         if (!session.folders) session.folders = {};
@@ -361,7 +358,7 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
         
         const entry = `${dest.uuid}___${dest.position}`;
         for (const f of Object.keys(session.folders)) {
-            session.folders[f] = session.folders[f].filter((id: string) => id !== entry);
+            session.folders[f] = session.folders[f].filter((id: string) => id.split('___')[0] !== dest.uuid);
         }
         session.folders[folderName].push(entry);
 
@@ -385,7 +382,8 @@ export function handleUngroupDesktop(result: string, sessionPath: string) {
         if (existsSync(sessionPath)) {
             const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
             if (data.folders && data.folders[folderName]) {
-                data.folders[folderName] = data.folders[folderName].filter((id: string) => id !== fullId);
+                const targetUuid = fullId.split('___')[0];
+                data.folders[folderName] = data.folders[folderName].filter((id: string) => id.split('___')[0] !== targetUuid);
                 writeFileSync(sessionPath, JSON.stringify(data, null, 2));
                 runCommand(`notify-send "Desktop Manager" "🔓 Removed from '${folderName}'"`);
             }
@@ -420,17 +418,18 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
         const uids: string[] = data.folders?.[folderName] || [];
 
         for (const fullId of uids) {
-            const parts = fullId.split("___");
-            if (parts.length > 1) {
-                const kwinIdx = (parseInt(parts[1]) + 1).toString();
-                closeWindowsOnDesktop(kwinIdx);
-            }
+            const uuid = fullId.split("___")[0];
+            closeWindowsOnDesktopByUUID(uuid);
         }
 
         for (const fullId of uids) {
             const uuid = fullId.split("___")[0];
+            
+            // 1. Rename to Empty instead of destroying
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
-            removeLabel(uuid);
+            updateLabel(uuid, "Empty");
+            
+            // 2. Remove session data tied to the desktop
             if (data.desktop_notes) delete data.desktop_notes[uuid];
             if (data.startup_apps) delete data.startup_apps[uuid];
         }
@@ -474,9 +473,8 @@ export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string
                     cleanedCount++;
                     
                     // Remove from session folders to keep them clean
-                    const fullId = `${d.uuid}___${d.position}`;
                     for (const f of Object.keys(session.folders)) {
-                        session.folders[f] = session.folders[f].filter((id: string) => id !== fullId);
+                        session.folders[f] = session.folders[f].filter((id: string) => id.split('___')[0] !== d.uuid);
                     }
                     delete session.desktop_notes[d.uuid];
                     if (session.startup_apps) delete session.startup_apps[d.uuid];
@@ -523,9 +521,8 @@ export function handleClearAll(currentDesktops: Desktop[], currentUuid: string, 
             clearedCount++;
             
             // Clean from session
-            const fullId = `${d.uuid}___${d.position}`;
             for (const f of Object.keys(session.folders)) {
-                session.folders[f] = session.folders[f].filter((id: string) => id !== fullId);
+                session.folders[f] = session.folders[f].filter((id: string) => id.split('___')[0] !== d.uuid);
             }
             delete session.desktop_notes[d.uuid];
             if (session.startup_apps) delete session.startup_apps[d.uuid];
