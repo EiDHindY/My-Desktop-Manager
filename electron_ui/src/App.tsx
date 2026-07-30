@@ -554,6 +554,18 @@ function App() {
     return count;
   })();
 
+  const activeFolder = (() => {
+    let folder: string | null = null;
+    if (data?.session?.folders && currentDesktop) {
+      Object.entries(data.session.folders).forEach(([folderName, desktops]: [string, any]) => {
+        if (Array.isArray(desktops) && desktops.some(d => d.split('___')[0] === currentDesktop)) {
+          folder = folderName;
+        }
+      });
+    }
+    return folder;
+  })();
+
   return (
     <div style={{ 
       color: 'var(--text-main)', 
@@ -897,10 +909,18 @@ function App() {
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
               <div style={{ display: activeTab === 'notes' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />
+                <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} currentFolder={activeFolder} onAction={() => setLastActionTime(Date.now())} />
               </div>
               <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <TasksTab isActive={activeTab === 'tasks'} tasksData={data?.tasks} sessionData={data?.session} templates={templates} searchQuery={searchQuery} onAction={() => setLastActionTime(Date.now())} />
+                <TasksTab 
+                  isActive={activeTab === 'tasks'} 
+                  tasksData={data?.tasks} 
+                  sessionData={data?.session} 
+                  templates={templates} 
+                  searchQuery={searchQuery} 
+                  currentFolder={activeFolder}
+                  onAction={() => setLastActionTime(Date.now())} 
+                />
               </div>
               {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
 

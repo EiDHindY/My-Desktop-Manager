@@ -17,7 +17,7 @@ interface TasksData {
   expanded_categories: string[];
 }
 
-export default function TasksTab({ isActive, tasksData, sessionData, templates, searchQuery = '', onAction }: { isActive: boolean, tasksData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void }) {
+export default function TasksTab({ isActive, tasksData, sessionData, templates, searchQuery = '', onAction, currentFolder = null }: { isActive: boolean, tasksData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void, currentFolder?: string | null }) {
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
   const [data, setData] = useState<TasksData>({
@@ -29,6 +29,20 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
 
   const [activeCategory, setActiveCategory] = useState<'general' | 'live' | 'templates'>('general');
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isActive && currentFolder) {
+      const isTemplate = templates?.some(t => t.name === currentFolder);
+      if (isTemplate) {
+        setActiveCategory('templates');
+        setActiveSubId(currentFolder);
+      } else {
+        setActiveCategory('live');
+        setActiveSubId(currentFolder);
+      }
+      setIsSidebarOpen(false);
+    }
+  }, [isActive, currentFolder, templates]);
   const [newTaskText, setNewTaskText] = useState('');
   
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -42,6 +56,16 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   useEffect(() => setSelectedIndex(0), [searchQuery]);
+
+  useEffect(() => {
+    if (isActive) {
+      setTimeout(() => {
+        if (newTaskInputRef.current) {
+          newTaskInputRef.current.focus();
+        }
+      }, 100);
+    }
+  }, [isActive]);
 
   // Reset selected task when active tasks change
   useEffect(() => {
