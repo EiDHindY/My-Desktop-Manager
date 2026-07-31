@@ -31,15 +31,18 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   const [activeSubId, setActiveSubId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isActive && currentFolder) {
-      const isTemplate = templates?.some(t => t.name === currentFolder);
-      if (isTemplate) {
-        setActiveCategory('templates');
-        setActiveSubId(currentFolder);
-      } else {
-        setActiveCategory('live');
-        setActiveSubId(currentFolder);
+    if (isActive) {
+      if (currentFolder) {
+        const isTemplate = templates?.some(t => t.name === currentFolder);
+        if (isTemplate) {
+          setActiveCategory('templates');
+          setActiveSubId(currentFolder);
+          setIsSidebarOpen(false);
+          return;
+        }
       }
+      setActiveCategory('general');
+      setActiveSubId(null);
       setIsSidebarOpen(false);
     }
   }, [isActive, currentFolder, templates]);
@@ -292,9 +295,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   if (!isSidebarOpen || !searchQuery || 'general tasks'.includes(searchQuery.toLowerCase())) {
     visibleItems.push({ type: 'general', id: null });
   }
-  
 
-  
   const templateItems = templates ? templates.filter(t => !t.isDivider).filter(t => isSidebarOpen && searchQuery ? t.name.toLowerCase().includes(searchQuery.toLowerCase()) : true) : [];
   templateItems.sort((a, b) => getUnfinishedCount('templates', b.name) - getUnfinishedCount('templates', a.name));
   templateItems.forEach(t => visibleItems.push({ type: 'templates', id: t.name }));
