@@ -3,6 +3,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconSlash } from './Icons';
 import CreateTaskModal from './CreateTaskModal';
 import PromptModal from './PromptModal';
+import DataSidebar from './DataSidebar';
 
 interface Task {
   id: string;
@@ -131,7 +132,6 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
 
   const writeData = async (newData: TasksData) => {
     setData(newData);
-    // @ts-ignore
     await window.electronAPI.writeJSON('tasks.json', newData);
     if (onAction) onAction();
   };
@@ -305,7 +305,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
     const handleKeyDown = (e: KeyboardEvent | React.KeyboardEvent) => {
       // Don't hijack if focused on an input UNLESS it's the global search bar
       const activeTag = document.activeElement?.tagName;
-      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable;
       const isGlobalSearch = document.activeElement?.id === 'global-search-input';
       
       if (isInputFocused && !isGlobalSearch) return;
@@ -372,7 +372,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
       }
 
       const activeTag = document.activeElement?.tagName;
-      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable;
       
       if (isInputFocused) return;
 
@@ -417,105 +417,26 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   return (
         <div id="tasks-tab-container" style={{ flex: 1, display: 'flex', height: '100%', backgroundColor: 'var(--bg-main)', minWidth: 0 }}>
       {/* Sidebar */}
-      <div style={{
-        width: isSidebarOpen ? '180px' : '0px',
-        opacity: isSidebarOpen ? 1 : 0,
-        backgroundColor: 'rgba(0, 33, 43, 0.4)',
-        borderRight: isSidebarOpen ? '1px solid var(--border-glass)' : '0px solid transparent',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: isSidebarOpen ? '16px 12px' : '16px 0',
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        visibility: isSidebarOpen ? 'visible' : 'hidden',
-        whiteSpace: 'nowrap'
-      }}>
-          {/* General Tasks */}
-          {(!isSidebarOpen || !searchQuery || 'general tasks'.includes(searchQuery.toLowerCase())) && (
-          <div 
-            className="interactive-element"
-            onClick={() => { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('general', null); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
-            tabIndex={0}
-            style={{
-              padding: '6px 12px',
-              margin: '2px 0',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              backgroundColor: activeCategory === 'general' || isHighlighted('general', null) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-              boxShadow: isHighlighted('general', null) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
-              color: activeCategory === 'general' ? 'var(--accent-blue)' : 'var(--text-main)',
-              fontSize: '13px',
-              fontWeight: activeCategory === 'general' ? '700' : '500',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <span style={{ 
-              backgroundColor: activeCategory === 'general' ? 'var(--accent-blue)' : (getUnfinishedCount('general') === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(181, 137, 0, 0.15)'), 
-              color: activeCategory === 'general' ? '#fff' : (getUnfinishedCount('general') === 0 ? 'var(--text-dim)' : 'var(--accent-yellow)'), 
-              padding: '2px 6px', 
-              borderRadius: '10px', 
-              fontSize: '10px', 
-              fontWeight: 'bold',
-              minWidth: '14px',
-              textAlign: 'center',
-              lineHeight: '1'
-            }}>
-              {getUnfinishedCount('general')}
-            </span>
-            <IconSlash size={14} />
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>General Tasks</span>
-          </div>
-          )}
-
-          {/* Templates */}
-          <div>
-            {templateItems.map((template: any) => {
-              const isActive = activeCategory === 'templates' && activeSubId === template.name;
-              return (
-                <div 
-                  key={template.name}
-                  className="interactive-element"
-                  onClick={() => { selectCategory('templates', template.name); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { selectCategory('templates', template.name); setIsSidebarOpen(false); window.dispatchEvent(new CustomEvent('clear-search-query')); } }}
-                  tabIndex={0}
-                  style={{
-                    padding: '6px 12px',
-                    margin: '2px 0',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    backgroundColor: isActive || isHighlighted('templates', template.name) ? 'rgba(38, 139, 210, 0.15)' : 'transparent',
-                    boxShadow: isHighlighted('templates', template.name) ? 'inset 0 0 0 1px var(--accent-blue)' : 'none',
-                    color: isActive ? 'var(--accent-blue)' : 'var(--text-main)',
-                    fontSize: '13px',
-                    fontWeight: isActive ? '700' : '500',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <span style={{ 
-                    backgroundColor: isActive ? 'var(--accent-blue)' : (getUnfinishedCount('templates', template.name) === 0 ? 'rgba(88, 110, 117, 0.15)' : 'rgba(181, 137, 0, 0.15)'), 
-                    color: isActive ? '#fff' : (getUnfinishedCount('templates', template.name) === 0 ? 'var(--text-dim)' : 'var(--accent-yellow)'), 
-                    padding: '2px 6px', 
-                    borderRadius: '10px', 
-                    fontSize: '10px', 
-                    fontWeight: 'bold',
-                    minWidth: '14px',
-                    textAlign: 'center',
-                    lineHeight: '1'
-                  }}>
-                    {getUnfinishedCount('templates', template.name)}
-                  </span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <DataSidebar
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        searchQuery={searchQuery}
+        activeCategory={activeCategory}
+        activeSubId={activeSubId}
+        selectCategory={selectCategory}
+        toggleCategory={toggleCategory}
+        isHighlighted={isHighlighted}
+        getUnfinishedCount={getUnfinishedCount}
+        expandedCategories={data.expanded_categories}
+        generalLabel="General Tasks"
+        generalIcon={<IconSlash size={14} />}
+        liveLabel="Live Tasks"
+        liveIcon={<IconRadio size={14} />}
+        liveItems={Object.keys(data.live || {}).map(id => ({ id, name: id, priority: 'normal', count: 0 }))} // TasksTab doesn't have priorities
+        templatesLabel="Template Tasks"
+        templatesIcon={<IconLayers size={14} />}
+        templateItems={templateItems}
+      />
 
       {/* Sidebar Toggle Area */}
       <div
@@ -671,6 +592,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
                                   style={{
                                     width: '100%',
                                     minHeight: '60px',
+                                    maxHeight: '400px',
                                     backgroundColor: 'rgba(0, 0, 0, 0.2)',
                                     border: '1px solid var(--accent-blue)',
                                     borderRadius: '4px',
@@ -680,7 +602,8 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
                                     outline: 'none',
                                     boxSizing: 'border-box',
                                     resize: 'vertical',
-                                    fontFamily: 'inherit'
+                                    fontFamily: 'inherit',
+                                    overflow: 'auto'
                                   }}
                                 />
                               ) : (

@@ -1,4 +1,5 @@
 import { join } from 'path';
+import { writeFileSync, existsSync, unlinkSync } from 'fs';
 import { fetchDesktops } from './helpers/desktop_utils';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktopByUUID } from './helpers/kwin_utils';
 import { updateLabel, updateIcon, updateShortcut } from './helpers/label_cache';
@@ -14,6 +15,7 @@ import {
     handleAddFolder,
     handleRenameFolder,
     handleImportFolder,
+    handleResetRootDesktops,
     handleCreateTemplate,
     handleImportScriptToTemplate,
     handleCreateScriptAndAddToTemplate,
@@ -49,6 +51,11 @@ for (const d of currentDesktops) {
 console.log(`Executing: ${command}`);
 runCommand(`notify-send "Desktop Manager" "Executing command: ${command.split(':')[0]}"`);
 
+const lockFilePath = join(libraryDir, '.cli-lock');
+writeFileSync(lockFilePath, "locked");
+
+try {
+
 if (command.startsWith('RENAME:')) {
     const parts = command.substring(7).split(':');
     const id = parts[0];
@@ -64,7 +71,11 @@ if (command.startsWith('RENAME:')) {
         const pureId = id.split("___")[0];
         const [nameOnly] = fresh.split('|');
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${pureId}" "${nameOnly.replace(/"/g, '\\"')}"`);
-        updateLabel(pureId, fresh);
+        if (nameOnly === "Empty" || nameOnly === "") {
+            removeLabel(pureId);
+        } else {
+            updateLabel(pureId, fresh);
+        }
     }
 } else if (command.startsWith('SET_ICON:')) {
     const parts = command.substring(9).split(':');
@@ -190,6 +201,9 @@ if (command.startsWith('RENAME:')) {
     handleCleanEmpty(currentDesktops, sessionPath);
 } else if (command === 'CLEAR_ALL') {
     handleClearAll(currentDesktops, currentUuid, sessionPath);
+} else if (command.startsWith('RESET_ROOT_DESKTOPS:')) {
+    const payload = command.substring(20);
+    handleResetRootDesktops(sessionPath, payload);
 } else if (command.startsWith('CLEAR:')) {
     handleClear(command, sessionPath, desktopMap, [], currentDesktops);
 } else if (command === 'ADD_FOLDER') {
@@ -293,5 +307,11 @@ if (command.startsWith('RENAME:')) {
         } catch(e) {
             console.error('Error moving task:', e);
         }
+    }
+}
+
+} finally {
+    if (existsSync(lockFilePath)) {
+        unlinkSync(lockFilePath);
     }
 }

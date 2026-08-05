@@ -33,9 +33,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
     const fetchIcons = () => {
       if (isFetchingIcons) return;
       isFetchingIcons = true;
-      // @ts-ignore
       if (window.electronAPI && window.electronAPI.listIcons) {
-        // @ts-ignore
         window.electronAPI.listIcons().then((icons: string[]) => {
           globalIconCache = icons;
           setAvailableIcons(icons);
@@ -95,6 +93,8 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
           onClose();
           return;
         }
+        if (document.activeElement?.tagName === 'BUTTON') return;
+
         if (focusedIndex === 0) {
           e.preventDefault(); e.stopPropagation();
           onClear();
@@ -126,9 +126,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
     const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim() + ' icon')}&tbm=isch`;
     const removeBgUrl = `https://www.remove.bg/`;
     const cmd = `google-chrome --profile-directory="Default" --new-window "${url}" "${removeBgUrl}"`;
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.executeCommand) {
-      // @ts-ignore
       window.electronAPI.executeCommand(cmd);
     }
   };

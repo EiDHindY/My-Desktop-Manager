@@ -325,6 +325,13 @@ export default function CreateTemplateScriptModal({ existingTemplates, onSubmit,
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button 
               onClick={() => setShowIconPicker(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowIconPicker(true);
+                }
+              }}
               style={{
                 padding: '10px 16px',
                 borderRadius: '8px',

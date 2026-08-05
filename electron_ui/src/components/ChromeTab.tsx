@@ -19,9 +19,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
   }, [searchQuery]);
 
   useEffect(() => {
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
-      // @ts-ignore
       window.electronAPI.fetchChromeProfiles().then((data: ChromeProfile[]) => {
         setProfiles(data || []);
         setLoading(false);
@@ -35,7 +33,6 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
   }, []);
 
   const launchProfile = (id: string) => {
-    // @ts-ignore
     window.electronAPI.executeCommand(`google-chrome --profile-directory="${id}"`);
   };
 

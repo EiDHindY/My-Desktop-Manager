@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statS
 import { join, basename, extname, dirname } from 'path';
 import { execSync } from 'child_process';
 import { runCommand, launchAppsForDesktop, closeWindowsOnDesktop, closeWindowsOnDesktopByUUID } from './kwin_utils';
-import { Desktop } from './desktop_utils';
+import { Desktop, fetchDesktops } from './desktop_utils';
 import { updateLabel, removeLabel, updateIcon, updateShortcut } from './label_cache';
 
 export function handleClear(result: string, sessionPath: string, desktopMap: Map<string, string>, undoStack: any[], currentDesktops: Desktop[] = []) {
@@ -43,16 +43,22 @@ export function handleClear(result: string, sessionPath: string, desktopMap: Map
         log(`Renaming desktop ${id} to Empty`);
         runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "Empty"`);
         
-        // 2. Update label cache to Empty
-        log(`Updating label for ${id} to Empty`);
-        updateLabel(id, "Empty");
+        // 2. Remove label cache to strip icons and shortcuts
+        log(`Removing label for ${id}`);
+        removeLabel(id);
 
-        // 2. Update session.json for immediate persistence
+        // 3. Update session.json for immediate persistence
         if (existsSync(sessionPath)) {
             log(`Updating session.json at ${sessionPath}`);
             const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
-            // We deliberately KEEP it in the folder it was assigned to (if any).
-            // This way it acts as a reusable empty slot in that folder.
+            
+            // Remove the desktop from ANY folder it is assigned to
+            if (data.folders) {
+                for (const f of Object.keys(data.folders)) {
+                    data.folders[f] = data.folders[f].filter((idStr: string) => idStr.split('___')[0] !== id);
+                }
+            }
+            
             if (data.desktop_notes) {
                 if (data.desktop_notes[id]) {
                     delete data.desktop_notes[id];
@@ -94,7 +100,7 @@ export function handleSummonFolder(folderName: string, sessionPath: string) {
         runCommand(`notify-send "Desktop Manager" "🚀 Sequencing '${folderName}'..."`);
         
         // 1. Find indices of desktops that HAVE windows to avoid redundant launches
-        const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager UI\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+        const cmd = "export PATH=$PATH:~/.local/bin; for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [[ \"$wname\" != \"Desktop Manager UI\" ]] && [[ \"$wname\" != \"Menu\" && \"$wname\" != \"\" ]]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
         const activeStr = runCommand(cmd) || "";
         const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
 
@@ -180,14 +186,31 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
         }
         if (!session.creation_times) session.creation_times = {};
 
-        const empties = currentDesktops.filter(d => {
+        let empties = currentDesktops.filter(d => {
             const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
             const creationTime = session.creation_times[d.uuid] || 0;
             const isRecentlyCreated = Date.now() - creationTime < 15 * 1000;
-            return (isNameEmpty || d.windowCount === 0) && !isRecentlyCreated && d.uuid !== currentUuid;
+            return isNameEmpty && d.windowCount === 0 && !isRecentlyCreated && d.uuid !== currentUuid;
         });
 
-        if (empties.length < tasks.length) return runCommand(`kdialog --msgbox "Not enough empty desktops (excluding your current one)."`);
+        if (empties.length < tasks.length) {
+            const needed = tasks.length - empties.length;
+            for (let i = 0; i < needed; i++) {
+                const pos = currentDesktops.length + i + 1;
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.createDesktop ${pos} "Empty"`);
+            }
+            
+            // Re-fetch desktops after creating new ones
+            currentDesktops = fetchDesktops();
+            empties = currentDesktops.filter(d => {
+                const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
+                const creationTime = session.creation_times[d.uuid] || 0;
+                const isRecentlyCreated = Date.now() - creationTime < 15 * 1000;
+                return isNameEmpty && d.windowCount === 0 && !isRecentlyCreated && d.uuid !== currentUuid;
+            });
+        }
+        
+        if (empties.length < tasks.length) return runCommand(`kdialog --msgbox "Failed to dynamically create enough empty desktops."`);
         
         if (!session.startup_apps) session.startup_apps = {};
         if (!session.folders) session.folders = {};
@@ -238,7 +261,7 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
                 // Count windows before launching
                 let initialCount = 0;
                 try {
-                    const countStr = runCommand(`kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
+                    const countStr = runCommand(`export PATH=$PATH:~/.local/bin; kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
                     initialCount = parseInt(countStr || "0");
                 } catch (e) {}
 
@@ -250,7 +273,7 @@ export function handleDeploy(result: string, sessionPath: string, currentDesktop
                         let attempts = 0;
                         while (attempts < 40) { // 8 seconds timeout
                             try {
-                                const newCountStr = runCommand(`kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
+                                const newCountStr = runCommand(`export PATH=$PATH:~/.local/bin; kdotool search --desktop ${dest.position + 1} --class '.*' 2>/dev/null | wc -l`);
                                 const newCount = parseInt(newCountStr || "0");
                                 if (newCount > initialCount) {
                                     // Window appeared! Allow it to finish mapping
@@ -333,7 +356,7 @@ export function handleCreateLiveDesktop(folderName: string, sessionPath: string,
             const isNameEmpty = ["", "empty"].includes(d.name.toLowerCase().trim()) || /^desktop \d+$/.test(d.name.toLowerCase());
             const creationTime = session.creation_times[d.uuid] || 0;
             const isRecentlyCreated = Date.now() - creationTime < 15 * 1000;
-            return (isNameEmpty || d.windowCount === 0) && !isRecentlyCreated && d.uuid !== currentUuid;
+            return isNameEmpty && d.windowCount === 0 && !isRecentlyCreated && d.uuid !== currentUuid;
         });
 
         console.log(`Found ${empties.length} empty desktops.`);
@@ -427,7 +450,7 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
             
             // 1. Rename to Empty instead of destroying
             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
-            updateLabel(uuid, "Empty");
+            removeLabel(uuid); // Completely remove it from label cache so icons and shortcuts are stripped
             
             // 2. Remove session data tied to the desktop
             if (data.desktop_notes) delete data.desktop_notes[uuid];
@@ -439,10 +462,9 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
             if (data.folder_order) data.folder_order = data.folder_order.filter((f: string) => f !== folderName);
             runCommand(`notify-send "Desktop Manager" "🧹 Folder '${folderName}' cleared and removed."`);
         } else {
-            // Keep folder but reset its desktops list if you want, 
-            // though usually Wipe means clean the desktops but keep the assignment.
-            // Let's keep the desktops assigned to the folder but they are now named "Empty".
-            runCommand(`notify-send "Desktop Manager" "🧼 Folder '${folderName}' wiped clean (desktops kept)."`);
+            // Keep folder but empty its desktops list
+            if (data.folders) data.folders[folderName] = [];
+            runCommand(`notify-send "Desktop Manager" "🧼 Folder '${folderName}' wiped clean."`);
         }
 
         writeFileSync(sessionPath, JSON.stringify(data, null, 2));
@@ -451,7 +473,7 @@ export function handleRemoveLiveFolder(folderName: string, sessionPath: string, 
 
 export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string) {
     // 1. Find indices of desktops that HAVE windows
-    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
+    const cmd = "export PATH=$PATH:~/.local/bin; for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null | sort -u";
     const activeStr = runCommand(cmd) || "";
     const activeIndices = activeStr.split("\n").map(s => s.trim()).filter(s => s !== "").map(s => parseInt(s));
     
@@ -466,8 +488,10 @@ export function handleCleanEmpty(currentDesktops: Desktop[], sessionPath: string
             const kwinIdx = d.position + 1;
             
             if (!activeIndices.includes(kwinIdx)) {
-                // If the desktop is empty and NOT already named "Empty"
-                if (d.name.toLowerCase() !== "empty") {
+                // If the desktop is empty and has a default KWin name (or is literally empty string)
+                const nameLower = d.name.toLowerCase().trim();
+                const isDefaultName = nameLower === "" || /^desktop \d+$/.test(nameLower);
+                if (isDefaultName) {
                     runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${d.uuid}" "Empty"`);
                     removeLabel(d.uuid);
                     cleanedCount++;
@@ -913,5 +937,39 @@ export function handleMoveTemplateScript(sourceFilename: string, taskId: string,
         }
     } catch (e) {
         console.error("Move Template Script error:", e);
+    }
+}
+
+export function handleResetRootDesktops(sessionPath: string, rootUuidsStr: string) {
+    try {
+        if (!existsSync(sessionPath)) return;
+        const data = JSON.parse(readFileSync(sessionPath, 'utf-8'));
+        
+        const rootUuids = rootUuidsStr.split(',').filter(id => id.trim() !== '');
+        if (rootUuids.length === 0) return;
+        
+        // Remove from ANY folder they might be assigned to
+        if (data.folders) {
+            for (const f of Object.keys(data.folders)) {
+                data.folders[f] = data.folders[f].filter((idStr: string) => !rootUuids.includes(idStr.split('___')[0]));
+            }
+        }
+        
+        let resetCount = 0;
+        for (const uuid of rootUuids) {
+            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "Empty"`);
+            removeLabel(uuid); // Completely remove it from label cache so icons are stripped
+            
+            if (data.desktop_notes && data.desktop_notes[uuid]) delete data.desktop_notes[uuid];
+            if (data.startup_apps && data.startup_apps[uuid]) delete data.startup_apps[uuid];
+            if (data.creation_times && data.creation_times[uuid]) delete data.creation_times[uuid];
+            
+            resetCount++;
+        }
+        
+        writeFileSync(sessionPath, JSON.stringify(data, null, 2));
+        runCommand(`notify-send "Desktop Manager" "🧹 Reset ${resetCount} desktops to Empty."`);
+    } catch (e: any) {
+        console.error("Error resetting root desktops:", e);
     }
 }

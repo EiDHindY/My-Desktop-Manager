@@ -1,4 +1,6 @@
 import { runCommand } from './kwin_utils';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'fs';
+import { join } from 'path';
 import { getLabelCache, saveLabelCache } from './label_cache';
 
 export interface Desktop {
@@ -13,7 +15,7 @@ export function fetchDesktops(): Desktop[] {
     const desktopsOutput = runCommand('qdbus-qt6 --literal org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.desktops');
     if (!desktopsOutput) return [];
     
-    const cmd = "for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null";
+    const cmd = "export PATH=$PATH:~/.local/bin; for id in $(kdotool search --class '.*' 2>/dev/null); do wname=$(kdotool getwindowname $id 2>/dev/null); if [ \"$wname\" != \"Desktop Manager\" ] && [ \"$wname\" != \"Menu\" ] && [ \"$wname\" != \"\" ]; then kdotool get_desktop_for_window $id 2>/dev/null; fi; done 2>/dev/null";
     const windowList = runCommand(cmd) || "";
     const windowCounts: Record<number, number> = {};
     windowList.split('\n').forEach(line => {
@@ -31,6 +33,15 @@ export function fetchDesktops(): Desktop[] {
     const desktops: Desktop[] = [];
     let cacheUpdated = false;
 
+    const lockFilePath = join(process.env.HOME || '', '.config', 'desktop-manager', '.cli-lock');
+    let isLocked = false;
+    if (existsSync(lockFilePath)) {
+        try {
+            const stat = statSync(lockFilePath);
+            if (Date.now() - stat.mtimeMs < 60000) isLocked = true;
+        } catch(e) {}
+    }
+
     while ((match = regex.exec(desktopsOutput)) !== null) {
         const position = parseInt(match[1]);
         const uuid = match[2];
@@ -43,17 +54,23 @@ export function fetchDesktops(): Desktop[] {
         if (isNameEmpty && labelCache[uuid]) {
             name = labelCache[uuid].name;
             priority = labelCache[uuid].priority;
-            runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "${name.replace(/"/g, '\\"')}"`);
+            if (!isLocked) {
+                runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "${name.replace(/"/g, '\\"')}"`);
+            }
         } else if (!isNameEmpty) {
             if (labelCache[uuid]) {
                 priority = labelCache[uuid].priority;
                 if (name !== labelCache[uuid].name) {
-                    labelCache[uuid].name = name;
-                    cacheUpdated = true;
+                    if (!isLocked) {
+                        labelCache[uuid].name = name;
+                        cacheUpdated = true;
+                    }
                 }
             } else {
-                labelCache[uuid] = { name, priority: "None" };
-                cacheUpdated = true;
+                if (!isLocked) {
+                    labelCache[uuid] = { name, priority: "None" };
+                    cacheUpdated = true;
+                }
             }
         }
 

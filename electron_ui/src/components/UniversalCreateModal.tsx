@@ -51,6 +51,20 @@ export default function UniversalCreateModal({ onSelect, onCancel }: UniversalCr
         e.stopPropagation();
         e.stopImmediatePropagation();
         onSelect(options[focusedIndex].id);
+      } else {
+        // Swallow ALL other keystrokes so they don't leak to the background search bar
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        // Type-ahead selection
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          const char = e.key.toLowerCase();
+          const matchIndex = options.findIndex(opt => opt.label.toLowerCase().startsWith(char));
+          if (matchIndex !== -1) {
+            setFocusedIndex(matchIndex);
+          }
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });

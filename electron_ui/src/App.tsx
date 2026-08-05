@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
+import { CLI_PATH } from './constants'
 import LiveTab from './components/LiveTab'
 import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
@@ -11,7 +12,10 @@ import CreateTaskModal from './components/CreateTaskModal'
 import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
 import CreateNoteModal from './components/CreateNoteModal'
 
+
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin } from './components/Icons'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useVisitHistory } from './hooks/useVisitHistory'
 import './App.css'
 
 const getThemeColor = (tab: string, type: 'var' | 'hex' = 'var') => {
@@ -57,19 +61,19 @@ function App() {
     };
   }, []);
 
-  const [currentDesktop, setCurrentDesktop] = useState<string | null>(null)
-  const [isPinned, setIsPinned] = useState(true) // Default to true because KWin Window Rule forces it on launch
-
-
-  const currentDesktopRef = useRef<string | null>(null)
-  useEffect(() => { currentDesktopRef.current = currentDesktop }, [currentDesktop])
-  
-  const [returnDesktop, setReturnDesktop] = useState<string | null>(null)
-  const returnDesktopRef = useRef<string | null>(null)
-  useEffect(() => { returnDesktopRef.current = returnDesktop }, [returnDesktop])
-  
-  const [visitHistory, setVisitHistory] = useState<string[]>([])
-  const prevDesktopRef = useRef<string | null>(null);
+  const {
+    currentDesktop,
+    setCurrentDesktop,
+    currentDesktopRef,
+    returnDesktop,
+    setReturnDesktop,
+    returnDesktopRef,
+    visitHistory,
+    setVisitHistory,
+    visitHistoryRef,
+    prevDesktopRef,
+  } = useVisitHistory();
+  const [isPinned, setIsPinned] = useState(true); // Default to true because KWin Window Rule forces it on launch
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('active')
@@ -107,9 +111,7 @@ function App() {
   const [chromeProfileCount, setChromeProfileCount] = useState(0);
 
   useEffect(() => {
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
-      // @ts-ignore
       window.electronAPI.fetchChromeProfiles().then((data: any[]) => {
         setChromeProfileCount(data ? data.length : 0);
       }).catch(console.error);
@@ -118,9 +120,7 @@ function App() {
 
   // Load templates separately — they rarely change, no need to fetch every 2.5s
   const loadTemplates = useCallback(async () => {
-    // @ts-ignore
     if (window.electronAPI?.listTemplates) {
-      // @ts-ignore
       const list = await window.electronAPI.listTemplates();
       setTemplates(list || []);
     }
@@ -133,26 +133,19 @@ function App() {
     // SMART POLLING: Only poll if the window is focused (reduces background CPU/IPC lag)
     // We only skip if we already have initial data loaded.
     if (!ignoreThrottle && !document.hasFocus() && dataRef.current) return;
-
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.readJSON) {
-      // @ts-ignore
       Promise.all([
-        // @ts-ignore
         window.electronAPI.readJSON('session.json'),
-        // @ts-ignore
         window.electronAPI.readJSON('notes.json'),
-        // @ts-ignore
         window.electronAPI.readJSON('tasks.json'),
-        // @ts-ignore
         window.electronAPI.readJSON('notes_new.json'),
-        // @ts-ignore
         window.electronAPI.fetchDesktops(true),
-        // @ts-ignore
         window.electronAPI.readJSON('history.json')
       ]).then(([sessionData, notesData, tasksData, notesDataNew, desktopInfo, historyData]) => {
         // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment
-        if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 1500) return;
+        // Must match the outer throttle (3000ms) to avoid race where Promise resolves
+        // just as the cooldown expires but backend hasn't finished writing
+        if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 3000) return;
 
         // Auto-migrate legacy notes format (version 2 hierarchy) to the new flat structure
         let finalNotesData = notesData;
@@ -197,7 +190,6 @@ function App() {
           };
           
           // Auto-save migrated format
-          // @ts-ignore
           window.electronAPI.writeJSON('notes.json', finalNotesData);
         }
 
@@ -234,12 +226,12 @@ function App() {
 
   // D-Bus Event Listener & Focused Polling
   useEffect(() => {
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.onDesktopsUpdated) {
-      // @ts-ignore
       window.electronAPI.onDesktopsUpdated((desktopInfo: any) => {
         // SMART SYNC: If we just performed a local action, ignore the dbus echo for a moment
-        if (Date.now() - lastActionTimeRef.current < 1500) return;
+        // Must match the outer throttle (3000ms) to prevent partial data from D-Bus
+        // stomping over optimistic UI updates during deploy/create operations
+        if (Date.now() - lastActionTimeRef.current < 3000) return;
         
         setDesktopNames(desktopInfo?.names || {})
         setDesktopPriorities(desktopInfo?.priorities || {})
@@ -261,14 +253,12 @@ function App() {
 
   // Register global shortcuts whenever desktopShortcuts changes
   useEffect(() => {
-    // @ts-ignore
     if (window.electronAPI && window.electronAPI.registerShortcuts) {
       const shortcutList = Object.entries(desktopShortcuts)
         .filter(([_, shortcut]) => !!shortcut)
         .map(([uuid, shortcut]) => ({ uuid, shortcut }));
       
       console.log("Syncing global shortcuts:", shortcutList);
-      // @ts-ignore
       window.electronAPI.registerShortcuts(shortcutList).then((failures: string[]) => {
         setShortcutErrors(failures || []);
       });
@@ -282,7 +272,7 @@ function App() {
         console.log("Snappy refresh triggered...");
         loadData(true);
         loadTemplates();
-      }, 1000); // Increased to 1000ms to ensure slow backend writes (like npx tsx) are finished
+      }, 2000); // 2s delay to ensure slow backend writes (npx tsx + file I/O) are finished
       return () => clearTimeout(timer);
     }
   }, [lastActionTime])
@@ -291,7 +281,7 @@ function App() {
     let focusDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const handleFocus = () => {
       setIsFocused(true);
-      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA' && !(document.activeElement as HTMLElement)?.isContentEditable) {
         setTimeout(() => searchInputRef.current?.focus(), 10);
       }
       // Debounce: wait 500ms after KDE brings the window forward before firing the
@@ -312,179 +302,26 @@ function App() {
     };
   }, [loadData]);
 
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
-      const tag = (document.activeElement as HTMLElement)?.tagName;
-      const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+  const isModalOpen = showCreateDesktopModal || showUniversalCreate || showGlobalCreateTask || showGlobalCreateScript || showGlobalCreateNote || !!promptConfig;
 
-      // Circular Tab Navigation - ALWAYS allow these even in inputs if Ctrl is held
-      if (e.ctrlKey) {
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const tabs = ['active', 'tasks', 'notes'];
-          const currentIndex = tabs.indexOf(activeTabRef.current);
-          handleSetActiveTab(currentIndex === -1 ? 'active' : tabs[(currentIndex + 1) % tabs.length]);
-          return;
-        }
-        if (e.key.toLowerCase() === 'q') {
-          e.preventDefault();
-          const tabs = ['active', 'tasks', 'notes'];
-          const currentIndex = tabs.indexOf(activeTabRef.current);
-          handleSetActiveTab(currentIndex === -1 ? 'active' : tabs[(currentIndex + tabs.length - 1) % tabs.length]);
-          return;
-        }
-        if (e.key.toLowerCase() === 'd') {
-          e.preventDefault();
-          handleSetActiveTab('temps');
-          return;
-        }
-        if (e.key.toLowerCase() === 'n' && !e.altKey && !e.shiftKey) {
-          e.preventDefault();
-          setShowUniversalCreate(true);
-          return;
-        }
-        if (e.key.toLowerCase() === 'n' && e.altKey) {
-          if (activeTabRef.current === 'active') {
-            e.preventDefault();
-            setShowCreateDesktopModal(true);
-            return;
-          } else if (activeTabRef.current === 'tasks' || activeTabRef.current === 'notes' || activeTabRef.current === 'temps') {
-            e.preventDefault();
-            window.dispatchEvent(new CustomEvent(`${activeTabRef.current}-create-new`));
-            return;
-          }
-        }
-        if (e.key.toLowerCase() === 'r') {
-          e.preventDefault();
-          const rD = returnDesktopRef.current;
-          const cD = currentDesktopRef.current;
-          const elToFocus = document.activeElement as HTMLElement;
-          if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
-          }
-          if (rD) {
-            setLastActionTime(Date.now());
-            const pureId = rD.split("___")[0];
-            setCurrentDesktop(pureId);
-            setSearchQuery('');
-            // @ts-ignore
-            window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
-            
-            setVisitHistory(prev => {
-              if (cD && pureId === cD) return prev;
-              return [...prev, cD as string].slice(-50);
-            });
-            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
-          }
-          return;
-        }
-        if (e.key.toLowerCase() === 'e') {
-          e.preventDefault();
-          const elToFocus = document.activeElement as HTMLElement;
-          if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
-          }
-          setVisitHistory(currentHist => {
-            if (currentHist.length === 0) return currentHist;
-            const target = currentHist[Math.max(0, currentHist.length - 2)];
-            if (target) {
-              setLastActionTime(Date.now());
-              setCurrentDesktop(target);
-              setSearchQuery('');
-              // @ts-ignore
-              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
-            }
-            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
-            return currentHist;
-          });
-          return;
-        }
-        if (e.key.toLowerCase() === 't') {
-          e.preventDefault();
-          const elToFocus = document.activeElement as HTMLElement;
-          if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
-          }
-          setVisitHistory(currentHist => {
-            if (currentHist.length === 0) return currentHist;
-            const target = currentHist[Math.max(0, currentHist.length - 3)];
-            if (target) {
-              setLastActionTime(Date.now());
-              setCurrentDesktop(target);
-              setSearchQuery('');
-              // @ts-ignore
-              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
-            }
-            if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
-            return currentHist;
-          });
-          return;
-        }
-        if (e.key.toLowerCase() === 'z' && e.metaKey) {
-          // @ts-ignore
-          if (window.electronAPI) {
-            // @ts-ignore
-            window.electronAPI.nativeAction('toggle-pin').then(() => setIsPinned(prev => !prev));
-          }
-          return;
-        }
-        if (e.shiftKey && e.key.toLowerCase() === 's') {
-          e.preventDefault();
-          window.dispatchEvent(new CustomEvent('toggle-sidebar'));
-          return;
-        }
-      }
+  useKeyboardShortcuts({
+    activeTabRef,
+    handleSetActiveTab,
+    setShowUniversalCreate,
+    setShowCreateDesktopModal,
+    returnDesktopRef,
+    currentDesktopRef,
+    setLastActionTime,
+    setCurrentDesktop,
+    setSearchQuery,
+    setVisitHistory,
+    visitHistoryRef,
+    setIsPinned,
+    searchInputRef,
+    isModalOpen
+  });
 
-      // Clear search on Escape - Allow if in search input or no input
-      if (e.key === 'Escape') {
-        if (!isInput || document.activeElement === searchInputRef.current) {
-          setSearchQuery('')
-        }
-      }
 
-      // ABSOLUTE GUARD for other keys: if user is typing in any input, ignore
-      if (isInput) return;
-
-      // Auto-focus search on any alphanumeric key if not already in an input
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9\/]$/i.test(e.key)) {
-        const interceptEvent = new CustomEvent('global-typing-intercept', { detail: { key: e.key }, cancelable: true });
-        window.dispatchEvent(interceptEvent);
-        if (!interceptEvent.defaultPrevented) {
-          searchInputRef.current?.focus()
-        }
-      }
-    }
-
-    const clearSearchHandler = () => setSearchQuery('');
-    const focusSearchHandler = () => searchInputRef.current?.focus();
-    window.addEventListener('clear-search-query', clearSearchHandler);
-    window.addEventListener('focus-global-search', focusSearchHandler);
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => {
-      window.removeEventListener('clear-search-query', clearSearchHandler);
-      window.removeEventListener('focus-global-search', focusSearchHandler);
-      window.removeEventListener('keydown', handleGlobalKeyDown);
-    }
-  }, [])
-
-  useEffect(() => {
-    if (currentDesktop) {
-      if (prevDesktopRef.current && prevDesktopRef.current !== currentDesktop) {
-        const prev = prevDesktopRef.current;
-        setVisitHistory(oldHist => {
-          const newHist = oldHist.filter(id => id !== prev && id !== currentDesktop);
-          newHist.push(prev);
-          // @ts-ignore
-          window.electronAPI.writeJSON('history.json', { last_uuid: prev, history: newHist });
-          setReturnDesktop(prev);
-          return newHist;
-        });
-      }
-      prevDesktopRef.current = currentDesktop;
-    }
-  }, [currentDesktop]);
 
   const handleSwitch = (targetId: string) => {
     setLastActionTime(Date.now())
@@ -642,35 +479,7 @@ function App() {
 
         {/* Actions and Stats Summary */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', height: '28px' }}>
-          {/* Pin Window Toggle */}
-          <button 
-            className="btn-hover"
-            onClick={async () => {
-              // @ts-ignore
-              if (window.electronAPI) {
-                // @ts-ignore
-                await window.electronAPI.nativeAction('toggle-pin');
-                setIsPinned(prev => !prev);
-              }
-            }}
-            style={{ 
-              width: '28px', 
-              height: '28px', 
-              borderRadius: '6px', 
-              border: '1px solid var(--border-glass)', 
-              backgroundColor: !isPinned ? 'rgba(38, 139, 210, 0.2)' : 'transparent', 
-              color: !isPinned ? 'var(--accent-blue)' : 'var(--text-dim)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              flexShrink: 0, 
-              padding: 0, 
-              transition: 'all 0.3s ease' 
-            }}
-            title="Toggle Keep Above Others (Windows+Z)"
-          >
-            <IconPin size={14} fill={!isPinned ? 'currentColor' : 'none'} />
-          </button>
+
 
           {/* Action Buttons (Tasks and Notes Tabs) */}
           {(activeTab === 'tasks' || activeTab === 'notes') && (
@@ -711,8 +520,7 @@ function App() {
                   className="btn-hover"
                   onClick={async () => {
                     const uniqueName = `Divider ${Date.now()}`;
-                    // @ts-ignore
-                    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE_DIVIDER:${uniqueName}"`);
+                    await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "CREATE_TEMPLATE_DIVIDER:${uniqueName}"`);
                     setLastActionTime(Date.now());
                   }}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid rgba(133, 153, 0, 0.2)', backgroundColor: 'rgba(133, 153, 0, 0.1)', color: 'var(--accent-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
@@ -724,11 +532,9 @@ function App() {
                 <button 
                   className="btn-hover"
                   onClick={async () => {
-                    // @ts-ignore
                     const folderPath = await window.electronAPI.nativeAction('select-folder');
                     if (folderPath) {
-                      // @ts-ignore
-                      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_FOLDER:${folderPath}"`);
+                      await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "IMPORT_FOLDER:${folderPath}"`);
                       setLastActionTime(Date.now());
                       loadTemplates();
                     }
@@ -741,7 +547,6 @@ function App() {
                 <button 
                   className="btn-hover"
                   onClick={async () => {
-                    // @ts-ignore
                     await window.electronAPI.executeCommand(`xdg-open "/home/dod/.local/bin/Scripts/"`);
                   }}
                   style={{ width: '32px', height: '28px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
@@ -898,16 +703,10 @@ function App() {
                   visitHistory={visitHistory}
                   setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
                   onAction={() => setLastActionTime(Date.now())}
-                  onSwitch={(id) => {
-                    setVisitHistory(prev => {
-                      const pureId = id.split('___')[0];
-                      if (pureId === currentDesktop) return prev;
-                      return [...prev, currentDesktop as string].slice(-50);
-                    });
-                  }}
+                  onSwitch={handleSwitch}
                 />
               )}
-              {activeTab === 'temps' && <TempsTab templates={templates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} />}
+              {activeTab === 'temps' && <TempsTab templates={templates} setTemplates={setTemplates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} setActiveTab={handleSetActiveTab} />}
               <div style={{ display: activeTab === 'notes' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
                 <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} currentFolder={activeFolder} onAction={() => setLastActionTime(Date.now())} />
               </div>
@@ -927,8 +726,41 @@ function App() {
             </>
           )}
         </div>
+        <button 
+          className="btn-hover"
+          onClick={async () => {
+            if (window.electronAPI) {
+              await window.electronAPI.nativeAction('toggle-pin');
+              setIsPinned(prev => !prev);
+            }
+          }}
+          style={{ 
+            position: 'fixed',
+            bottom: '0',
+            right: '0',
+            zIndex: 9999,
+            width: '28px', 
+            height: '28px', 
+            borderTopLeftRadius: '6px', 
+            borderBottomRightRadius: '0',
+            borderBottomLeftRadius: '0',
+            borderTopRightRadius: '0',
+            border: '1px solid var(--border-glass)', 
+            backgroundColor: !isPinned ? 'rgba(38, 139, 210, 0.2)' : 'rgba(0, 33, 43, 0.8)', 
+            backdropFilter: 'blur(10px)',
+            color: !isPinned ? 'var(--accent-blue)' : 'var(--text-dim)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            flexShrink: 0, 
+            padding: 0, 
+            transition: 'all 0.3s ease' 
+          }}
+          title="Toggle Keep Above Others (Windows+Z)"
+        >
+          <IconPin size={14} fill={!isPinned ? 'currentColor' : 'none'} />
+        </button>
       </div>
-      
       {promptConfig && (
         <PromptModal 
           title={promptConfig.title}
@@ -952,8 +784,6 @@ function App() {
               const currentOrder = currentNotes.folder_order || Object.keys(currentFolders);
               const currentNames = currentNotes.folder_names || {};
               const currentIsDivider = currentNotes.folder_is_divider || {};
-              
-              // @ts-ignore
               await window.electronAPI.writeJSON('notes.json', {
                 ...currentNotes,
                 folders: { ...currentFolders, [folderKey]: [] },
@@ -966,8 +796,7 @@ function App() {
               const finalCommand = promptConfig.isConfirm 
                 ? promptConfig.command 
                 : `${promptConfig.command}:${value}`;
-              // @ts-ignore
-              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${finalCommand}"`);
+              await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "${finalCommand}"`);
             }
             setLastActionTime(Date.now());
             loadTemplates();
@@ -991,8 +820,7 @@ function App() {
           })}
           onSubmit={async (folderName, desktopNameWithPriority) => {
             setShowCreateDesktopModal(false);
-            // @ts-ignore
-            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_LIVE_DESKTOP:${folderName}:${desktopNameWithPriority}"`);
+            await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "CREATE_LIVE_DESKTOP:${folderName}:${desktopNameWithPriority}"`);
             setLastActionTime(Date.now());
           }}
           onCancel={() => setShowCreateDesktopModal(false)}
@@ -1027,9 +855,7 @@ function App() {
             const command = isNewTemplate 
               ? `CREATE_TEMPLATE_SCRIPT:"${templateName}":"${scriptName}":${icon ? `"${icon}"` : 'null'}:true`
               : `CREATE_TEMPLATE_SCRIPT:"${templateName}":"${scriptName}":${icon ? `"${icon}"` : 'null'}:false`;
-            
-            // @ts-ignore
-            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" '${command}'`);
+            await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" '${command}'`);
             setLastActionTime(Date.now());
             loadTemplates();
           }}
@@ -1062,7 +888,6 @@ function App() {
               if (!newData.templates[subId]) newData.templates[subId] = [];
               newData.templates[subId] = [...newData.templates[subId], newTask];
             }
-            // @ts-ignore
             window.electronAPI.writeJSON('tasks.json', newData);
             setLastActionTime(Date.now());
           }}
@@ -1095,7 +920,6 @@ function App() {
               if (!newData.templates[subId]) newData.templates[subId] = [];
               newData.templates[subId] = [...newData.templates[subId], newNote];
             }
-            // @ts-ignore
             window.electronAPI.writeJSON('notes_new.json', newData);
             setLastActionTime(Date.now());
           }}

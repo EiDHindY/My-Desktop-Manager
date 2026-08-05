@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { fuzzyMatch } from '../utils';
+import { CLI_PATH } from '../constants';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
 import PromptModal from './PromptModal';
@@ -89,9 +91,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
   const [showIconPicker, setShowIconPicker] = useState<string | null>(null);
 
-  useEffect(() => {
 
-  }, []);
 
   const handleSetIcons = (icons: string[]) => {
     if (showIconPicker) {
@@ -100,117 +100,187 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
     }
   };
 
-  const folders = { ...(sessionData?.folders || {}) };
-  
-  // Auto-sync: Ensure all system desktops are in SOME folder, otherwise inject into root
-  Object.keys(desktopNames || {}).forEach(id => {
-    let found = false;
-    Object.values(folders).forEach((desktopList: any) => {
-      if (Array.isArray(desktopList) && desktopList.some((d: string) => d.split('___')[0] === id)) found = true;
-    });
-    if (!found) {
-      if (!folders['root']) folders['root'] = [];
-      folders['root'] = [...folders['root'], `${id}___root`];
-    }
-  });
+  const { folders, folderNames } = useMemo(() => {
+    const f = JSON.parse(JSON.stringify(sessionData?.folders || {}));
+    
+    if (!f['root']) f['root'] = [];
 
-  const query = (searchQuery || '').toLowerCase().trim();
-  
-  // Use saved order if available, otherwise fallback to alphabetical
-  let folderNames = Object.keys(folders).filter(f => f !== 'root');
-  if (sessionData?.folder_order) {
-    const orderMap = new Map<string, number>(sessionData.folder_order.map((f: string, i: number) => [f, i]));
-    folderNames.sort((a, b) => {
-      const idxA = orderMap.has(a) ? (orderMap.get(a) as number) : 999;
-      const idxB = orderMap.has(b) ? (orderMap.get(b) as number) : 999;
-      return idxA - idxB;
-    });
-  } else {
-    folderNames.sort((a, b) => a.localeCompare(b));
-  }
-  if (folders['root']) folderNames.push('root'); // Root always at bottom
-
-  const fuzzyMatch = (str: string, q: string) => {
-    let i = 0;
-    for (let j = 0; j < str.length && i < q.length; j++) {
-      if (str[j] === q[i]) i++;
-    }
-    return i === q.length;
-  };
-
-  // Flattened list for keyboard navigation
-  const visibleItems: { type: 'folder' | 'desktop', id: string, folderName?: string }[] = [];
-  folderNames.forEach(folderName => {
-    const desktops = folders[folderName] || [];
-
-    const matchingDesktops = desktops.filter((id: string) => {
-      const pureId = id.split('___')[0];
-      const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
-      const isCurrent = pureId === currentDesktop;
-      if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
-      
-      if (!query) return true;
-      const name = desktopNames[pureId] || '';
-      return fuzzyMatch(name.toLowerCase(), query);
-    });
-
-    const folderMatches = !query || fuzzyMatch(folderName.toLowerCase(), query);
-
-    if (query && !folderMatches && matchingDesktops.length === 0) return;
-    if (showOnlyActive && matchingDesktops.length === 0) return;
-
-    visibleItems.push({ type: 'folder', id: folderName });
-
-    if (expandedFolders.includes(folderName) || query || showOnlyActive) {
-      const sorted = folderName === 'root'
-        ? [...matchingDesktops].sort((a, b) => {
-            const pA = a.split('___')[0]; const pB = b.split('___')[0];
-            const cA = windowCounts[pA] || 0; const cB = windowCounts[pB] || 0;
-            if (cA > 0 && cB === 0) return -1;
-            if (cA === 0 && cB > 0) return 1;
-            const nA = (desktopNames[pA] || '').toLowerCase(); const nB = (desktopNames[pB] || '').toLowerCase();
-            const eA = !nA || nA === 'empty'; const eB = !nB || nB === 'empty';
-            if (!eA && eB) return -1; if (eA && !eB) return 1;
-            return 0;
-          })
-        : (query || showOnlyActive ? matchingDesktops : desktops);
-
-      sorted.forEach((dId: string) => {
-        visibleItems.push({ type: 'desktop', id: dId, folderName });
+    // The Empty Aggregator Logic: Move empty desktops to root in the Active tab
+    if (showOnlyActive) {
+      Object.keys(f).forEach(folderName => {
+        if (folderName === 'root') return;
+        const remainingDesktops: string[] = [];
+        f[folderName].forEach((id: string) => {
+          const pureId = id.split('___')[0];
+          const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+          const isCurrent = pureId === currentDesktop;
+          const hasWindows = (windowCounts[pureId] || 0) > 0;
+          
+          if (!hasWindows && !isRecentlyCreated && !isCurrent) {
+            f['root'].push(id);
+          } else {
+            remainingDesktops.push(id);
+          }
+        });
+        f[folderName] = remainingDesktops;
       });
     }
-  });
+
+    // Auto-sync: Ensure all system desktops are in SOME folder, otherwise inject into root
+    Object.keys(desktopNames || {}).forEach(id => {
+      let found = false;
+      Object.values(f).forEach((desktopList: any) => {
+        if (Array.isArray(desktopList) && desktopList.some((d: string) => d.split('___')[0] === id)) found = true;
+      });
+      if (!found) {
+        f['root'] = [...f['root'], `${id}___root`];
+      }
+    });
+
+    let fNames = Object.keys(f).filter(name => name !== 'root');
+    if (sessionData?.folder_order) {
+      const orderMap = new Map<string, number>(sessionData.folder_order.map((name: string, i: number) => [name, i]));
+      fNames.sort((a, b) => {
+        const idxA = orderMap.has(a) ? (orderMap.get(a) as number) : 999;
+        const idxB = orderMap.has(b) ? (orderMap.get(b) as number) : 999;
+        return idxA - idxB;
+      });
+    } else {
+      fNames.sort((a, b) => a.localeCompare(b));
+    }
+    if (f['root']) fNames.push('root'); // Root always at bottom
+
+    return { folders: f, folderNames: fNames };
+  }, [sessionData?.folders, sessionData?.folder_order, desktopNames, windowCounts, currentDesktop, sessionData?.creation_times, showOnlyActive]);
+
+  const query = (searchQuery || '').toLowerCase().trim();
+
+  // Flattened list for keyboard navigation
+  const visibleItems = useMemo(() => {
+    const items: { type: 'folder' | 'desktop', id: string, folderName?: string, name?: string }[] = [];
+    folderNames.forEach(folderName => {
+      const desktops = folders[folderName] || [];
+
+      const activeDesktops = desktops.filter((id: string) => {
+        const pureId = id.split('___')[0];
+        const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
+        const isCurrent = pureId === currentDesktop;
+        if (showOnlyActive && folderName !== 'root' && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
+        return true;
+      });
+
+      const folderMatches = !query || fuzzyMatch(folderName.toLowerCase(), query);
+
+      const matchingDesktops = activeDesktops.filter((id: string) => {
+        if (!query) return true;
+        const pureId = id.split('___')[0];
+        const name = desktopNames[pureId] || '';
+        return fuzzyMatch(name.toLowerCase(), query);
+      });
+
+      if (query && !folderMatches && matchingDesktops.length === 0) return;
+      if (showOnlyActive && activeDesktops.length === 0) return;
+
+      items.push({ type: 'folder', id: folderName, name: folderName });
+
+      if (expandedFolders.includes(folderName) || query || showOnlyActive) {
+        const desktopsToShow = folderMatches && query ? activeDesktops : matchingDesktops;
+        
+        const sorted = folderName === 'root'
+          ? [...desktopsToShow].sort((a, b) => {
+              const pA = a.split('___')[0]; const pB = b.split('___')[0];
+              const cA = windowCounts[pA] || 0; const cB = windowCounts[pB] || 0;
+              if (cA > 0 && cB === 0) return -1;
+              if (cA === 0 && cB > 0) return 1;
+              const nA = (desktopNames[pA] || '').toLowerCase(); const nB = (desktopNames[pB] || '').toLowerCase();
+              const eA = !nA || nA === 'empty'; const eB = !nB || nB === 'empty';
+              if (!eA && eB) return -1; if (eA && !eB) return 1;
+              return 0;
+            })
+          : (query || showOnlyActive ? desktopsToShow : desktops);
+
+        sorted.forEach((dId: string) => {
+          items.push({ type: 'desktop', id: dId, folderName, name: desktopNames[dId.split('___')[0]] || '' });
+        });
+      }
+    });
+    return items;
+  }, [folderNames, folders, sessionData?.creation_times, currentDesktop, showOnlyActive, windowCounts, query, desktopNames, expandedFolders]);
+
+  const prevQueryRef = useRef(query);
+  const prevDesktopRef = useRef(currentDesktop);
 
   useEffect(() => {
-    if (searchQuery) {
-      const firstDesktopIndex = visibleItems.findIndex(item => item.type === 'desktop');
-      setSelectedIndex(firstDesktopIndex !== -1 ? firstDesktopIndex : 0);
-    } else {
-      // Find which folder contains the current desktop
-      const parentFolder = Object.keys(folders).find(folderName => 
-        folders[folderName].some((id: string) => id.split("___")[0] === currentDesktop)
-      );
-      
-      // Try to find the desktop itself first
-      let targetIndex = visibleItems.findIndex(item => item.id.split("___")[0] === currentDesktop);
-      
-      // If not found (likely folder is collapsed), find the parent folder
-      if (targetIndex === -1 && parentFolder) {
-        targetIndex = visibleItems.findIndex(item => item.id === parentFolder);
+    const queryChanged = prevQueryRef.current !== query;
+    const desktopChanged = prevDesktopRef.current !== currentDesktop;
+    
+    prevQueryRef.current = query;
+    prevDesktopRef.current = currentDesktop;
+    
+    if (queryChanged || (desktopChanged && !query)) {
+      if (!query) {
+        // Find which folder contains the current desktop
+        const parentFolder = Object.keys(folders).find(folderName => 
+          folders[folderName].some((id: string) => id.split("___")[0] === currentDesktop)
+        );
+        
+        // Try to find the desktop itself first
+        let targetIndex = visibleItems.findIndex(item => item.id.split("___")[0] === currentDesktop);
+        
+        // If not found (likely folder is collapsed), find the parent folder
+        if (targetIndex === -1 && parentFolder) {
+          targetIndex = visibleItems.findIndex(item => item.id === parentFolder);
+        }
+        
+        if (targetIndex !== -1) {
+          setSelectedIndex(targetIndex);
+        } else {
+          setSelectedIndex(0);
+        }
+        return;
       }
       
-      if (targetIndex !== -1) {
-        setSelectedIndex(targetIndex);
-      } else {
-        setSelectedIndex(0);
+      if (queryChanged) {
+        const lowerQuery = query;
+        
+        const findBestIndex = (targetType: string) => {
+          const startsWith = visibleItems.findIndex(item => item.type === targetType && (item.name || '').toLowerCase().startsWith(lowerQuery));
+          if (startsWith !== -1) return startsWith;
+          const includes = visibleItems.findIndex(item => item.type === targetType && (item.name || '').toLowerCase().includes(lowerQuery));
+          if (includes !== -1) return includes;
+          const fuzzy = visibleItems.findIndex(item => item.type === targetType && fuzzyMatch((item.name || '').toLowerCase(), lowerQuery));
+          return fuzzy;
+        };
+
+        let bestIndex = findBestIndex('desktop');
+        
+        if (bestIndex === -1) {
+          const bestFolderIndex = findBestIndex('folder');
+          if (bestFolderIndex !== -1) {
+            // If the folder matched, we want to highlight the FIRST desktop inside that folder, not the folder itself.
+            const folderId = visibleItems[bestFolderIndex].id;
+            const firstDesktopIndex = visibleItems.findIndex(item => item.type === 'desktop' && item.folderName === folderId);
+            bestIndex = firstDesktopIndex !== -1 ? firstDesktopIndex : bestFolderIndex;
+          }
+        }
+        
+        setSelectedIndex(bestIndex !== -1 ? bestIndex : 0);
       }
     }
-  }, [searchQuery, currentDesktop, visibleItems.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, currentDesktop]);
 
   // Keyboard Navigation: Ctrl + J / K and Ctrl + Enter
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'j')) {
+      // Don't hijack if focused on an input UNLESS it's the global search bar
+      const activeTag = document.activeElement?.tagName;
+      const isInputFocused = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable;
+      const isGlobalSearch = document.activeElement?.id === 'global-search-input';
+      
+      if (isInputFocused && !isGlobalSearch) return;
+
+      if (e.key === 'ArrowDown' || (e.ctrlKey && e.key.toLowerCase() === 'j')) {
         e.preventDefault();
         if (visibleItems.length > 0) {
           setSelectedIndex(prev => {
@@ -221,7 +291,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             return i;
           });
         }
-      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'k')) {
+      } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
         if (visibleItems.length > 0) {
           setSelectedIndex(prev => {
@@ -273,8 +343,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
   const executeMenuCommand = async (command: string) => {
     setContextMenu(null);
-    // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "${command}"`);
+    await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "${command}"`);
     if (onAction) onAction();
   };
 
@@ -341,7 +410,6 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
       }
 
       // Await backend write BEFORE onAction (which triggers fast-refresh)
-      // @ts-ignore
       await window.electronAPI.moveDesktop(draggedId, destFolder, destination.index);
       if (onAction) onAction();
     }
@@ -350,7 +418,6 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
   const handleSwitchDesktop = (id: string) => {
     if (onSwitch) onSwitch(id);
     const pureId = id.split("___")[0];
-    // @ts-ignore
     window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${pureId}"`);
   };
 
@@ -360,22 +427,28 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
 
     const query = (searchQuery || '').toLowerCase().trim();
 
-    const matchingDesktops = desktops.filter((id: string) => {
+    const activeDesktops = desktops.filter((id: string) => {
       const pureId = id.split('___')[0];
       const isRecentlyCreated = sessionData?.creation_times?.[pureId] && (Date.now() - sessionData.creation_times[pureId] < 30 * 1000);
       const isCurrent = pureId === currentDesktop;
-      if (showOnlyActive && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
+      if (showOnlyActive && folderName !== 'root' && (windowCounts[pureId] || 0) === 0 && !isRecentlyCreated && !isCurrent) return false;
+      return true;
+    });
+
+    const folderMatches = !query || fuzzyMatch(folderName.toLowerCase(), query);
+
+    const matchingDesktops = activeDesktops.filter((id: string) => {
       if (!query) return true;
+      const pureId = id.split('___')[0];
       const name = desktopNames[pureId] || '';
       return fuzzyMatch(name.toLowerCase(), query);
     });
 
-    const folderMatches = !query || fuzzyMatch(folderName.toLowerCase(), query);
-    const displayDesktops = (query && !folderMatches) || showOnlyActive ? matchingDesktops : desktops;
-    const isExpanded = expandedFolders.includes(folderName) || !!query || showOnlyActive;
-
     if (query && !folderMatches && matchingDesktops.length === 0) return null;
-    if (showOnlyActive && matchingDesktops.length === 0) return null;
+    if (showOnlyActive && activeDesktops.length === 0) return null;
+
+    const displayDesktops = folderMatches && query ? activeDesktops : matchingDesktops;
+    const isExpanded = expandedFolders.includes(folderName) || !!query || showOnlyActive;
 
     const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split('___')[0]] || 0) > 0).length;
     const folderEmpty = displayDesktops.length - folderActive;
@@ -452,7 +525,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             minWidth: 0
           }}>{label}</span>
           
-          {isFocusedFolder && (
+          {isFocusedFolder && folderName !== 'root' && (
             <div 
               className="btn-hover"
               onClick={(e) => { e.stopPropagation(); setPromptConfig({ title: 'New Desktop Name', defaultValue: 'New Desktop', command: `CREATE_LIVE_DESKTOP:${folderName}` }); }}
@@ -470,6 +543,34 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
               title="Add Desktop"
             >
               <IconPlus size={16} />
+            </div>
+          )}
+          {isFocusedFolder && folderName === 'root' && (
+            <div 
+              className="btn-hover"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                const rootUuids = (folders['root'] || []).map((id: string) => id.split('___')[0]).join(',');
+                executeMenuCommand(`RESET_ROOT_DESKTOPS:${rootUuids}`); 
+              }}
+              style={{ 
+                backgroundColor: 'rgba(239, 68, 68, 0.1)', 
+                color: 'var(--accent-red)', 
+                border: '1px solid var(--accent-red)',
+                borderRadius: '4px', 
+                padding: '0 8px',
+                height: '24px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                marginRight: '10px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                gap: '4px'
+              }}
+              title="Clean All Unassigned"
+            >
+              <IconTrash size={12} /> Clean All
             </div>
           )}
 
@@ -645,11 +746,11 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             ) : (
             <>
               <div className="menu-item" onClick={() => setPromptConfig({ title: 'New Desktop Name', defaultValue: 'New Desktop', command: `CREATE_LIVE_DESKTOP:${contextMenu.id}` })}>
-                <IconPlus size={14} /> Add Desktop
+                <IconPlus size={14} /> Add Desktop to {contextMenu.id}
               </div>
 
               <div className="menu-item" onClick={() => executeMenuCommand(`REMOVE_LIVE_FOLDER:${contextMenu.id}`)}>
-                <IconTrash size={14} /> Delete Folder
+                <IconTrash size={14} /> Delete Folder ({contextMenu.id})
               </div>
             </>
             )

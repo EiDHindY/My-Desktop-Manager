@@ -1,0 +1,11 @@
+--- shared_backend/helpers/kwin_utils.ts
++++ shared_backend/helpers/kwin_utils.ts
+@@ -64,7 +64,8 @@
+                 `if [ "$d" = "${kwinIdx}" ]; then ` +
+                 `name=$(kdotool getwindowname $id 2>/dev/null); ` +
+                 `if [ -n "$name" ] && [ "$name" != "Desktop Manager" ] && [ "$name" != "Menu" ] && [ "$name" != "Rename Desktop" ] && [ "$name" != "Chrome Launcher" ] && [ "$name" != "plasma-desktop" ] && [ "$name" != "Plasma" ]; then ` +
+-                `kdotool windowclose $id 2>/dev/null; ` +
++                `kdotool windowclose $id 2>/dev/null; sleep 0.2; ` +
+                 `fi; fi; done`;
+     try {
+         require('child_process').execSync(cmd, { stdio: 'ignore' });

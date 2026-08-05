@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, protocol, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, protocol, globalShortcut, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -23,6 +23,9 @@ function showWindow() {
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.focus();
+
+  // Force KWin to activate our window using kdotool (bypasses Wayland focus stealing)
+  exec(`export PATH=$PATH:~/.local/bin && kdotool search --name "^Desktop Manager$" windowactivate`);
 }
 
 // ─── SIGUSR2: Fired by KDE Custom Shortcut — zero latency, compositor-native ──
@@ -65,6 +68,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     alwaysOnTop: true,
+    skipTaskbar: true,
     title: "Desktop Manager", // Explicit title for wmctrl
     icon: ICON_PATH,
     webPreferences: {

@@ -1,0 +1,52 @@
+--- shared_backend/helpers/desktop_utils.ts
++++ shared_backend/helpers/desktop_utils.ts
+@@ -1,5 +1,6 @@
+-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
++import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'fs';
+ import { join } from 'path';
+ import { runCommand } from './kwin_utils';
+ import { getLabelCache, saveLabelCache } from './label_cache';
+ 
+@@ -31,6 +32,15 @@
+     let match;
+     const desktops: Desktop[] = [];
+     let cacheUpdated = false;
++    
++    const lockFilePath = join(process.env.HOME || '', '.config', 'desktop-manager', '.cli-lock');
++    let isLocked = false;
++    if (existsSync(lockFilePath)) {
++        const stat = statSync(lockFilePath);
++        if (Date.now() - stat.mtimeMs < 60000) { // Lock expires after 60 seconds
++            isLocked = true;
++        }
++    }
+ 
+     while ((match = regex.exec(desktopsOutput)) !== null) {
+         const position = parseInt(match[1]);
+@@ -41,17 +51,19 @@
+         // Persistence Logic
+         const isNameEmpty = !name || name === "" || name.toLowerCase() === "empty" || name.toLowerCase().startsWith("desktop ");
+         
+-        if (isNameEmpty && labelCache[uuid]) {
++        if (!isLocked && isNameEmpty && labelCache[uuid]) {
+             name = labelCache[uuid].name;
+             priority = labelCache[uuid].priority;
+             runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${uuid}" "${name.replace(/"/g, '\\"')}"`);
+         } else if (!isNameEmpty) {
+             if (labelCache[uuid]) {
+                 priority = labelCache[uuid].priority;
+-                if (name !== labelCache[uuid].name) {
++                if (!isLocked && name !== labelCache[uuid].name) {
+                     labelCache[uuid].name = name;
+                     cacheUpdated = true;
+                 }
+             } else {
+-                labelCache[uuid] = { name, priority: "None" };
+-                cacheUpdated = true;
++                if (!isLocked) {
++                    labelCache[uuid] = { name, priority: "None" };
++                    cacheUpdated = true;
++                }
+             }
+         }
+ 

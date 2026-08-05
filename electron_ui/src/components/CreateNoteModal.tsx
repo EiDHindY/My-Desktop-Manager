@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import TiptapEditor from './TiptapEditor';
 
 interface CreateNoteModalProps {
   existingLiveFolders: string[];
@@ -204,28 +205,11 @@ export default function CreateNoteModal({ existingLiveFolders, existingTemplates
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <textarea 
+          <TiptapEditor 
             value={info}
-            placeholder="Note Info"
-            onChange={(e) => setInfo(e.target.value)}
-            onKeyDown={handleKeyDown}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '10px',
-              borderRadius: '8px',
-              backgroundColor: 'rgba(0, 33, 43, 0.6)',
-              border: '1px solid var(--border-glass)',
-              color: '#e0e0e0',
-              outline: 'none',
-              fontSize: '14px',
-              minHeight: '80px',
-              resize: 'vertical',
-              transition: 'all 0.3s ease',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)',
-              fontFamily: 'inherit'
-            }}
-            className="search-input-hover prompt-modal-input"
+            onChange={setInfo}
+            onBlur={() => {}}
+            autoFocus={false}
           />
         </div>
 

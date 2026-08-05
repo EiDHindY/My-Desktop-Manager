@@ -18,5 +18,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onPinStatusChanged: (callback) => {
     ipcRenderer.removeAllListeners('pin-status-changed');
     ipcRenderer.on('pin-status-changed', (_event, isAlwaysOnTop) => callback(isAlwaysOnTop));
+  },
+  onMessage: (callback) => {
+    const handler = (_event, msg) => callback(msg);
+    ipcRenderer.on('radial-scroll', handler);
+    ipcRenderer.on('radial-show', handler);
+    return () => {
+      ipcRenderer.removeListener('radial-scroll', handler);
+      ipcRenderer.removeListener('radial-show', handler);
+    };
   }
 });

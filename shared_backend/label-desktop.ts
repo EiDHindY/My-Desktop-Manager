@@ -74,7 +74,11 @@ function main() {
                 
                 undoStack.push({ id, oldName: old });
                 runCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.setDesktopName "${id}" "${newName.replace(/"/g, '\\"')}"`);
-                updateLabel(id, newName, priority);
+                if (newName === "Empty" || newName === "") {
+                    removeLabel(id);
+                } else {
+                    updateLabel(id, newName, priority);
+                }
             }
         } else if (result.startsWith('CLEAR:')) {
             handleClear(result, sessionPath, desktopMap, undoStack);

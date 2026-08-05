@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { fuzzyMatch } from '../utils';
+import { CLI_PATH } from '../constants';
 import { IconTerminal, IconPlay, IconFolder, IconFolderOpen, IconPencil, IconLoader, IconFilePlus, IconTrash, ManualIcon, IconRocket, IconKeyboard, IconGrip, IconFileText, IconImport, IconType, IconMonitor, IconArrowRight } from './Icons';
 import IconPicker from './IconPicker';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -32,8 +34,16 @@ interface FlatItem {
   taskId?: string;
 }
 
-export default function TempsTab({ templates, searchQuery, onAction, setPromptConfig }: { templates: Template[], searchQuery?: string, onAction?: () => void, setPromptConfig?: any }) {
-  const [localTemplates, setLocalTemplates] = useState<Template[]>(templates);
+interface Props {
+  templates: Template[];
+  searchQuery?: string;
+  onAction?: () => void;
+  setPromptConfig?: (config: any) => void;
+  setTemplates?: React.Dispatch<React.SetStateAction<Template[]>>;
+  setActiveTab?: (tab: string) => void;
+}
+
+export default function TempsTab({ templates, setTemplates, searchQuery = '', onAction, setPromptConfig, setActiveTab }: Props) {
   const [expandedTemps, setExpandedTemps] = useState<string[]>([]);
   const [loadingTasks, setLoadingTasks] = useState<Record<string, boolean>>({});
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
@@ -48,23 +58,13 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
     return () => window.removeEventListener('temps-create-new', handleCreateNew);
   }, []);
 
-  useEffect(() => {
-    setLocalTemplates(templates);
-  }, [templates]);
-
   const query = (searchQuery || '').toLowerCase().trim();
 
   const filteredTemplates = useMemo(() => {
-    return localTemplates.map(temp => {
+    return templates.map(temp => {
       if (!query) return temp;
 
-      const fuzzyMatch = (str: string, q: string) => {
-        let i = 0;
-        for (let j = 0; j < str.length && i < q.length; j++) {
-          if (str[j] === q[i]) i++;
-        }
-        return i === q.length;
-      };
+
 
       const nameMatch = fuzzyMatch(temp.name.toLowerCase(), query);
       const matchingTasks = temp.tasks?.filter(t => fuzzyMatch(t.name.toLowerCase(), query)) || [];
@@ -73,7 +73,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
       }
       return null;
     }).filter(Boolean) as Template[];
-  }, [localTemplates, query]);
+  }, [templates, query]);
 
   const flatItems = useMemo(() => {
     const items: FlatItem[] = [];
@@ -105,25 +105,24 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
   const handleDeployTemplate = async (templateFilename: string, templateName: string) => {
     const key = `deploy-temp-${templateFilename}`;
     setLoadingTasks(prev => ({ ...prev, [key]: true }));
-    // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DEPLOY_ALL:${templateName}"`);
+    const result = await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_ALL:${templateName}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
+    if (result && result.ok && setActiveTab) setActiveTab('active');
   };
 
   const handleDeployTask = async (templateName: string, taskId: string) => {
     const key = `${templateName}-${taskId}`;
     setLoadingTasks(prev => ({ ...prev, [key]: true }));
-    // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "DEPLOY_TASK:${templateName}:${taskId}"`);
+    const result = await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:${templateName}:${taskId}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
+    if (result && result.ok && setActiveTab) setActiveTab('active');
   };
 
   const handleSetTaskIcons = async (filename: string, taskId: string, icons: string[]) => {
     const key = `set-icon-${filename}-${taskId}`;
     setLoadingTasks(prev => ({ ...prev, [key]: true }));
     const iconsStr = icons.join(',');
-    // @ts-ignore
-    await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "SET_TEMPLATE_TASK_ICON:${filename}:${taskId}:${iconsStr}"`);
+    await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "SET_TEMPLATE_TASK_ICON:${filename}:${taskId}:${iconsStr}"`);
     setLoadingTasks(prev => ({ ...prev, [key]: false }));
     onAction?.();
   };
@@ -137,22 +136,21 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
     }
 
     if (type === 'template') {
-      const newTemplates = Array.from(localTemplates);
+      const newTemplates = Array.from(templates);
       const [removed] = newTemplates.splice(source.index, 1);
       newTemplates.splice(destination.index, 0, removed);
       
-      setLocalTemplates(newTemplates);
+      if (setTemplates) setTemplates(newTemplates);
       const newOrderStr = newTemplates.map(t => t.filename).join(',');
-      // @ts-ignore
-      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "REORDER_TEMPLATES:${newOrderStr}"`);
+      await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "REORDER_TEMPLATES:${newOrderStr}"`);
       onAction?.();
     } else if (type === 'task') {
       const templateFilename = source.droppableId.replace('tasks-', '');
-      const templateIndex = localTemplates.findIndex(t => t.filename === templateFilename);
+      const templateIndex = templates.findIndex(t => t.filename === templateFilename);
       
       if (templateIndex === -1) return;
       
-      const newTemplates = [...localTemplates];
+      const newTemplates = [...templates];
       const template = { ...newTemplates[templateIndex] };
       const newTasks = Array.from(template.tasks || []);
       
@@ -162,9 +160,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
       template.tasks = newTasks;
       newTemplates[templateIndex] = template;
       
-      setLocalTemplates(newTemplates);
-      // @ts-ignore
-      await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "MOVE_TASK:${templateFilename}:${removed.id}:${destination.index}"`);
+      if (setTemplates) setTemplates(newTemplates);
+      await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "MOVE_TASK:${templateFilename}:${removed.id}:${destination.index}"`);
       onAction?.();
     }
   };
@@ -214,13 +211,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
       
       const lowerQuery = query.toLowerCase();
       
-      const fuzzyMatch = (str: string, q: string) => {
-        let i = 0;
-        for (let j = 0; j < str.length && i < q.length; j++) {
-          if (str[j] === q[i]) i++;
-        }
-        return i === q.length;
-      };
+
 
       // Find the best item to focus: prioritize tasks over templates, then start match, includes, and fuzzy
       const findBestIndex = (targetType: string) => {
@@ -410,14 +401,12 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                       <button 
                         className="btn-hover"
                         onClick={async (e) => { 
-                          e.stopPropagation(); 
-                          // @ts-ignore
+                          e.stopPropagation();
                           const scriptPath = await window.electronAPI.nativeAction('select-file');
                           if (scriptPath) {
                             const key = `import-script-${temp.filename}`;
                             setLoadingTasks(prev => ({ ...prev, [key]: true }));
-                            // @ts-ignore
-                            await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "IMPORT_SCRIPT_TO_TEMPLATE:${temp.filename}:${scriptPath}"`);
+                            await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "IMPORT_SCRIPT_TO_TEMPLATE:${temp.filename}:${scriptPath}"`);
                             setLoadingTasks(prev => ({ ...prev, [key]: false }));
                             onAction?.();
                           }
@@ -452,7 +441,7 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                     <button 
                       className="btn-hover"
                       onClick={(e) => { e.stopPropagation(); handleDeployTemplate(temp.filename, temp.name); }}
-                      disabled={loadingTasks[temp.name]}
+                      disabled={loadingTasks[`deploy-temp-${temp.filename}`]}
                       style={{ 
                         background: 'var(--aurora-gradient)', 
                         color: 'var(--accent-cyan)', 
@@ -469,8 +458,8 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                         letterSpacing: '0.5px'
                       }}
                     >
-                      {loadingTasks[temp.name] ? <IconLoader size={12} /> : <IconMonitor size={12} />} 
-                      {loadingTasks[temp.name] ? '...' : 'Deploy All'}
+                      {loadingTasks[`deploy-temp-${temp.filename}`] ? <IconLoader size={12} /> : <IconMonitor size={12} />} 
+                      {loadingTasks[`deploy-temp-${temp.filename}`] ? '...' : 'Deploy All'}
                     </button>
                   </div>
                 </div>
@@ -548,7 +537,6 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   const cleanPath = task.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
-                                  // @ts-ignore
                                   await window.electronAPI.executeCommand(`chmod +x "${cleanPath}"`);
                                   onAction?.();
                                 }}
@@ -585,7 +573,6 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
                               onClick={(e) => { 
                                 e.stopPropagation(); 
                                 const cleanPath = task.script.replace(/^bash\s+['"]?/, '').replace(/['"]?$/, '');
-                                // @ts-ignore
                                 window.electronAPI.executeCommand(`kate "${cleanPath}"`);
                               }}
                               style={{ backgroundColor: 'rgba(224, 175, 104, 0.1)', color: 'var(--accent-yellow, #e0af68)', border: '1px solid rgba(224, 175, 104, 0.2)', width: '24px', height: '24px', padding: 0 }}
@@ -711,25 +698,22 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
 
       {showCreateModal && (
         <CreateTemplateScriptModal
-          existingTemplates={localTemplates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
           onCancel={() => setShowCreateModal(false)}
           onSubmit={async (scriptName, templateName, isNewTemplate, icon) => {
             let filename = templateName.toLowerCase().replace(/\s+/g, '_') + '.json';
             
             if (isNewTemplate) {
-              // @ts-ignore
-              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE:${templateName}"`);
+              await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "CREATE_TEMPLATE:${templateName}"`);
               // Wait a bit to ensure it's created before adding script
               await new Promise(r => setTimeout(r, 200));
             }
 
             // Create script and add to template, optionally with icon
-            let cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}"`;
+            let cmd = `npx tsx "${CLI_PATH}" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}"`;
             if (icon) {
-              cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}:${icon}"`;
+              cmd = `npx tsx "${CLI_PATH}" "CREATE_SCRIPT_TO_TEMPLATE:${filename}:${scriptName}:${icon}"`;
             }
-            
-            // @ts-ignore
             await window.electronAPI.executeCommand(cmd);
             
             setShowCreateModal(false);
@@ -741,21 +725,18 @@ export default function TempsTab({ templates, searchQuery, onAction, setPromptCo
 
       {moveTargetScript && (
         <MoveScriptModal
-          existingTemplates={localTemplates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
+          existingTemplates={templates.filter(t => !t.isDivider).map(t => ({ filename: t.filename, name: t.name }))}
           scriptName={moveTargetScript.task.name}
           onCancel={() => setMoveTargetScript(null)}
           onSubmit={async (templateName, isNewTemplate) => {
             let targetFilename = templateName.toLowerCase().replace(/\s+/g, '_') + '.json';
             
             if (isNewTemplate) {
-              // @ts-ignore
-              await window.electronAPI.executeCommand(`npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "CREATE_TEMPLATE:${templateName}"`);
+              await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "CREATE_TEMPLATE:${templateName}"`);
               await new Promise(r => setTimeout(r, 200));
             }
 
-            const cmd = `npx tsx "/home/dod/Projects/My_Desktop_Manager/shared_backend/cli.ts" "MOVE_TEMPLATE_SCRIPT:${moveTargetScript.temp.filename}:${moveTargetScript.task.id}:${targetFilename}"`;
-            
-            // @ts-ignore
+            const cmd = `npx tsx "${CLI_PATH}" "MOVE_TEMPLATE_SCRIPT:${moveTargetScript.temp.filename}:${moveTargetScript.task.id}:${targetFilename}"`;
             await window.electronAPI.executeCommand(cmd);
             
             setMoveTargetScript(null);
