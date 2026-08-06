@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Theme Chooser</title>
+<style>
+  body {
+    background-color: #1a1a1a;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3rem;
+    justify-content: center;
+  }
+  .theme-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+  .theme-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #ccc;
+  }
+  .switcher {
+    width: 320px;
+    border-radius: 12px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Inter', sans-serif;
+    backdrop-filter: blur(15px);
+  }
+  .folder {
+    padding: 4px 12px 0px 12px;
+    font-size: 9px;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 1px;
+    opacity: 0.9;
+    margin-bottom: 0px;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px 6px 24px;
+    border-radius: 8px;
+    margin: 0px;
+    cursor: pointer;
+  }
+  .item-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 10px;
+    background-color: #888;
+    border-radius: 4px;
+  }
+  .item-text {
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .current-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<script>
+const themes = [
+  {
+    name: "1. Solarized Ocean (Current)",
+    bg: "rgba(0, 20, 28, 0.85)",
+    border: "rgba(255,255,255,0.1)",
+    accent: "#268bd2",
+    activeBg: "rgba(38, 139, 210, 0.2)",
+    text: "#fff",
+    textMuted: "rgba(255, 255, 255, 0.8)",
+    currentBg: "rgba(255, 255, 255, 0.05)",
+    currentBorder: "rgba(255, 255, 255, 0.3)"
+  },
+  {
+    name: "2. Neon Cyberpunk",
+    bg: "rgba(13, 2, 33, 0.85)",
+    border: "rgba(255, 0, 255, 0.2)",
+    accent: "#ff00ff",
+    activeBg: "rgba(255, 0, 255, 0.2)",
+    text: "#00ffff",
+    textMuted: "rgba(0, 255, 255, 0.6)",
+    currentBg: "rgba(0, 255, 255, 0.05)",
+    currentBorder: "rgba(0, 255, 255, 0.3)"
+  },
+  {
+    name: "3. Nord Frost",
+    bg: "rgba(46, 52, 64, 0.85)",
+    border: "rgba(216, 222, 233, 0.1)",
+    accent: "#88c0d0",
+    activeBg: "rgba(136, 192, 208, 0.2)",
+    text: "#eceff4",
+    textMuted: "rgba(236, 239, 244, 0.7)",
+    currentBg: "rgba(216, 222, 233, 0.05)",
+    currentBorder: "rgba(216, 222, 233, 0.3)"
+  },
+  {
+    name: "4. Dracula",
+    bg: "rgba(40, 42, 54, 0.85)",
+    border: "rgba(98, 114, 164, 0.3)",
+    accent: "#ff79c6",
+    activeBg: "rgba(255, 121, 198, 0.2)",
+    text: "#f8f8f2",
+    textMuted: "rgba(248, 248, 242, 0.7)",
+    currentBg: "rgba(248, 248, 242, 0.05)",
+    currentBorder: "rgba(248, 248, 242, 0.3)"
+  },
+  {
+    name: "5. Monokai Pro",
+    bg: "rgba(45, 42, 46, 0.85)",
+    border: "rgba(255, 255, 255, 0.05)",
+    accent: "#ffd866",
+    activeBg: "rgba(255, 216, 102, 0.2)",
+    text: "#fcfcfa",
+    textMuted: "rgba(252, 252, 250, 0.6)",
+    currentBg: "rgba(255, 255, 255, 0.05)",
+    currentBorder: "rgba(255, 255, 255, 0.2)"
+  },
+  {
+    name: "6. Gruvbox Retro",
+    bg: "rgba(40, 40, 40, 0.85)",
+    border: "rgba(235, 219, 178, 0.1)",
+    accent: "#b8bb26",
+    activeBg: "rgba(184, 187, 38, 0.2)",
+    text: "#ebdbb2",
+    textMuted: "rgba(235, 219, 178, 0.6)",
+    currentBg: "rgba(235, 219, 178, 0.05)",
+    currentBorder: "rgba(235, 219, 178, 0.2)"
+  },
+  {
+    name: "7. Midnight Ruby",
+    bg: "rgba(10, 10, 10, 0.85)",
+    border: "rgba(255, 0, 51, 0.15)",
+    accent: "#ff0033",
+    activeBg: "rgba(255, 0, 51, 0.2)",
+    text: "#ffffff",
+    textMuted: "rgba(255, 255, 255, 0.6)",
+    currentBg: "rgba(255, 255, 255, 0.05)",
+    currentBorder: "rgba(255, 255, 255, 0.2)"
+  },
+  {
+    name: "8. Forest Glass",
+    bg: "rgba(11, 31, 21, 0.85)",
+    border: "rgba(167, 243, 208, 0.15)",
+    accent: "#34d399",
+    activeBg: "rgba(52, 211, 153, 0.2)",
+    text: "#ecfdf5",
+    textMuted: "rgba(236, 253, 245, 0.7)",
+    currentBg: "rgba(236, 253, 245, 0.05)",
+    currentBorder: "rgba(236, 253, 245, 0.2)"
+  },
+  {
+    name: "9. Tokyo Night",
+    bg: "rgba(26, 27, 38, 0.85)",
+    border: "rgba(122, 162, 247, 0.15)",
+    accent: "#7aa2f7",
+    activeBg: "rgba(122, 162, 247, 0.2)",
+    text: "#c0caf5",
+    textMuted: "rgba(192, 202, 245, 0.7)",
+    currentBg: "rgba(192, 202, 245, 0.05)",
+    currentBorder: "rgba(192, 202, 245, 0.2)"
+  },
+  {
+    name: "10. Obsidian Gold",
+    bg: "rgba(18, 18, 18, 0.85)",
+    border: "rgba(212, 175, 55, 0.15)",
+    accent: "#d4af37",
+    activeBg: "rgba(212, 175, 55, 0.2)",
+    text: "#ffffff",
+    textMuted: "rgba(255, 255, 255, 0.6)",
+    currentBg: "rgba(255, 255, 255, 0.05)",
+    currentBorder: "rgba(255, 255, 255, 0.2)"
+  }
+];
+
+const container = document.body;
+
+themes.forEach(theme => {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'theme-container';
+  
+  const title = document.createElement('div');
+  title.className = 'theme-title';
+  title.innerText = theme.name;
+  
+  const switcher = document.createElement('div');
+  switcher.className = 'switcher';
+  switcher.style.backgroundColor = theme.bg;
+  switcher.style.border = `1px solid ${theme.border}`;
+  
+  // Folder 1
+  const folder = document.createElement('div');
+  folder.className = 'folder';
+  folder.style.color = theme.accent;
+  folder.innerText = 'Desktop Manager';
+  switcher.appendChild(folder);
+  
+  // Active Item (Simulating hover selection)
+  const item1 = document.createElement('div');
+  item1.className = 'item';
+  item1.style.backgroundColor = theme.activeBg;
+  item1.style.borderLeft = `4px solid ${theme.accent}`;
+  
+  const icon1 = document.createElement('div');
+  icon1.className = 'item-icon';
+  icon1.style.backgroundColor = theme.text;
+  
+  const text1 = document.createElement('div');
+  text1.className = 'item-text';
+  text1.style.color = '#fff';
+  text1.innerText = 'My_desktop_manager';
+  
+  item1.appendChild(icon1);
+  item1.appendChild(text1);
+  switcher.appendChild(item1);
+  
+  // Folder 2
+  const folder2 = document.createElement('div');
+  folder2.className = 'folder';
+  folder2.style.color = theme.accent;
+  folder2.style.marginTop = '4px';
+  folder2.innerText = 'Vera';
+  switcher.appendChild(folder2);
+  
+  // Inactive Item
+  const item2 = document.createElement('div');
+  item2.className = 'item';
+  item2.style.backgroundColor = 'transparent';
+  item2.style.borderLeft = '4px solid transparent';
+  
+  const icon2 = document.createElement('div');
+  icon2.className = 'item-icon';
+  icon2.style.backgroundColor = theme.textMuted;
+  
+  const text2 = document.createElement('div');
+  text2.className = 'item-text';
+  text2.style.color = theme.textMuted;
+  text2.innerText = 'Vera Notion and Anti';
+  
+  item2.appendChild(icon2);
+  item2.appendChild(text2);
+  switcher.appendChild(item2);
+
+  // Current but Inactive Item (Simulating the desktop you are currently on, but not highlighted by mouse)
+  const folder3 = document.createElement('div');
+  folder3.className = 'folder';
+  folder3.style.color = theme.accent;
+  folder3.style.marginTop = '4px';
+  folder3.innerText = 'Full_Stack_Journey';
+  switcher.appendChild(folder3);
+  
+  const item3 = document.createElement('div');
+  item3.className = 'item';
+  item3.style.backgroundColor = theme.currentBg;
+  item3.style.borderLeft = `4px solid ${theme.currentBorder}`;
+  
+  const icon3 = document.createElement('div');
+  icon3.className = 'item-icon';
+  icon3.style.backgroundColor = theme.accent;
+  
+  const text3 = document.createElement('div');
+  text3.className = 'item-text';
+  text3.style.color = theme.accent;
+  text3.style.fontWeight = '800';
+  text3.innerText = 'Anti_FullStack_Tutor';
+
+  const dot3 = document.createElement('div');
+  dot3.className = 'current-dot';
+  dot3.style.backgroundColor = theme.accent;
+  
+  item3.appendChild(icon3);
+  item3.appendChild(text3);
+  item3.appendChild(dot3);
+  switcher.appendChild(item3);
+  
+  wrapper.appendChild(title);
+  wrapper.appendChild(switcher);
+  container.appendChild(wrapper);
+});
+</script>
+</body>
+</html>

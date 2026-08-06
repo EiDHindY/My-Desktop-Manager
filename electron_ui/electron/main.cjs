@@ -407,6 +407,9 @@ function setupDBusWatcher() {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('desktops-updated', newData);
           }
+          if (switcherWindow && !switcherWindow.isDestroyed()) {
+            switcherWindow.webContents.send('desktops-updated', newData);
+          }
         }
       }
     } catch (e) {
@@ -443,8 +446,15 @@ function setupScrollDaemon() {
                   const matchX = stdout.match(/X=(\d+)/);
                   const matchY = stdout.match(/Y=(\d+)/);
                   if (matchX && matchY) {
-                    const x = parseInt(matchX[1], 10) - 175;
-                    const y = parseInt(matchY[1], 10) - 225;
+                    const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1;
+                    const logicalX = parseInt(matchX[1], 10) / scaleFactor;
+                    const logicalY = parseInt(matchY[1], 10) / scaleFactor;
+                    
+                    // We want the cursor to be exactly on the top-left of the visual scrollable pop-up.
+                    // The visual container has 16px padding on all sides, meaning the visual top-left is 16px inside.
+                    // So we offset by -16 to align the visual edge with the cursor.
+                    const x = Math.round(logicalX - 16);
+                    const y = Math.round(logicalY - 16);
                     switcherWindow.setPosition(x, y);
                     switcherWindow.show();
                   } else {
@@ -461,11 +471,13 @@ function setupScrollDaemon() {
           }
         } else if (event.type === 'global-click') {
           if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
+            switcherWindow.webContents.send('compact-reset');
             setTimeout(() => switcherWindow.hide(), 50);
           }
         } else if (event.type === 'confirm') {
           if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
             switcherWindow.webContents.send('compact-confirm');
+            switcherWindow.webContents.send('compact-reset');
             setTimeout(() => switcherWindow.hide(), 50);
           }
         }
@@ -570,6 +582,13 @@ ipcMain.handle('write-json', async (event, filename, data) => {
   try {
     await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
     await fs.rename(tempPath, filePath);
+
+    if (filename === 'session.json' || filename === 'labels.json') {
+      const newData = await performFetchDesktops(false);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktops-updated', newData);
+      if (switcherWindow && !switcherWindow.isDestroyed()) switcherWindow.webContents.send('desktops-updated', newData);
+    }
+
     return true;
   } catch (error) {
     try { await fs.unlink(tempPath); } catch (e) {}

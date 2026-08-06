@@ -3,11 +3,12 @@ import React, { useEffect, useRef } from 'react';
 interface CompactSwitcherProps {
   items: { id: string; name: string; folder: string; icons?: string[] }[];
   selectedIndex: number;
+  currentDesktopId?: string | null;
   onSelect?: (index: number) => void;
   onHover?: (index: number) => void;
 }
 
-export default function CompactSwitcher({ items, selectedIndex, onSelect, onHover }: CompactSwitcherProps) {
+export default function CompactSwitcher({ items, selectedIndex, currentDesktopId, onSelect, onHover }: CompactSwitcherProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll the selected item into view
@@ -52,74 +53,87 @@ export default function CompactSwitcher({ items, selectedIndex, onSelect, onHove
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '2px', // Tighter gap
+          gap: '0px', // Completely flush
           width: '100%', // Fill the available space
           height: 'fit-content', // Tightly wrap the items!
           maxHeight: '100%',
           overflowY: 'auto',
-          backgroundColor: 'rgba(0, 20, 28, 0.85)', // Restore glass box
+          backgroundColor: 'var(--cs-bg, rgba(46, 52, 64, 0.85))',
           backdropFilter: 'blur(15px)',
           border: '1px solid var(--border-glass)',
           borderRadius: '12px',
-          padding: '4px', // Tighter padding
+          padding: '4px 24px 4px 4px', // Extra right padding to prevent clipping when scaled
           scrollbarWidth: 'none'
         }}
       >
         {items.map((item, index) => {
           const isActive = index === selectedIndex;
+          const isCurrent = item.id === currentDesktopId;
           const prevFolder = index > 0 ? items[index - 1].folder : null;
-          const showFolderHeader = item.folder !== prevFolder;
+          const showFolderHeader = item.folder !== prevFolder && item.folder !== 'root' && item.folder !== 'Other';
 
           return (
             <React.Fragment key={item.id}>
               {showFolderHeader && (
                 <div style={{
-                  padding: '12px 12px 4px 12px',
-                  fontSize: '10px',
+                  padding: '4px 12px 0px 12px', // No bottom padding
+                  fontSize: '9px',
                   color: 'var(--accent-blue)',
                   textTransform: 'uppercase',
                   fontWeight: 800,
                   letterSpacing: '1px',
-                  opacity: 0.8
+                  opacity: 0.9,
+                  marginTop: index > 0 ? '4px' : '0',
+                  marginBottom: '0px'
                 }}>
                   {item.folder}
                 </div>
               )}
               <div
                 className={`compact-item ${isActive ? 'active' : ''}`}
-                onClick={() => onSelect?.(index)}
-                onMouseEnter={() => onHover?.(index)}
+                onClick={() => !isCurrent && onSelect?.(index)}
+                onMouseEnter={() => !isCurrent && onHover?.(index)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  padding: '8px 12px', 
-                  paddingLeft: '24px', // Indented for sub-items
+                  padding: '6px 12px', 
+                  paddingLeft: (item.folder !== 'root' && item.folder !== 'Other') ? '24px' : '12px',
                   borderRadius: '8px',
-                  backgroundColor: isActive ? 'rgba(38, 139, 210, 0.2)' : 'transparent',
+                  backgroundColor: isActive ? 'var(--cs-active-bg)' : 'transparent',
                   borderLeft: isActive ? '4px solid var(--accent-blue)' : '4px solid transparent',
-                  transition: 'all 0.1s ease',
-                  marginTop: '2px',
-                  marginBottom: '2px',
-                  cursor: 'pointer'
+                  transform: isActive ? 'scale(1.08)' : 'scale(1)',
+                  transformOrigin: 'left center',
+                  transition: 'all 0.15s ease-out',
+                  marginTop: '0px',
+                  marginBottom: '0px',
+                  cursor: isCurrent ? 'default' : 'pointer',
+                  zIndex: isActive ? 10 : 1, // Keep scaled item above others
+                  opacity: isCurrent ? 0.4 : 1,
+                  filter: isCurrent ? 'grayscale(100%)' : 'none'
                 }}
               >
                 {item.icons && item.icons.length > 0 ? (
-                  <div style={{ display: 'flex', gap: '4px', marginRight: '12px' }}>
+                  <div style={{ display: 'flex', gap: '4px', marginRight: '10px' }}>
                     {item.icons.map((icon, idx) => (
                       <img 
                         key={idx}
                         src={`local-icon://${encodeURIComponent(icon)}`} 
                         alt="icon" 
-                        style={{ width: '20px', height: '20px', objectFit: 'contain', opacity: isActive ? 1 : 0.6 }} 
+                        style={{ width: '18px', height: '18px', objectFit: 'contain', opacity: isActive ? 1 : 0.6 }} 
                       />
                     ))}
                   </div>
                 ) : (
-                  <div style={{ width: '20px', height: '20px', marginRight: '12px' }} />
+                  <div style={{ width: '18px', height: '18px', marginRight: '10px' }} />
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', color: isActive ? '#fff' : 'rgba(255, 255, 255, 0.8)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.name}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '13px', color: isActive ? 'var(--cs-text-active)' : 'var(--text-dim)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.name}
+                    </div>
+                    {isCurrent && (
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--accent-blue)' }} />
+                    )}
                   </div>
                 </div>
               </div>

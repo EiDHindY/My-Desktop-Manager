@@ -11,6 +11,7 @@ export interface IElectronAPI {
   nativeAction: (action: string, params?: any) => Promise<any>;
   onCompactScroll: (callback: (direction: number) => void) => void;
   onCompactConfirm: (callback: () => void) => void;
+  onCompactReset: (callback: () => void) => void;
   onDesktopsUpdated: (callback: (info: any) => void) => void;
   registerShortcuts: (shortcuts: { uuid: string; shortcut: string }[]) => Promise<string[]>;
 }

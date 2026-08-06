@@ -4,10 +4,12 @@ import './App.css'; // ensure CSS variables are loaded
 
 export default function CompactSwitcherApp() {
   const [items, setItems] = useState<any[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [currentDesktopId, setCurrentDesktopId] = useState<string | null>(null);
+  const currentDesktopIdRef = useRef<string | null>(null);
   
   const itemsRef = useRef<any[]>([]);
-  const indexRef = useRef(0);
+  const indexRef = useRef(-1);
   
   const loadData = async () => {
     if (!window.electronAPI) return;
@@ -57,6 +59,8 @@ export default function CompactSwitcherApp() {
       
       itemsRef.current = newItems;
       setItems(newItems);
+      setCurrentDesktopId(currentDesktop || null);
+      currentDesktopIdRef.current = currentDesktop || null;
     } catch (e) {
       console.error("Failed to load desktops for switcher:", e);
     }
@@ -74,13 +78,18 @@ export default function CompactSwitcherApp() {
   useEffect(() => {
     if (!window.electronAPI) return;
     
-    // We expect main.cjs to trigger compact-scroll
     window.electronAPI.onCompactScroll((direction) => {
-      let next = indexRef.current + (direction > 0 ? -1 : 1);
-      if (next < 0) next = itemsRef.current.length - 1;
-      if (next >= itemsRef.current.length) next = 0;
+      let next = indexRef.current;
+      const step = direction > 0 ? -1 : 1;
       
-      // Safety if items is empty
+      // Find the next valid index (skip currentDesktopId)
+      for (let i = next + step; i >= 0 && i < itemsRef.current.length; i += step) {
+        if (itemsRef.current[i].id !== currentDesktopIdRef.current) {
+          next = i;
+          break;
+        }
+      }
+      
       if (itemsRef.current.length === 0) next = 0;
       
       indexRef.current = next;
@@ -93,6 +102,13 @@ export default function CompactSwitcherApp() {
         window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selected.id}"`);
       }
     });
+
+    if (window.electronAPI.onCompactReset) {
+      window.electronAPI.onCompactReset(() => {
+        indexRef.current = -1;
+        setSelectedIndex(-1);
+      });
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && window.electronAPI) {
@@ -107,20 +123,22 @@ export default function CompactSwitcherApp() {
   }, []);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden', padding: '16px' }}>
       <CompactSwitcher 
         items={items} 
-        selectedIndex={selectedIndex} 
-        onHover={(index) => {
-          indexRef.current = index;
-          setSelectedIndex(index);
-        }}
-        onSelect={(index) => {
-          const selected = itemsRef.current[index];
+        selectedIndex={selectedIndex}
+        currentDesktopId={currentDesktopId}
+        onSelect={(idx) => {
+          const selected = itemsRef.current[idx];
+          setSelectedIndex(idx);
           if (selected && window.electronAPI) {
             window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selected.id}"`);
             window.electronAPI.hideCompactSwitcher();
           }
+        }}
+        onHover={(idx) => {
+          indexRef.current = idx;
+          setSelectedIndex(idx);
         }}
       />
     </div>

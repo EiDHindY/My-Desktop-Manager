@@ -28,6 +28,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('compact-confirm');
     ipcRenderer.on('compact-confirm', () => callback());
   },
+  onCompactReset: (callback) => {
+    ipcRenderer.removeAllListeners('compact-reset');
+    ipcRenderer.on('compact-reset', () => callback());
+  },
   onMessage: (callback) => {
     const handler = (_event, msg) => callback(msg);
     ipcRenderer.on('radial-scroll', handler);
