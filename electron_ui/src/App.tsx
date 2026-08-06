@@ -5,6 +5,7 @@ import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
 import TasksTab from './components/TasksTab'
 import ChromeTab from './components/ChromeTab'
+import CompactSwitcher from './components/CompactSwitcher'
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
 import UniversalCreateModal from './components/UniversalCreateModal'
@@ -73,6 +74,12 @@ function App() {
     visitHistoryRef,
     prevDesktopRef,
   } = useVisitHistory();
+  
+  const [isCompactSwitcherActive, setIsCompactSwitcherActive] = useState(false);
+  const [compactSelectedIndex, setCompactSelectedIndex] = useState(0);
+  const compactItemsRef = useRef<any[]>([]);
+  const compactIndexRef = useRef(0);
+
   const [isPinned, setIsPinned] = useState(true); // Default to true because KWin Window Rule forces it on launch
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -264,6 +271,52 @@ function App() {
       });
     }
   }, [desktopShortcuts])
+
+  
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.onCompactScroll((direction) => {
+      setIsCompactSwitcherActive(true);
+      
+      // Compute items
+      const folders = dataRef.current?.session?.folders || {};
+      const items: any[] = [];
+      const dNames = dataRef.current?.names || desktopNames;
+      const dIcons = dataRef.current?.icons || desktopIcons;
+      
+      Object.entries(folders).forEach(([folderName, ids]) => {
+         if (Array.isArray(ids)) {
+           ids.forEach(fullId => {
+             const id = fullId.split('___')[0];
+             const name = dNames[id];
+             if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
+               if (!items.find(i => i.id === id)) {
+                 items.push({ id, name, folder: folderName, icons: dIcons[id] });
+               }
+             }
+           });
+         }
+      });
+      
+      compactItemsRef.current = items;
+      
+      let next = compactIndexRef.current + (direction > 0 ? -1 : 1);
+      if (next < 0) next = items.length - 1;
+      if (next >= items.length) next = 0;
+      
+      compactIndexRef.current = next;
+      setCompactSelectedIndex(next);
+    });
+
+    window.electronAPI.onCompactConfirm(() => {
+      setIsCompactSwitcherActive(false);
+      const items = compactItemsRef.current;
+      const selected = items[compactIndexRef.current];
+      if (selected) {
+        handleSwitch(selected.id);
+      }
+    });
+  }, [desktopNames, desktopIcons]);
 
   // FAST REFRESH: Fetch new data shortly after an action to make the app feel snappy
   useEffect(() => {
@@ -761,6 +814,14 @@ function App() {
           <IconPin size={14} fill={!isPinned ? 'currentColor' : 'none'} />
         </button>
       </div>
+      
+      {isCompactSwitcherActive && (
+        <CompactSwitcher 
+          items={compactItemsRef.current} 
+          selectedIndex={compactSelectedIndex} 
+        />
+      )}
+
       {promptConfig && (
         <PromptModal 
           title={promptConfig.title}

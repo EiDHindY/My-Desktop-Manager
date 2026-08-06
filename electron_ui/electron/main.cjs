@@ -21,7 +21,6 @@ function showWindow() {
   
   // Always show and focus (do not hide). The KDE Window Rule handles the Wayland override!
   mainWindow.show();
-  mainWindow.setAlwaysOnTop(true, 'floating');
   mainWindow.focus();
 
   // Force KWin to activate our window using kdotool (bypasses Wayland focus stealing)
@@ -51,7 +50,7 @@ if (!gotTheLock) {
   fsSync.writeFileSync(PID_FILE, process.pid.toString());
 
   app.on('second-instance', () => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -67,7 +66,6 @@ function createWindow() {
     height: 550,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
     skipTaskbar: true,
     title: "Desktop Manager", // Explicit title for wmctrl
     icon: ICON_PATH,
@@ -93,18 +91,58 @@ function createWindow() {
 
   // Set behaviors AFTER show() so KDE registers the window properly
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  mainWindow.setAlwaysOnTop(true, 'floating');
 
+}
+
+let switcherWindow;
+let isPositioningSwitcher = false;
+let pendingScrolls = [];
+
+function createSwitcherWindow() {
+  switcherWindow = new BrowserWindow({
+    width: 350,
+    height: 450,
+    frame: false,
+    transparent: true,
+    hasShadow: false, // Prevents KDE from drawing a large glass box around the transparent window
+    type: 'tooltip',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: true, // Needs focus to detect blur/click-outside
+    show: false, // Start hidden
+    title: "Compact Switcher",
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  if (process.env.NODE_ENV === 'development') {
+    switcherWindow.loadURL('http://127.0.0.1:5173?switcher=true');
+  } else {
+    switcherWindow.loadFile(path.join(__dirname, '../dist/index.html'), { search: 'switcher=true' });
+  }
 }
 
 app.whenReady().then(() => {
   // Register custom protocol for local icons
   try {
     protocol.registerFileProtocol('local-icon', (request, callback) => {
-      const url = decodeURIComponent(request.url.replace('local-icon://', ''));
+      const url = decodeURIComponent(request.url.replace('local-icon://', '')).replace(/\/$/, ''); // Remove trailing slash if any
       const appPath = app.getAppPath();
       const iconsDir = path.join(appPath, '..', 'icons');
-      return callback(path.join(iconsDir, url));
+      
+      try {
+        const files = require('fs').readdirSync(iconsDir);
+        const match = files.find(f => f.toLowerCase() === url.toLowerCase());
+        if (match) {
+          return callback({ path: path.join(iconsDir, match) });
+        }
+      } catch (e) {
+        console.error('Error reading icons dir:', e);
+      }
+      return callback({ path: path.join(iconsDir, url) }); // Fallback
     });
   } catch (error) {
     console.error('Failed to register protocol', error);
@@ -114,8 +152,10 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
   setupDBusWatcher();
+  setupScrollDaemon();
 
   createWindow();
+  createSwitcherWindow();
 });
 
 
@@ -381,6 +421,67 @@ function setupDBusWatcher() {
   });
 }
 
+let scrollDaemonChild = null;
+function setupScrollDaemon() {
+  if (scrollDaemonChild) return;
+  const scriptPath = path.join(__dirname, '..', '..', 'shared_backend', 'scroll_daemon.py');
+  scrollDaemonChild = spawn('python3', [scriptPath]);
+  
+  scrollDaemonChild.stdout.on('data', (data) => {
+    try {
+      const str = data.toString().trim();
+      const lines = str.split('\n');
+      for (const line of lines) {
+        if (!line) continue;
+        const event = JSON.parse(line);
+        console.log('[SCROLL DAEMON]', event);
+        if (event.type === 'scroll') {
+          if (switcherWindow && !switcherWindow.isDestroyed()) {
+            if (!switcherWindow.isVisible()) {
+              exec('export PATH=$PATH:~/.local/bin && kdotool getmouselocation --shell', (error, stdout) => {
+                if (!error && stdout) {
+                  const matchX = stdout.match(/X=(\d+)/);
+                  const matchY = stdout.match(/Y=(\d+)/);
+                  if (matchX && matchY) {
+                    const x = parseInt(matchX[1], 10) - 175;
+                    const y = parseInt(matchY[1], 10) - 225;
+                    switcherWindow.setPosition(x, y);
+                    switcherWindow.show();
+                  } else {
+                    switcherWindow.show();
+                  }
+                } else {
+                  switcherWindow.show();
+                }
+                switcherWindow.webContents.send('compact-scroll', event.direction);
+              });
+            } else {
+              switcherWindow.webContents.send('compact-scroll', event.direction);
+            }
+          }
+        } else if (event.type === 'global-click') {
+          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
+            setTimeout(() => switcherWindow.hide(), 50);
+          }
+        } else if (event.type === 'confirm') {
+          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
+            switcherWindow.webContents.send('compact-confirm');
+            setTimeout(() => switcherWindow.hide(), 50);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[SCROLL DAEMON ERROR PARSING]', e);
+    }
+  });
+
+  scrollDaemonChild.on('close', () => {
+    console.log('[SCROLL DAEMON] closed. Restarting in 5s...');
+    scrollDaemonChild = null;
+    setTimeout(setupScrollDaemon, 5000);
+  });
+}
+
 ipcMain.handle('list-icons', async () => {
   const appPath = app.getAppPath();
   const iconsDir = path.join(appPath, '..', 'icons');
@@ -517,6 +618,12 @@ ipcMain.handle('fetch-chrome-profiles', async () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
     return [];
+  }
+});
+
+ipcMain.handle('hide-compact-switcher', () => {
+  if (switcherWindow && !switcherWindow.isDestroyed()) {
+    switcherWindow.hide();
   }
 });
 

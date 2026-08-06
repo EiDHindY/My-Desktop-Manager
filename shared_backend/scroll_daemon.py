@@ -34,10 +34,18 @@ async def monitor_device(device):
                         if state["active_alt_scrolling"]:
                             emit("confirm")
                             state["active_alt_scrolling"] = False
+                elif event.code in {272, 273}: # BTN_LEFT, BTN_RIGHT
+                    if event.value == 1: # Mouse down
+                        emit("global-click")
                             
             elif event.type == evdev.ecodes.EV_REL:
                 # sys.stderr.write(f"REL: {event.code} VAL: {event.value}\n")
                 if event.code in [evdev.ecodes.REL_WHEEL, evdev.ecodes.REL_WHEEL_HI_RES]:
+                    import time
+                    current_time = time.time()
+                    if current_time - state.get("last_scroll_time", 0) < 0.05:
+                        continue
+                    state["last_scroll_time"] = current_time
                     sys.stderr.write(f"SCROLL detected: {event.value} (Alt: {state['alt_held']})\n")
                     sys.stderr.flush()
                     if state["alt_held"]:

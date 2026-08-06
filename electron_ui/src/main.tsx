@@ -9,8 +9,12 @@ window.addEventListener('error', (event) => {
   }
 });
 
+import CompactSwitcherApp from './CompactSwitcherApp.tsx'
+
+const isSwitcher = window.location.search.includes('switcher=true');
+
 createRoot(document.getElementById('root')!).render(
   <>
-    <App />
+    {isSwitcher ? <CompactSwitcherApp /> : <App />}
   </>,
 )

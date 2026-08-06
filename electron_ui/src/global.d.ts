@@ -7,7 +7,10 @@ export interface IElectronAPI {
   listTemplates: () => Promise<any[]>;
   fetchChromeProfiles: () => Promise<any[]>;
   listIcons: () => Promise<string[]>;
+  hideCompactSwitcher: () => Promise<void>;
   nativeAction: (action: string, params?: any) => Promise<any>;
+  onCompactScroll: (callback: (direction: number) => void) => void;
+  onCompactConfirm: (callback: () => void) => void;
   onDesktopsUpdated: (callback: (info: any) => void) => void;
   registerShortcuts: (shortcuts: { uuid: string; shortcut: string }[]) => Promise<string[]>;
 }

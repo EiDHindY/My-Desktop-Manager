@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listTemplates: () => ipcRenderer.invoke('list-templates'),
   fetchChromeProfiles: () => ipcRenderer.invoke('fetch-chrome-profiles'),
   listIcons: () => ipcRenderer.invoke('list-icons'),
+  hideCompactSwitcher: () => ipcRenderer.invoke('hide-compact-switcher'),
   nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
   registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts),
   onDesktopsUpdated: (callback) => {
@@ -18,6 +19,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onPinStatusChanged: (callback) => {
     ipcRenderer.removeAllListeners('pin-status-changed');
     ipcRenderer.on('pin-status-changed', (_event, isAlwaysOnTop) => callback(isAlwaysOnTop));
+  },
+  onCompactScroll: (callback) => {
+    ipcRenderer.removeAllListeners('compact-scroll');
+    ipcRenderer.on('compact-scroll', (_event, direction) => callback(direction));
+  },
+  onCompactConfirm: (callback) => {
+    ipcRenderer.removeAllListeners('compact-confirm');
+    ipcRenderer.on('compact-confirm', () => callback());
   },
   onMessage: (callback) => {
     const handler = (_event, msg) => callback(msg);
