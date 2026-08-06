@@ -14,12 +14,15 @@ export default function CompactSwitcherApp() {
   const loadData = async () => {
     if (!window.electronAPI) return;
     try {
-      const [sessionData, desktopInfo] = await Promise.all([
+      const [sessionData, desktopInfo, historyData] = await Promise.all([
         window.electronAPI.readJSON('session.json'),
-        window.electronAPI.fetchDesktops(false) // no window scan needed
+        window.electronAPI.fetchDesktops(true), // scan windows to get counts
+        window.electronAPI.readJSON('history.json')
       ]);
 
       const folders = sessionData?.folders || {};
+      const creationTimes = sessionData?.creation_times || {};
+      const visitHistory = historyData?.history || [];
       const dNames = desktopInfo?.names || {};
       const dIcons = desktopInfo?.icons || {};
       const currentDesktop = desktopInfo?.current;
@@ -41,9 +44,14 @@ export default function CompactSwitcherApp() {
            ids.forEach(fullId => {
              const id = fullId.split('___')[0];
              const name = dNames[id];
+             const count = desktopInfo.counts ? desktopInfo.counts[id] || 0 : 0;
+             const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
+
              if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-               if (!newItems.find(i => i.id === id)) {
-                 newItems.push({ id, name, folder: folderName, icons: dIcons[id] });
+               if (count > 0 || isRecentlyCreated || id === currentDesktop) {
+                 if (!newItems.find(i => i.id === id)) {
+                   newItems.push({ id, name, folder: folderName, icons: dIcons[id] });
+                 }
                }
              }
            });
@@ -56,6 +64,20 @@ export default function CompactSwitcherApp() {
            newItems.push({ id: currentDesktop, name, folder: 'Other', icons: dIcons[currentDesktop] });
          }
       }
+
+      newItems.sort((a, b) => {
+        if (a.id === currentDesktop) return -1;
+        if (b.id === currentDesktop) return 1;
+
+        const idxA = visitHistory.indexOf(a.id);
+        const idxB = visitHistory.indexOf(b.id);
+        
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        
+        return a.name.localeCompare(b.name);
+      });
       
       itemsRef.current = newItems;
       setItems(newItems);
@@ -78,23 +100,40 @@ export default function CompactSwitcherApp() {
   useEffect(() => {
     if (!window.electronAPI) return;
     
-    window.electronAPI.onCompactScroll((direction) => {
-      let next = indexRef.current;
-      const step = direction > 0 ? -1 : 1;
-      
-      // Find the next valid index (skip currentDesktopId)
-      for (let i = next + step; i >= 0 && i < itemsRef.current.length; i += step) {
-        if (itemsRef.current[i].id !== currentDesktopIdRef.current) {
-          next = i;
-          break;
+    if (window.electronAPI.onCompactShow) {
+      window.electronAPI.onCompactShow((payload: any) => {
+        setMousePos({ x: payload.localX, y: payload.localY });
+        if (payload.direction) {
+          const length = itemsRef.current.length;
+          if (length <= 1) return;
+          const step = payload.direction > 0 ? -1 : 1;
+          let next = step === 1 ? 1 : length - 1;
+          indexRef.current = next;
+          setSelectedIndex(next);
         }
-      }
-      
-      if (itemsRef.current.length === 0) next = 0;
-      
-      indexRef.current = next;
-      setSelectedIndex(next);
-    });
+      });
+    }
+
+    if (window.electronAPI.onCompactScroll) {
+      window.electronAPI.onCompactScroll((direction) => {
+        const length = itemsRef.current.length;
+        if (length <= 1) return;
+
+        let next = indexRef.current;
+        const step = direction > 0 ? -1 : 1;
+        
+        if (next === -1) {
+          next = step === 1 ? 1 : length - 1;
+        } else {
+          next += step;
+          if (next < 1) next = length - 1;
+          if (next >= length) next = 1;
+        }
+        
+        indexRef.current = next;
+        setSelectedIndex(next);
+      });
+    }
 
     window.electronAPI.onCompactConfirm(() => {
       const selected = itemsRef.current[indexRef.current];
@@ -123,7 +162,7 @@ export default function CompactSwitcherApp() {
   }, []);
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'hidden', padding: '16px' }}>
+    <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
       <CompactSwitcher 
         items={items} 
         selectedIndex={selectedIndex}

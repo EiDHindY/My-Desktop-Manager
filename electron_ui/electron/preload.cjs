@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('compact-scroll');
     ipcRenderer.on('compact-scroll', (_event, direction) => callback(direction));
   },
+  onCompactShow: (callback) => {
+    ipcRenderer.removeAllListeners('compact-show');
+    ipcRenderer.on('compact-show', (_event, payload) => callback(payload));
+  },
   onCompactConfirm: (callback) => {
     ipcRenderer.removeAllListeners('compact-confirm');
     ipcRenderer.on('compact-confirm', () => callback());

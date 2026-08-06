@@ -16,7 +16,7 @@ const PID_FILE = '/tmp/desktop-manager.pid';
 
 // Helper: show and focus the window (used by both SIGUSR1 and globalShortcut)
 function showWindow() {
-  if (!mainWindow) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   
   // Always show and focus (do not hide). The KDE Window Rule handles the Wayland override!
@@ -100,12 +100,12 @@ let pendingScrolls = [];
 
 function createSwitcherWindow() {
   switcherWindow = new BrowserWindow({
-    width: 350,
-    height: 450,
+    width: 600,
+    height: 300,
     frame: false,
     transparent: true,
     hasShadow: false, // Prevents KDE from drawing a large glass box around the transparent window
-    type: 'tooltip',
+    type: 'menu',
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: true, // Needs focus to detect blur/click-outside
@@ -450,11 +450,9 @@ function setupScrollDaemon() {
                     const logicalX = parseInt(matchX[1], 10) / scaleFactor;
                     const logicalY = parseInt(matchY[1], 10) / scaleFactor;
                     
-                    // We want the cursor to be exactly on the top-left of the visual scrollable pop-up.
-                    // The visual container has 16px padding on all sides, meaning the visual top-left is 16px inside.
-                    // So we offset by -16 to align the visual edge with the cursor.
-                    const x = Math.round(logicalX - 16);
-                    const y = Math.round(logicalY - 16);
+                    // We offset x by 70 and y by 32 so the mouse lands comfortably inside the first item.
+                    const x = Math.round(logicalX - 70);
+                    const y = Math.round(logicalY - 32);
                     switcherWindow.setPosition(x, y);
                     switcherWindow.show();
                   } else {
@@ -610,6 +608,11 @@ ipcMain.handle('move-desktop', async (event, fullId, targetFolder, targetIndex) 
       data.folders[targetFolder].splice(targetIndex, 0, fullId);
       await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
       await fs.rename(tempPath, sessionPath);
+      
+      const newData = await performFetchDesktops(false);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktops-updated', newData);
+      if (switcherWindow && !switcherWindow.isDestroyed()) switcherWindow.webContents.send('desktops-updated', newData);
+      
       return true;
     }
     return false;

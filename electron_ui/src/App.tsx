@@ -280,6 +280,7 @@ function App() {
       
       // Compute items
       const folders = dataRef.current?.session?.folders || {};
+      const creationTimes = dataRef.current?.session?.creation_times || {};
       const items: any[] = [];
       const dNames = dataRef.current?.names || desktopNames;
       const dIcons = dataRef.current?.icons || desktopIcons;
@@ -289,20 +290,49 @@ function App() {
            ids.forEach(fullId => {
              const id = fullId.split('___')[0];
              const name = dNames[id];
+             const count = windowCounts[id] || 0;
+             const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
+
              if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-               if (!items.find(i => i.id === id)) {
-                 items.push({ id, name, folder: folderName, icons: dIcons[id] });
+               if (count > 0 || isRecentlyCreated || id === currentDesktop) {
+                 if (!items.find(i => i.id === id)) {
+                   items.push({ id, name, folder: folderName, icons: dIcons[id] });
+                 }
                }
              }
            });
          }
       });
       
+      items.sort((a, b) => {
+        if (a.id === currentDesktop) return -1;
+        if (b.id === currentDesktop) return 1;
+
+        const idxA = visitHistoryRef.current.indexOf(a.id);
+        const idxB = visitHistoryRef.current.indexOf(b.id);
+        
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        
+        return a.name.localeCompare(b.name);
+      });
+      
       compactItemsRef.current = items;
       
-      let next = compactIndexRef.current + (direction > 0 ? -1 : 1);
-      if (next < 0) next = items.length - 1;
-      if (next >= items.length) next = 0;
+      const length = items.length;
+      if (length <= 1) return; // No other items to switch to
+
+      let next = compactIndexRef.current;
+      const step = direction > 0 ? -1 : 1;
+      
+      if (next === -1) {
+        next = step === 1 ? 1 : length - 1;
+      } else {
+        next += step;
+        if (next < 1) next = length - 1;
+        if (next >= length) next = 1;
+      }
       
       compactIndexRef.current = next;
       setCompactSelectedIndex(next);
@@ -316,7 +346,7 @@ function App() {
         handleSwitch(selected.id);
       }
     });
-  }, [desktopNames, desktopIcons]);
+  }, [desktopNames, desktopIcons, windowCounts, currentDesktop]);
 
   // FAST REFRESH: Fetch new data shortly after an action to make the app feel snappy
   useEffect(() => {
