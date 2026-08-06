@@ -69,7 +69,7 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
       >
         {item.icons && item.icons.length > 0 ? (
           <div style={{ display: 'flex', gap: '4px', marginRight: '10px' }}>
-            {item.icons.map((icon, idx) => (
+            {item.icons.map((icon: string, idx: number) => (
               <img 
                 key={idx}
                 src={`local-icon://${encodeURIComponent(icon)}`} 

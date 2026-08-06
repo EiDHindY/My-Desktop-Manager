@@ -99,20 +99,6 @@ export default function CompactSwitcherApp() {
 
   useEffect(() => {
     if (!window.electronAPI) return;
-    
-    if (window.electronAPI.onCompactShow) {
-      window.electronAPI.onCompactShow((payload: any) => {
-        setMousePos({ x: payload.localX, y: payload.localY });
-        if (payload.direction) {
-          const length = itemsRef.current.length;
-          if (length <= 1) return;
-          const step = payload.direction > 0 ? -1 : 1;
-          let next = step === 1 ? 1 : length - 1;
-          indexRef.current = next;
-          setSelectedIndex(next);
-        }
-      });
-    }
 
     if (window.electronAPI.onCompactScroll) {
       window.electronAPI.onCompactScroll((direction) => {
