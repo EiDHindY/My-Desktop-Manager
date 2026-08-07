@@ -92,6 +92,10 @@ function createWindow() {
   // Set behaviors AFTER show() so KDE registers the window properly
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
+  mainWindow.once('ready-to-show', () => {
+    // Force KWin to activate our window using kdotool on first launch
+    exec(`export PATH=$PATH:~/.local/bin && kdotool search --name "^Desktop Manager$" windowactivate`);
+  });
 }
 
 let switcherWindow;
@@ -175,6 +179,10 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// Ensure graceful shutdown on Ctrl+C to prevent zombie processes
+process.on('SIGINT', () => app.quit());
+process.on('SIGTERM', () => app.quit());
 
 // Listen for messages from the React UI to execute commands
 // Using ipcMain.handle so the renderer can await completion before refreshing data
@@ -351,6 +359,8 @@ done 2>/dev/null
         cacheUpdated = true;
       }
 
+      const isPinned = cached ? !!cached.isPinned : false;
+
       desktops[uuid] = name;
       priorities[uuid] = priority;
       // pos is 0-based from qdbus; kdotool uses 1-based indices
@@ -360,6 +370,8 @@ done 2>/dev/null
       appMap[uuid] = []; // app class scanning removed for performance
       desktopIcons[uuid] = (cached && cached.icons) ? cached.icons : [];
       desktopShortcuts[uuid] = (cached && cached.shortcut) ? cached.shortcut : null;
+      if (!global.pinnedDesktops) global.pinnedDesktops = {};
+      global.pinnedDesktops[uuid] = isPinned;
     }
 
     if (cacheUpdated) {
@@ -373,6 +385,7 @@ done 2>/dev/null
       apps: appMap, 
       icons: desktopIcons, 
       shortcuts: desktopShortcuts,
+      pinned: global.pinnedDesktops || {},
       current: currentOutput 
     };
   } catch (error) {
@@ -383,6 +396,25 @@ done 2>/dev/null
 
 ipcMain.handle('fetch-desktops', async (event, scanWindows = true) => {
   return await performFetchDesktops(scanWindows);
+});
+
+ipcMain.handle('toggle-pin-desktop', async (event, uuid) => {
+  const labelsPath = path.join(os.homedir(), '.config', 'desktop-manager', 'labels.json');
+  if (global.labelCacheData && global.labelCacheData[uuid]) {
+    global.labelCacheData[uuid].isPinned = !global.labelCacheData[uuid].isPinned;
+    try {
+      await fs.writeFile(labelsPath, JSON.stringify(global.labelCacheData, null, 2));
+      const newData = await performFetchDesktops(false);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('desktops-updated', newData);
+      }
+      if (switcherWindow && !switcherWindow.isDestroyed()) {
+        switcherWindow.webContents.send('desktops-updated', newData);
+      }
+    } catch (e) {
+      console.error('Error saving pin status', e);
+    }
+  }
 });
 
 // Setup python dbus watcher

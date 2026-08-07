@@ -33,7 +33,7 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
   }, []);
 
   const launchProfile = (id: string) => {
-    window.electronAPI.executeCommand(`google-chrome --profile-directory="${id}"`);
+    window.electronAPI.executeCommand(`setsid google-chrome --profile-directory="${id}" </dev/null >/dev/null 2>&1 &`);
   };
 
   const filtered = profiles

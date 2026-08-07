@@ -42,7 +42,7 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, visitHistory = [], setSessionData, onAction, onSwitch }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, visitHistory?: string[], setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void }) {
+export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, visitHistory = [], setSessionData, onAction, onSwitch, pinnedCache = {}, onTogglePin }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, visitHistory?: string[], setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void, pinnedCache?: Record<string, boolean>, onTogglePin?: (id: string) => void }) {
 
   const getPriorityScore = (p: string) => {
     const up = p?.toUpperCase();
@@ -654,6 +654,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                         shortcut={shortcut}
                         hasShortcutError={hasShortcutError}
                         folderName={folderName}
+                        isPinned={pinnedCache[pureId] || false}
                         onContextMenu={handleContextMenu}
                         onSwitch={handleSwitchDesktop}
                         onHover={(id) => {
@@ -668,6 +669,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                         onExecuteCommand={executeMenuCommand}
                         onPrompt={(title, defaultVal, command, isConfirm) => setPromptConfig({ title, defaultValue: defaultVal, command, isConfirm })}
                         onShowIconPicker={setShowIconPicker}
+                        onTogglePin={onTogglePin}
                         hideActionButtons={isGridView}
                       />
                     );

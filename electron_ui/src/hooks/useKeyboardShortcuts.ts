@@ -83,7 +83,7 @@ export function useKeyboardShortcuts({
           const cD = currentDesktopRef.current;
           const elToFocus = document.activeElement as HTMLElement;
           if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
+            handleSetActiveTab('tasks');
           }
           if (rD) {
             setLastActionTime(Date.now());
@@ -104,7 +104,7 @@ export function useKeyboardShortcuts({
           e.preventDefault();
           const elToFocus = document.activeElement as HTMLElement;
           if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
+            handleSetActiveTab('tasks');
           }
           const currentHist = visitHistoryRef.current;
           if (currentHist.length > 0) {
@@ -123,7 +123,7 @@ export function useKeyboardShortcuts({
           e.preventDefault();
           const elToFocus = document.activeElement as HTMLElement;
           if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('active');
+            handleSetActiveTab('tasks');
           }
           const currentHist = visitHistoryRef.current;
           if (currentHist.length > 0) {
@@ -151,6 +151,17 @@ export function useKeyboardShortcuts({
         }
       }
 
+      // Global forward slash shortcut to jump to Chrome tab
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '/') {
+        e.preventDefault();
+        handleSetActiveTab('chrome');
+        window.dispatchEvent(new CustomEvent('clear-search-query'));
+        setTimeout(() => {
+          searchInputRef.current?.focus();
+        }, 0);
+        return;
+      }
+
       // Clear search on Escape - Allow if in search input or no input
       if (e.key === 'Escape') {
         if (!isInput || document.activeElement === searchInputRef.current) {
@@ -162,7 +173,7 @@ export function useKeyboardShortcuts({
       if (isInput) return;
 
       // Auto-focus search on any alphanumeric key if not already in an input
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9\/]$/i.test(e.key)) {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[a-z0-9]$/i.test(e.key)) {
         const interceptEvent = new CustomEvent('global-typing-intercept', { detail: { key: e.key }, cancelable: true });
         window.dispatchEvent(interceptEvent);
         if (!interceptEvent.defaultPrevented) {

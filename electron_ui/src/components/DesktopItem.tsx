@@ -1,4 +1,5 @@
 import React from 'react';
+import { Lock, Unlock } from 'lucide-react';
 import { Draggable } from '@hello-pangea/dnd';
 import { createPortal } from 'react-dom';
 import { 
@@ -31,6 +32,7 @@ interface DesktopItemProps {
   shortcut: string | null;
   hasShortcutError: boolean;
   folderName: string;
+  isPinned?: boolean;
   
   onContextMenu: (e: React.MouseEvent, type: 'desktop', id: string, folderName?: string) => void;
   onSwitch: (id: string) => void;
@@ -38,14 +40,15 @@ interface DesktopItemProps {
   onExecuteCommand: (cmd: string) => void;
   onPrompt: (title: string, defaultVal: string, command: string, isConfirm?: boolean) => void;
   onShowIconPicker: (id: string) => void;
+  onTogglePin?: (id: string) => void;
   hideActionButtons?: boolean;
 }
 
 const DesktopItemComponent: React.FC<DesktopItemProps> = ({
   desktopId, pureId, dIndex, query, displayName, isActive, isReturn, historyShortcut, winCount, hasWindows,
   isSelected, isHovered, priority, priorityColor, hasScriptAttached, isDeleting,
-  icons, shortcut, hasShortcutError, folderName,
-  onContextMenu, onSwitch, onHover, onExecuteCommand, onPrompt, onShowIconPicker, hideActionButtons
+  icons, shortcut, hasShortcutError, folderName, isPinned,
+  onContextMenu, onSwitch, onHover, onExecuteCommand, onPrompt, onShowIconPicker, onTogglePin, hideActionButtons
 }) => {
   let stateClass = "desktop-item ";
   if (isActive) stateClass += "active ";
@@ -152,6 +155,26 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
             
             {!hideActionButtons && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: isFocused ? 1 : 0, transition: 'opacity 0.2s ease', flexShrink: 0 }}>
+                <div 
+                  className="btn-hover"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onTogglePin) onTogglePin(pureId);
+                  }}
+                  style={{ 
+                    backgroundColor: isPinned ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                    color: isPinned ? 'var(--accent-blue)' : 'var(--text-dim)',
+                    width: '20px', 
+                    height: '20px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    borderRadius: '4px'
+                  }}
+                  title={isPinned ? "Unpin" : "Pin"}
+                >
+                  {isPinned ? <Lock size={12} /> : <Unlock size={12} />}
+                </div>
                 <div 
                   className="btn-hover"
                   onClick={(e) => { 

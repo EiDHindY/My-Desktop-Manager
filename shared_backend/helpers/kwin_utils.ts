@@ -28,9 +28,9 @@ export function launchAppsForDesktop(uuid: string, waitUntilFinished: boolean = 
             apps.forEach((cmd: string) => {
                 if (waitUntilFinished) {
                     try {
-                        // BUG-16 FIX: Was overriding DISPLAY=':0' which breaks on Wayland
-                        // or non-default displays. Inherit env as-is instead.
-                        execSync(cmd, { stdio: 'ignore' });
+                        // Use setsid to detach the launched app from the terminal's process group
+                        // so that Ctrl+C doesn't kill it.
+                        execSync(`setsid ${cmd}`, { stdio: 'ignore' });
                     } catch (e) {}
                 } else {
                     spawn('bash', ['-c', cmd], {

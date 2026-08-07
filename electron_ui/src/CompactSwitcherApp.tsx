@@ -25,6 +25,7 @@ export default function CompactSwitcherApp() {
       const visitHistory = historyData?.history || [];
       const dNames = desktopInfo?.names || {};
       const dIcons = desktopInfo?.icons || {};
+      const dPinned = desktopInfo?.pinned || {};
       const currentDesktop = desktopInfo?.current;
       
       const newItems: any[] = [];
@@ -48,9 +49,9 @@ export default function CompactSwitcherApp() {
              const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
 
              if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-               if (count > 0 || isRecentlyCreated || id === currentDesktop) {
+               if (count > 0 || isRecentlyCreated || id === currentDesktop || dPinned[id]) {
                  if (!newItems.find(i => i.id === id)) {
-                   newItems.push({ id, name, folder: folderName, icons: dIcons[id] });
+                   newItems.push({ id, name, folder: folderName, icons: dIcons[id], isPinned: dPinned[id] });
                  }
                }
              }
@@ -61,13 +62,16 @@ export default function CompactSwitcherApp() {
       if (currentDesktop && !newItems.find(i => i.id === currentDesktop)) {
          const name = dNames[currentDesktop];
          if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-           newItems.push({ id: currentDesktop, name, folder: 'Other', icons: dIcons[currentDesktop] });
+           newItems.push({ id: currentDesktop, name, folder: 'Other', icons: dIcons[currentDesktop], isPinned: dPinned[currentDesktop] });
          }
       }
 
       newItems.sort((a, b) => {
         if (a.id === currentDesktop) return -1;
         if (b.id === currentDesktop) return 1;
+
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
 
         const idxA = visitHistory.indexOf(a.id);
         const idxB = visitHistory.indexOf(b.id);
@@ -103,17 +107,20 @@ export default function CompactSwitcherApp() {
     if (window.electronAPI.onCompactScroll) {
       window.electronAPI.onCompactScroll((direction) => {
         const length = itemsRef.current.length;
-        if (length <= 1) return;
+        const numNonScrollable = itemsRef.current.filter(i => i.id === currentDesktopIdRef.current || i.isPinned).length;
+        const minIndex = numNonScrollable;
+        
+        if (length <= minIndex) return;
 
         let next = indexRef.current;
         const step = direction > 0 ? -1 : 1;
         
-        if (next === -1) {
-          next = step === 1 ? 1 : length - 1;
+        if (next === -1 || next < minIndex) {
+          next = step === 1 ? minIndex : length - 1;
         } else {
           next += step;
-          if (next < 1) next = length - 1;
-          if (next >= length) next = 1;
+          if (next < minIndex) next = length - 1;
+          if (next >= length) next = minIndex;
         }
         
         indexRef.current = next;

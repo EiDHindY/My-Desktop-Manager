@@ -43,7 +43,7 @@ async def monitor_device(device):
                 if event.code in [evdev.ecodes.REL_WHEEL, evdev.ecodes.REL_WHEEL_HI_RES]:
                     import time
                     current_time = time.time()
-                    if current_time - state.get("last_scroll_time", 0) < 0.05:
+                    if current_time - state.get("last_scroll_time", 0) < 0.15:
                         continue
                     state["last_scroll_time"] = current_time
                     sys.stderr.write(f"SCROLL detected: {event.value} (Alt: {state['alt_held']})\n")

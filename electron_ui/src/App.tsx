@@ -39,6 +39,7 @@ function App() {
   const [desktopIcons, setDesktopIcons] = useState<Record<string, string[] | null>>({})
   const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
+  const [pinnedCache, setPinnedCache] = useState<Record<string, boolean>>({});
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -83,10 +84,10 @@ function App() {
   const [isPinned, setIsPinned] = useState(true); // Default to true because KWin Window Rule forces it on launch
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('active')
+  const [activeTab, setActiveTab] = useState('tasks')
   // Ref so loadData can read current tab without being recreated
-  const activeTabRef = useRef('active')
-  const lastSection1TabRef = useRef('active');
+  const activeTabRef = useRef('tasks')
+  const lastSection1TabRef = useRef('tasks');
   const lastSection2TabRef = useRef('temps');
   const handleSetActiveTab = useCallback((tab: string) => {
     activeTabRef.current = tab
@@ -116,6 +117,13 @@ function App() {
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(true);
   const [chromeProfileCount, setChromeProfileCount] = useState(0);
+
+  const handleTogglePin = async (id: string) => {
+    if (window.electronAPI && window.electronAPI.togglePinDesktop) {
+      await window.electronAPI.togglePinDesktop(id);
+      setPinnedCache(prev => ({ ...prev, [id]: !prev[id] }));
+    }
+  };
 
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
@@ -211,6 +219,7 @@ function App() {
         setDesktopApps(desktopInfo?.apps || {})
         setDesktopIcons(desktopInfo?.icons || {})
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
+        setPinnedCache(desktopInfo?.pinned || {})
         setCurrentDesktop(desktopInfo?.current || null)
         setReturnDesktop(historyData?.last_uuid || null)
         const historyList = historyData?.history || [];
@@ -248,6 +257,7 @@ function App() {
         setDesktopApps(desktopInfo?.apps || {})
         setDesktopIcons(desktopInfo?.icons || {})
         setDesktopShortcuts(desktopInfo?.shortcuts || {})
+        setPinnedCache(desktopInfo?.pinned || {})
         setCurrentDesktop(desktopInfo?.current || null)
       });
     }
@@ -418,62 +428,6 @@ function App() {
   const totalEmpty = totalAll - totalActive;
   const totalScripts = templates.filter(t => !t.isDivider).reduce((acc, t) => acc + (t.tasks ? t.tasks.length : 0), 0);
 
-  const totalUnfinishedTasks = (() => {
-    let count = 0;
-    
-    // General tasks
-    if (data?.tasks?.general) {
-      count += data.tasks.general.filter((t: any) => !t.checked).length;
-    }
-    
-    // Live tasks (only active folders + root)
-    if (data?.tasks?.live) {
-      const activeFolders = Object.keys(data?.session?.folders || {});
-      Object.entries(data.tasks.live).forEach(([folderId, folderTasks]: [string, any]) => {
-        if (folderId === 'root' || activeFolders.includes(folderId)) {
-          count += folderTasks.filter((t: any) => !t.checked).length;
-        }
-      });
-    }
-    
-    // Template tasks (now treated as active tasks for that project)
-    if (data?.tasks?.templates) {
-      Object.values(data.tasks.templates).forEach((folderTasks: any) => {
-        count += folderTasks.filter((t: any) => !t.checked).length;
-      });
-    }
-    
-    return count;
-  })();
-
-  const totalNotes = (() => {
-    let count = 0;
-    
-    // General notes
-    if (data?.notes_new?.general) {
-      count += data.notes_new.general.length;
-    }
-    
-    // Live notes
-    if (data?.notes_new?.live) {
-      const activeFolders = Object.keys(data?.session?.folders || {});
-      Object.entries(data.notes_new.live).forEach(([folderId, folderNotes]: [string, any]) => {
-        if (folderId === 'root' || activeFolders.includes(folderId)) {
-          count += folderNotes.length;
-        }
-      });
-    }
-    
-    // Template notes
-    if (data?.notes_new?.templates) {
-      Object.values(data.notes_new.templates).forEach((folderNotes: any) => {
-        count += folderNotes.length;
-      });
-    }
-    
-    return count;
-  })();
-
   const activeFolder = (() => {
     let folder: string | null = null;
     if (data?.session?.folders && currentDesktop) {
@@ -484,6 +438,44 @@ function App() {
       });
     }
     return folder;
+  })();
+
+  const totalUnfinishedTasks = (() => {
+    let count = 0;
+    
+    if (activeFolder) {
+      if (data?.tasks?.live?.[activeFolder]) {
+        count += data.tasks.live[activeFolder].filter((t: any) => !t.checked).length;
+      }
+      if (data?.tasks?.templates?.[activeFolder]) {
+        count += data.tasks.templates[activeFolder].filter((t: any) => !t.checked).length;
+      }
+    } else {
+      if (data?.tasks?.general) {
+        count += data.tasks.general.filter((t: any) => !t.checked).length;
+      }
+    }
+    
+    return count;
+  })();
+
+  const totalNotes = (() => {
+    let count = 0;
+    
+    if (activeFolder) {
+      if (data?.notes_new?.live?.[activeFolder]) {
+        count += data.notes_new.live[activeFolder].length;
+      }
+      if (data?.notes_new?.templates?.[activeFolder]) {
+        count += data.notes_new.templates[activeFolder].length;
+      }
+    } else {
+      if (data?.notes_new?.general) {
+        count += data.notes_new.general.length;
+      }
+    }
+    
+    return count;
   })();
 
   return (
@@ -787,6 +779,8 @@ function App() {
                   setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
                   onAction={() => setLastActionTime(Date.now())}
                   onSwitch={handleSwitch}
+                  pinnedCache={pinnedCache}
+                  onTogglePin={handleTogglePin}
                 />
               )}
               {activeTab === 'temps' && <TempsTab templates={templates} setTemplates={setTemplates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} setActiveTab={handleSetActiveTab} />}

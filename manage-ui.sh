@@ -21,7 +21,7 @@ if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null; the
     kill -USR2 $(cat "$PID_FILE")
 else
     # App is completely closed -> launch it directly (bypass npm for speed)
-    "$ELECTRON_BIN" --class=DesktopManager "$APP_DIR" > /dev/null 2>&1 &
+    env SHOW_ON_LAUNCH=1 "$ELECTRON_BIN" --ozone-platform=x11 --class=DesktopManager "$APP_DIR" > /dev/null 2>&1 &
 fi
 
 exit 0

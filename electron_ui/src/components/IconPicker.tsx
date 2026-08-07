@@ -125,7 +125,7 @@ export default function IconPicker({ currentIcons, onToggle, onClear, onClose, t
     if (!searchQuery.trim()) return;
     const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery.trim() + ' icon')}&tbm=isch`;
     const removeBgUrl = `https://www.remove.bg/`;
-    const cmd = `google-chrome --profile-directory="Default" --new-window "${url}" "${removeBgUrl}"`;
+    const cmd = `setsid google-chrome --profile-directory="Default" --new-window "${url}" "${removeBgUrl}" </dev/null >/dev/null 2>&1 &`;
     if (window.electronAPI && window.electronAPI.executeCommand) {
       window.electronAPI.executeCommand(cmd);
     }

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 interface CompactSwitcherProps {
-  items: { id: string; name: string; folder: string; icons?: string[] }[];
+  items: { id: string; name: string; folder: string; icons?: string[]; isPinned?: boolean }[];
   selectedIndex: number;
   currentDesktopId?: string | null;
   onSelect?: (index: number) => void;
@@ -14,14 +14,12 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
 
   useEffect(() => {
     if (containerRef.current) {
-      const activeEl = containerRef.current.querySelector('.compact-item.active') as HTMLElement;
-      if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const activeElement = containerRef.current.querySelector('.compact-item.active') as HTMLElement;
+      if (activeElement) {
+        activeElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
     }
   }, [selectedIndex]);
-
-  if (items.length === 0) return null;
 
   const handleMouseEnter = (e: React.MouseEvent, index: number, isCurrent: boolean) => {
     if (isCurrent) return;
@@ -29,7 +27,6 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
     if (lastMousePos.current) {
       const dx = Math.abs(e.clientX - lastMousePos.current.x);
       const dy = Math.abs(e.clientY - lastMousePos.current.y);
-      // If the mouse hasn't moved more than 2 pixels, it's a synthetic event from scrolling!
       if (dx <= 2 && dy <= 2) {
         return;
       }
@@ -39,7 +36,7 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
     onHover?.(index);
   };
 
-  const renderItem = (item: any, index: number) => {
+  const renderItem = (item: any, index: number, isScrollable: boolean = false) => {
     const isActive = index === selectedIndex;
     const isCurrent = item.id === currentDesktopId;
     const folderText = (item.folder && item.folder !== 'root' && item.folder !== 'Other') ? item.folder : '';
@@ -52,7 +49,7 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
         style={{
           display: 'flex',
           alignItems: 'center',
-          padding: '6px 12px', 
+          padding: isScrollable ? '10px 12px' : '6px 12px', 
           borderRadius: '8px',
           backgroundColor: isActive ? 'var(--cs-active-bg)' : 'transparent',
           borderLeft: isActive ? '4px solid var(--accent-blue)' : '4px solid transparent',
@@ -102,8 +99,9 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
     );
   };
 
-  const currentItem = items.length > 0 && items[0].id === currentDesktopId ? items[0] : null;
-  const scrollableItems = currentItem ? items.slice(1) : items;
+  const numNonScrollable = items.filter(item => item.id === currentDesktopId || item.isPinned).length;
+  const nonScrollableItems = items.slice(0, numNonScrollable);
+  const scrollableItems = items.slice(numNonScrollable);
 
   return (
     <div style={{
@@ -147,14 +145,14 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
           padding: '4px', // Reduced padding here, moved to inner containers
         }}
       >
-        {currentItem && (
+        {nonScrollableItems.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '20px', paddingLeft: '4px' }}>
-            {renderItem(currentItem, 0)}
+            {nonScrollableItems.map((item, index) => renderItem(item, index, false))}
             <div style={{ height: '1px', backgroundColor: 'var(--border-glass)', margin: '4px 12px', opacity: 0.5 }} />
           </div>
         )}
-        <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0px', paddingRight: '20px', paddingLeft: '4px', scrollbarWidth: 'none' }}>
-          {scrollableItems.map((item, index) => renderItem(item, currentItem ? index + 1 : index))}
+        <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '20px', paddingLeft: '4px', paddingTop: '4px', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+          {scrollableItems.map((item, index) => renderItem(item, numNonScrollable + index, true))}
         </div>
       </div>
     </div>
