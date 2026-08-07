@@ -103,13 +103,22 @@ let isPositioningSwitcher = false;
 let pendingScrolls = [];
 
 function createSwitcherWindow() {
+  const displays = screen.getAllDisplays();
+  const bounds = displays.reduce((acc, curr) => ({
+    x: Math.min(acc.x, curr.bounds.x),
+    y: Math.min(acc.y, curr.bounds.y),
+    right: Math.max(acc.right, curr.bounds.x + curr.bounds.width),
+    bottom: Math.max(acc.bottom, curr.bounds.y + curr.bounds.height)
+  }), { x: 0, y: 0, right: 0, bottom: 0 });
+
   switcherWindow = new BrowserWindow({
-    width: 600,
-    height: 300,
+    width: bounds.right - bounds.x,
+    height: bounds.bottom - bounds.y,
+    x: bounds.x,
+    y: bounds.y,
     frame: false,
     transparent: true,
     hasShadow: false, // Prevents KDE from drawing a large glass box around the transparent window
-    type: 'menu',
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: true, // Needs focus to detect blur/click-outside
@@ -473,31 +482,9 @@ function setupScrollDaemon() {
         if (event.type === 'scroll') {
           if (switcherWindow && !switcherWindow.isDestroyed()) {
             if (!switcherWindow.isVisible()) {
-              exec('export PATH=$PATH:~/.local/bin && kdotool getmouselocation --shell', (error, stdout) => {
-                if (!error && stdout) {
-                  const matchX = stdout.match(/X=(\d+)/);
-                  const matchY = stdout.match(/Y=(\d+)/);
-                  if (matchX && matchY) {
-                    const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1;
-                    const logicalX = parseInt(matchX[1], 10) / scaleFactor;
-                    const logicalY = parseInt(matchY[1], 10) / scaleFactor;
-                    
-                    // We offset x by 70 and y by 32 so the mouse lands comfortably inside the first item.
-                    const x = Math.round(logicalX - 70);
-                    const y = Math.round(logicalY - 32);
-                    switcherWindow.setPosition(x, y);
-                    switcherWindow.show();
-                  } else {
-                    switcherWindow.show();
-                  }
-                } else {
-                  switcherWindow.show();
-                }
-                switcherWindow.webContents.send('compact-scroll', event.direction);
-              });
-            } else {
-              switcherWindow.webContents.send('compact-scroll', event.direction);
+              switcherWindow.show();
             }
+            switcherWindow.webContents.send('compact-scroll', event.direction);
           }
         } else if (event.type === 'global-click') {
           if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {

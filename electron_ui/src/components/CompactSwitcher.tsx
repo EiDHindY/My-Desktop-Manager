@@ -112,8 +112,8 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
       bottom: 0,
       backgroundColor: 'transparent', // Fully transparent window background
       display: 'flex',
-      alignItems: 'flex-start', // Place at top-left
-      justifyContent: 'flex-start',
+      alignItems: 'center', // Center vertically
+      justifyContent: 'center', // Center horizontally
       padding: '16px', // space for shadow
       zIndex: 99999, // Ensure it covers everything
       animation: 'fadeIn 0.15s ease-out',

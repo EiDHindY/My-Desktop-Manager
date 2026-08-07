@@ -155,24 +155,42 @@ export default function CompactSwitcherApp() {
   }, []);
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-      <CompactSwitcher 
-        items={items} 
-        selectedIndex={selectedIndex}
-        currentDesktopId={currentDesktopId}
-        onSelect={(idx) => {
-          const selected = itemsRef.current[idx];
-          setSelectedIndex(idx);
-          if (selected && window.electronAPI) {
-            window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selected.id}"`);
-            window.electronAPI.hideCompactSwitcher();
-          }
-        }}
-        onHover={(idx) => {
-          indexRef.current = idx;
-          setSelectedIndex(idx);
-        }}
-      />
+    <div 
+      style={{ 
+        width: '100vw', 
+        height: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        backgroundColor: 'rgba(0, 0, 0, 0.01)', // Almost invisible but captures events
+        overflow: 'hidden'
+      }}
+      onClick={() => {
+        if (window.electronAPI) window.electronAPI.hideCompactSwitcher();
+      }}
+    >
+      <div 
+        style={{ width: '600px', height: '300px', pointerEvents: 'auto' }}
+        onClick={(e) => e.stopPropagation()} // Prevent clicking inside the switcher from hiding it
+      >
+        <CompactSwitcher 
+          items={items} 
+          selectedIndex={selectedIndex}
+          currentDesktopId={currentDesktopId}
+          onSelect={(idx) => {
+            const selected = itemsRef.current[idx];
+            setSelectedIndex(idx);
+            if (selected && window.electronAPI) {
+              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${selected.id}"`);
+              window.electronAPI.hideCompactSwitcher();
+            }
+          }}
+          onHover={(idx) => {
+            indexRef.current = idx;
+            setSelectedIndex(idx);
+          }}
+        />
+      </div>
     </div>
   );
 }
