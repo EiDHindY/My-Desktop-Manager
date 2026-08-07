@@ -119,6 +119,7 @@ function createSwitcherWindow() {
     frame: false,
     transparent: true,
     hasShadow: false, // Prevents KDE from drawing a large glass box around the transparent window
+    type: 'menu',
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: true, // Needs focus to detect blur/click-outside
