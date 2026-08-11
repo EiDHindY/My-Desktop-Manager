@@ -175,6 +175,10 @@ function setupScrollDaemon() {
 }
 
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'local-icon', privileges: { bypassCSP: true, supportFetchAPI: true, secure: true, corsEnabled: true, standard: true } }
+]);
+
 app.whenReady().then(() => {
   // Register custom protocol for local icons
   try {
