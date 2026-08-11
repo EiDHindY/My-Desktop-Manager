@@ -19,6 +19,10 @@ if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null; the
     # App is already running in the background -> instantly signal it to show
     env > /tmp/manage-ui-env.log
     kill -USR2 $(cat "$PID_FILE")
+    # Use the KDE Custom Shortcut's activation token to force Wayland focus
+    export PATH=$PATH:~/.local/bin
+    sleep 0.1
+    kdotool search --name "^Desktop Manager$" windowactivate
 else
     # App is completely closed -> launch it directly (bypass npm for speed)
     env SHOW_ON_LAUNCH=1 "$ELECTRON_BIN" --ozone-platform=x11 --class=DesktopManager "$APP_DIR" > /dev/null 2>&1 &

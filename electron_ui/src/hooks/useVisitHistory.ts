@@ -12,7 +12,8 @@ export function useVisitHistory() {
   const [visitHistory, setVisitHistory] = useState<string[]>([]);
   const visitHistoryRef = useRef<string[]>([]);
   useEffect(() => { visitHistoryRef.current = visitHistory; }, [visitHistory]);
-  
+
+
   const prevDesktopRef = useRef<string | null>(null);
 
   useEffect(() => {

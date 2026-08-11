@@ -95,35 +95,27 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Force KWin to activate our window using kdotool on first launch
     exec(`export PATH=$PATH:~/.local/bin && kdotool search --name "^Desktop Manager$" windowactivate`);
-  });
+});
 }
 
 let switcherWindow;
-let isPositioningSwitcher = false;
-let pendingScrolls = [];
+let scrollDaemonChild = null;
 
 function createSwitcherWindow() {
-  const displays = screen.getAllDisplays();
-  const bounds = displays.reduce((acc, curr) => ({
-    x: Math.min(acc.x, curr.bounds.x),
-    y: Math.min(acc.y, curr.bounds.y),
-    right: Math.max(acc.right, curr.bounds.x + curr.bounds.width),
-    bottom: Math.max(acc.bottom, curr.bounds.y + curr.bounds.height)
-  }), { x: 0, y: 0, right: 0, bottom: 0 });
-
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
   switcherWindow = new BrowserWindow({
-    width: bounds.right - bounds.x,
-    height: bounds.bottom - bounds.y,
-    x: bounds.x,
-    y: bounds.y,
+    width: width,
+    height: height,
+    center: true,
     frame: false,
     transparent: true,
-    hasShadow: false, // Prevents KDE from drawing a large glass box around the transparent window
-    type: 'tooltip',
+    hasShadow: false,
+    type: 'notification', // Notifications are usually drawn over everything
     alwaysOnTop: true,
     skipTaskbar: true,
-    focusable: true, // Needs focus to detect blur/click-outside
-    show: false, // Start hidden
+    focusable: true,
+    show: false,
     title: "Compact Switcher",
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -132,12 +124,56 @@ function createSwitcherWindow() {
     }
   });
 
+  switcherWindow.on('blur', () => {
+    switcherWindow.hide();
+  });
+
   if (process.env.NODE_ENV === 'development') {
     switcherWindow.loadURL('http://127.0.0.1:5173?switcher=true');
   } else {
     switcherWindow.loadFile(path.join(__dirname, '../dist/index.html'), { search: 'switcher=true' });
   }
 }
+
+function setupScrollDaemon() {
+  if (scrollDaemonChild) return;
+  const scriptPath = path.join(__dirname, '..', '..', 'shared_backend', 'scroll_daemon.py');
+  scrollDaemonChild = spawn('python3', [scriptPath]);
+  
+  scrollDaemonChild.stdout.on('data', (data) => {
+    try {
+      const str = data.toString().trim();
+      const lines = str.split('\n');
+      for (const line of lines) {
+        if (!line) continue;
+        const event = JSON.parse(line);
+        if (event.type === 'scroll') {
+          if (switcherWindow && !switcherWindow.isDestroyed()) {
+            if (!switcherWindow.isVisible()) switcherWindow.show();
+            switcherWindow.webContents.send('compact-scroll', event.direction);
+          }
+        } else if (event.type === 'global-click') {
+          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
+            switcherWindow.webContents.send('compact-reset');
+            setTimeout(() => switcherWindow.hide(), 50);
+          }
+        } else if (event.type === 'confirm') {
+          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
+            switcherWindow.webContents.send('compact-confirm');
+            switcherWindow.webContents.send('compact-reset');
+            setTimeout(() => switcherWindow.hide(), 50);
+          }
+        }
+      }
+    } catch (e) {}
+  });
+
+  scrollDaemonChild.on('close', () => {
+    scrollDaemonChild = null;
+    setTimeout(setupScrollDaemon, 500);
+  });
+}
+
 
 app.whenReady().then(() => {
   // Register custom protocol for local icons
@@ -167,7 +203,6 @@ app.whenReady().then(() => {
 
   setupDBusWatcher();
   setupScrollDaemon();
-
   createWindow();
   createSwitcherWindow();
 });
@@ -421,6 +456,7 @@ ipcMain.handle('toggle-pin-desktop', async (event, uuid) => {
       if (switcherWindow && !switcherWindow.isDestroyed()) {
         switcherWindow.webContents.send('desktops-updated', newData);
       }
+
     } catch (e) {
       console.error('Error saving pin status', e);
     }
@@ -452,6 +488,7 @@ function setupDBusWatcher() {
           if (switcherWindow && !switcherWindow.isDestroyed()) {
             switcherWindow.webContents.send('desktops-updated', newData);
           }
+
         }
       }
     } catch (e) {
@@ -466,51 +503,7 @@ function setupDBusWatcher() {
   });
 }
 
-let scrollDaemonChild = null;
-function setupScrollDaemon() {
-  if (scrollDaemonChild) return;
-  const scriptPath = path.join(__dirname, '..', '..', 'shared_backend', 'scroll_daemon.py');
-  scrollDaemonChild = spawn('python3', [scriptPath]);
-  
-  scrollDaemonChild.stdout.on('data', (data) => {
-    try {
-      const str = data.toString().trim();
-      const lines = str.split('\n');
-      for (const line of lines) {
-        if (!line) continue;
-        const event = JSON.parse(line);
-        console.log('[SCROLL DAEMON]', event);
-        if (event.type === 'scroll') {
-          if (switcherWindow && !switcherWindow.isDestroyed()) {
-            if (!switcherWindow.isVisible()) {
-              switcherWindow.show();
-            }
-            switcherWindow.webContents.send('compact-scroll', event.direction);
-          }
-        } else if (event.type === 'global-click') {
-          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
-            switcherWindow.webContents.send('compact-reset');
-            setTimeout(() => switcherWindow.hide(), 50);
-          }
-        } else if (event.type === 'confirm') {
-          if (switcherWindow && !switcherWindow.isDestroyed() && switcherWindow.isVisible()) {
-            switcherWindow.webContents.send('compact-confirm');
-            switcherWindow.webContents.send('compact-reset');
-            setTimeout(() => switcherWindow.hide(), 50);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[SCROLL DAEMON ERROR PARSING]', e);
-    }
-  });
 
-  scrollDaemonChild.on('close', () => {
-    console.log('[SCROLL DAEMON] closed. Restarting in 5s...');
-    scrollDaemonChild = null;
-    setTimeout(setupScrollDaemon, 5000);
-  });
-}
 
 ipcMain.handle('list-icons', async () => {
   const appPath = app.getAppPath();
@@ -632,6 +625,7 @@ ipcMain.handle('move-desktop', async (event, fullId, targetFolder, targetIndex) 
       const newData = await performFetchDesktops(false);
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktops-updated', newData);
       if (switcherWindow && !switcherWindow.isDestroyed()) switcherWindow.webContents.send('desktops-updated', newData);
+
       
       return true;
     }
@@ -663,11 +657,7 @@ ipcMain.handle('fetch-chrome-profiles', async () => {
   }
 });
 
-ipcMain.handle('hide-compact-switcher', () => {
-  if (switcherWindow && !switcherWindow.isDestroyed()) {
-    switcherWindow.hide();
-  }
-});
+
 
 const { dialog } = require('electron');
 
@@ -728,4 +718,11 @@ if file_path:
   }
 
   return null;
+});
+
+ipcMain.handle('hide-compact-switcher', () => {
+  if (switcherWindow && !switcherWindow.isDestroyed()) {
+    switcherWindow.hide();
+  }
+  return true;
 });

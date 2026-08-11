@@ -159,20 +159,17 @@ export default function CompactSwitcherApp() {
       style={{ 
         width: '100vw', 
         height: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        backgroundColor: 'rgba(0, 0, 0, 0.01)', // Almost invisible but captures events
-        overflow: 'hidden'
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.01)' // Invisible overlay to capture scroll/clicks
       }}
       onClick={() => {
         if (window.electronAPI) window.electronAPI.hideCompactSwitcher();
       }}
     >
-      <div 
-        style={{ width: '600px', height: '300px', pointerEvents: 'auto' }}
-        onClick={(e) => e.stopPropagation()} // Prevent clicking inside the switcher from hiding it
-      >
+      <div onClick={(e) => e.stopPropagation()}>
         <CompactSwitcher 
           items={items} 
           selectedIndex={selectedIndex}

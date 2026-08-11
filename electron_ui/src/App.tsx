@@ -6,6 +6,7 @@ import NotesTab from './components/NotesTab'
 import TasksTab from './components/TasksTab'
 import ChromeTab from './components/ChromeTab'
 import CompactSwitcher from './components/CompactSwitcher'
+
 import PromptModal from './components/PromptModal'
 import CreateDesktopModal from './components/CreateDesktopModal'
 import UniversalCreateModal from './components/UniversalCreateModal'
@@ -76,6 +77,8 @@ function App() {
     prevDesktopRef,
   } = useVisitHistory();
   
+  const [isHistoryPaused, setIsHistoryPaused] = useState(false);
+  
   const [isCompactSwitcherActive, setIsCompactSwitcherActive] = useState(false);
   const [compactSelectedIndex, setCompactSelectedIndex] = useState(0);
   const compactItemsRef = useRef<any[]>([]);
@@ -125,6 +128,13 @@ function App() {
     }
   };
 
+  const handleSwitch = useCallback((targetId: string) => {
+    setLastActionTime(Date.now())
+    const pureTargetId = targetId.split('___')[0]
+    setCurrentDesktop(pureTargetId) // New target becomes current
+    setSearchQuery('') // Clear search so the default live page is clean next time
+  }, [setLastActionTime, setCurrentDesktop, setSearchQuery]);
+
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
       window.electronAPI.fetchChromeProfiles().then((data: any[]) => {
@@ -132,6 +142,8 @@ function App() {
       }).catch(console.error);
     }
   }, []);
+
+
 
   // Load templates separately — they rarely change, no need to fetch every 2.5s
   const loadTemplates = useCallback(async () => {
@@ -141,7 +153,7 @@ function App() {
     }
   }, [])
 
-  const loadData = useCallback((ignoreThrottle = false) => {
+  const loadData = useCallback((ignoreThrottle = false, scanWindows = true) => {
     // Skip polling if we just performed an action (to prevent UI flickering/revert)
     if (!ignoreThrottle && Date.now() - lastActionTimeRef.current < 3000) return;
 
@@ -154,7 +166,7 @@ function App() {
         window.electronAPI.readJSON('notes.json'),
         window.electronAPI.readJSON('tasks.json'),
         window.electronAPI.readJSON('notes_new.json'),
-        window.electronAPI.fetchDesktops(true),
+        window.electronAPI.fetchDesktops(scanWindows),
         window.electronAPI.readJSON('history.json')
       ]).then(([sessionData, notesData, tasksData, notesDataNew, desktopInfo, historyData]) => {
         // SMART SYNC: If we just performed a local switch/action, ignore polling for a moment
@@ -238,7 +250,7 @@ function App() {
   }, [])
 
   // Initial load on mount — load data + templates together
-  useEffect(() => { loadData(true); loadTemplates(); }, [])
+  useEffect(() => { loadData(true, true); loadTemplates(); }, [])
 
   // D-Bus Event Listener & Focused Polling
   useEffect(() => {
@@ -264,7 +276,7 @@ function App() {
 
     // Only poll (for window counts) when focused to save CPU
     if (!isFocused) return;
-    const interval = setInterval(() => loadData(activeTabRef.current === 'active'), 2500)
+    const interval = setInterval(() => loadData(activeTabRef.current === 'active', false), 2500)
     return () => clearInterval(interval)
   }, [loadData, isFocused])
 
@@ -416,12 +428,6 @@ function App() {
 
 
 
-  const handleSwitch = (targetId: string) => {
-    setLastActionTime(Date.now())
-    const pureTargetId = targetId.split('___')[0]
-    setCurrentDesktop(pureTargetId) // New target becomes current
-    setSearchQuery('') // Clear search so the default live page is clean next time
-  }
 
   const totalActive = Object.values(windowCounts || {}).filter(c => c > 0).length;
   const totalAll = Object.keys(desktopNames || {}).length;
@@ -1010,6 +1016,31 @@ function App() {
           }}
           onCancel={() => setShowGlobalCreateNote(false)}
         />
+      )}
+
+      {isHistoryPaused && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(0, 33, 43, 0.9)',
+          backdropFilter: 'blur(10px)',
+          padding: '16px 24px',
+          borderRadius: '12px',
+          border: '1px solid var(--accent-blue)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          zIndex: 10000,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <div style={{ color: 'var(--text-dim)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Quick Jump</div>
+          <div style={{ color: 'var(--accent-blue)', fontSize: '18px', fontWeight: 'bold' }}>
+            {desktopNames[currentDesktop || ''] || 'Loading...'}
+          </div>
+        </div>
       )}
 
       <style>{`

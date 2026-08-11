@@ -58,6 +58,15 @@ async def monitor_device(device):
         # Device might have disconnected
         pass
 
+async def watch_devices():
+    known_devices = set(evdev.list_devices())
+    while True:
+        await asyncio.sleep(2)
+        current_devices = set(evdev.list_devices())
+        if current_devices != known_devices:
+            sys.stderr.write("Devices changed, exiting to restart...\n")
+            sys.exit(1)
+
 async def main():
     devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
     tasks = []
@@ -71,6 +80,8 @@ async def main():
 
     if not tasks:
         sys.exit(1)
+        
+    tasks.append(asyncio.create_task(watch_devices()))
         
     await asyncio.gather(*tasks)
 
