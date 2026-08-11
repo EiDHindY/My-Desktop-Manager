@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { IconMonitor } from './Icons';
 
 interface CompactSwitcherProps {
   items: { id: string; name: string; folder: string; icons?: string[]; isPinned?: boolean }[];
@@ -76,7 +77,9 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
             ))}
           </div>
         ) : (
-          <div style={{ width: '18px', height: '18px', marginRight: '10px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', marginRight: '10px' }}>
+            <IconMonitor size={14} color={isActive ? 'var(--cs-text-active)' : 'var(--text-dim)'} />
+          </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
