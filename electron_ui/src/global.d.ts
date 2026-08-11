@@ -8,6 +8,7 @@ export interface IElectronAPI {
   fetchChromeProfiles: () => Promise<any[]>;
   listIcons: () => Promise<string[]>;
   hideCompactSwitcher: () => Promise<void>;
+  restartScrollDaemon: () => Promise<void>;
   nativeAction: (action: string, params?: any) => Promise<any>;
   onCompactScroll: (callback: (direction: number) => void) => void;
   onCompactConfirm: (callback: () => void) => void;

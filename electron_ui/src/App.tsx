@@ -15,7 +15,7 @@ import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
 import CreateNoteModal from './components/CreateNoteModal'
 
 
-import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin } from './components/Icons'
+import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap } from './components/Icons'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useVisitHistory } from './hooks/useVisitHistory'
 import './App.css'
@@ -556,6 +556,25 @@ function App() {
               className="search-input-hover"
             />
           </div>
+          <button 
+            className="btn-hover"
+            onClick={() => {
+              if (window.electronAPI && window.electronAPI.restartScrollDaemon) {
+                window.electronAPI.restartScrollDaemon();
+                setLastActionTime(Date.now());
+              }
+            }}
+            style={{ 
+              width: '32px', height: '28px', borderRadius: '8px', 
+              border: '1px solid var(--border-glass)', 
+              backgroundColor: 'rgba(255, 204, 0, 0.1)', 
+              color: 'var(--accent-yellow)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0, transition: 'all 0.3s ease' 
+            }}
+            title="Restart Scroll Daemon (fixes Alt+Scroll)"
+          >
+            <IconZap size={16} />
+          </button>
         </div>
 
         {/* Actions and Stats Summary */}

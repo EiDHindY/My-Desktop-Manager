@@ -726,3 +726,12 @@ ipcMain.handle('hide-compact-switcher', () => {
   }
   return true;
 });
+
+ipcMain.handle('restart-scroll-daemon', () => {
+  if (scrollDaemonChild) {
+    try { scrollDaemonChild.kill(); } catch (e) {}
+  } else {
+    setupScrollDaemon();
+  }
+  return true;
+});

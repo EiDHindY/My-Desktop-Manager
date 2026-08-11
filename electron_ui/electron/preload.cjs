@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchChromeProfiles: () => ipcRenderer.invoke('fetch-chrome-profiles'),
   listIcons: () => ipcRenderer.invoke('list-icons'),
   hideCompactSwitcher: () => ipcRenderer.invoke('hide-compact-switcher'),
+  restartScrollDaemon: () => ipcRenderer.invoke('restart-scroll-daemon'),
   nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
   registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts),
   togglePinDesktop: (uuid) => ipcRenderer.invoke('toggle-pin-desktop', uuid),
