@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
   registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts),
   togglePinDesktop: (uuid) => ipcRenderer.invoke('toggle-pin-desktop', uuid),
+  popoutNote: (noteId) => ipcRenderer.invoke('popout-note', noteId),
+  closePopout: (noteId) => ipcRenderer.invoke('close-popout', noteId),
   onDesktopsUpdated: (callback) => {
     ipcRenderer.removeAllListeners('desktops-updated'); // prevent duplicate listeners
     ipcRenderer.on('desktops-updated', (_event, data) => callback(data));

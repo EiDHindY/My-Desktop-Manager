@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconCopy, IconMinus, IconSlash } from './Icons';
+import { IconFolder, IconFolderOpen, IconPlus, IconCheck, IconSquare, IconChevronRight, IconChevronDown, IconTrash, IconGrip, IconPencil, IconInbox, IconRadio, IconLayers, IconCopy, IconMinus, IconSlash, IconExternalLink } from './Icons';
 import CreateNoteModal from './CreateNoteModal';
 import PromptModal from './PromptModal';
 import DataSidebar from './DataSidebar';
@@ -704,6 +704,17 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
                                   title="Copy Note Info"
                                 >
                                   {copiedNoteId === note.id ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                                </div>
+                                <div 
+                                  className="action-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.electronAPI.popoutNote(note.id);
+                                  }}
+                                  style={{ color: 'var(--text-main)', cursor: 'pointer', padding: '4px' }}
+                                  title="Pop Out Note"
+                                >
+                                  <IconExternalLink size={14} />
                                 </div>
                                 <div 
                                   className="action-btn"

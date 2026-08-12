@@ -16,6 +16,8 @@ export interface IElectronAPI {
   onDesktopsUpdated: (callback: (info: any) => void) => void;
   registerShortcuts: (shortcuts: { uuid: string; shortcut: string }[]) => Promise<string[]>;
   togglePinDesktop: (uuid: string) => Promise<void>;
+  popoutNote: (noteId: string) => Promise<boolean>;
+  closePopout: (noteId: string) => Promise<boolean>;
 }
 
 declare global {

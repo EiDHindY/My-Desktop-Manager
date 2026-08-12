@@ -8,6 +8,7 @@ interface TiptapEditorProps {
   onChange: (value: string) => void;
   onBlur: () => void;
   autoFocus?: boolean;
+  fullHeight?: boolean;
 }
 
 const MenuBar = ({ editor }: { editor: any }) => {
@@ -89,7 +90,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
   );
 };
 
-export default function TiptapEditor({ value, onChange, onBlur, autoFocus }: TiptapEditorProps) {
+export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullHeight }: TiptapEditorProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   
   const editor = useEditor({
@@ -123,6 +124,7 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus }: Tip
       className="tiptap-wrapper"
       style={{
         width: '100%',
+        height: fullHeight ? '100%' : undefined,
         backgroundColor: 'rgba(0, 0, 0, 0.2)',
         border: '1px solid var(--border-glass)',
         borderRadius: '6px',
@@ -138,7 +140,7 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus }: Tip
         style={{ 
           flex: 1, 
           overflowY: 'auto', 
-          maxHeight: '350px',
+          maxHeight: fullHeight ? 'none' : '350px',
           cursor: 'text'
         }}
         onClick={() => {

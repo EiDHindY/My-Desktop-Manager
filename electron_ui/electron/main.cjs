@@ -209,6 +209,18 @@ app.whenReady().then(() => {
   setupScrollDaemon();
   createWindow();
   createSwitcherWindow();
+
+  // Register Ctrl+Space internally so it works out of the box without KDE Custom Shortcuts
+  globalShortcut.register('CommandOrControl+Space', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isVisible() && mainWindow.isFocused()) {
+        // Optional: you can hide it here or just leave it to handle blur
+        mainWindow.hide();
+      } else {
+        showWindow();
+      }
+    }
+  });
 });
 
 
@@ -737,5 +749,56 @@ ipcMain.handle('restart-scroll-daemon', () => {
   } else {
     setupScrollDaemon();
   }
+  return true;
+});
+
+const standaloneNotes = {};
+
+ipcMain.handle('popout-note', (event, noteId) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+  }
+
+  if (standaloneNotes[noteId] && !standaloneNotes[noteId].isDestroyed()) {
+    standaloneNotes[noteId].show();
+    standaloneNotes[noteId].focus();
+    return true;
+  }
+
+  const win = new BrowserWindow({
+    width: 350,
+    height: 350,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    icon: ICON_PATH,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  if (process.env.NODE_ENV === 'development') {
+    win.loadURL(`http://127.0.0.1:5173?standaloneNote=true&noteId=${noteId}`);
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'), { search: `standaloneNote=true&noteId=${noteId}` });
+  }
+
+  win.show();
+  standaloneNotes[noteId] = win;
+
+  win.on('closed', () => {
+    delete standaloneNotes[noteId];
+  });
+  return true;
+});
+
+ipcMain.handle('close-popout', (event, noteId) => {
+  if (standaloneNotes[noteId] && !standaloneNotes[noteId].isDestroyed()) {
+    standaloneNotes[noteId].close();
+  }
+  showWindow();
   return true;
 });
