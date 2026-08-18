@@ -15,7 +15,7 @@ export NVM_DIR="$HOME/.nvm"
 PID_FILE="/tmp/desktop-manager.pid"
 
 # Check if PID file exists and the process is alive
-if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null; then
+if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE" 2>/dev/null) 2>/dev/null && ps -p $(cat "$PID_FILE" 2>/dev/null) -o comm= | grep -qi 'electron'; then
     # App is already running in the background -> instantly signal it to show
     env > /tmp/manage-ui-env.log
     kill -USR2 $(cat "$PID_FILE")
