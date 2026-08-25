@@ -114,7 +114,7 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
       style={{
       display: 'flex',
       flexDirection: 'column',
-      minHeight: '100vh',
+      height: '100vh',
       backgroundColor: 'var(--bg-app)',
       color: 'var(--text-main)',
       overflow: 'hidden',
