@@ -18,6 +18,7 @@ export interface IElectronAPI {
   togglePinDesktop: (uuid: string) => Promise<void>;
   popoutNote: (noteId: string) => Promise<boolean>;
   closePopout: (noteId: string) => Promise<boolean>;
+  resizePopout: (noteId: string, width: number, height: number) => Promise<boolean>;
 }
 
 declare global {

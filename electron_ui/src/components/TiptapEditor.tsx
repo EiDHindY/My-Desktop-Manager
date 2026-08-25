@@ -9,6 +9,8 @@ interface TiptapEditorProps {
   onBlur: () => void;
   autoFocus?: boolean;
   fullHeight?: boolean;
+  autoGrow?: boolean;
+  spellcheck?: boolean;
 }
 
 const MenuBar = ({ editor }: { editor: any }) => {
@@ -90,7 +92,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
   );
 };
 
-export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullHeight }: TiptapEditorProps) {
+export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullHeight, autoGrow, spellcheck = true }: TiptapEditorProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   
   const editor = useEditor({
@@ -104,7 +106,8 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
     editorProps: {
       attributes: {
         class: 'tiptap-editor-content',
-        style: 'outline: none; padding: 12px; min-height: 80px; color: var(--text-dim); font-size: 13px; font-family: inherit; cursor: text;'
+        style: 'outline: none; padding: 12px; min-height: 80px; color: var(--text-dim); font-size: 13px; font-family: inherit; cursor: text;',
+        spellcheck: spellcheck ? 'true' : 'false'
       }
     }
   });
@@ -115,6 +118,20 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
     }
   }, [editor, autoFocus]);
 
+  useEffect(() => {
+    if (editor) {
+      editor.setOptions({
+        editorProps: {
+          attributes: {
+            class: 'tiptap-editor-content',
+            style: 'outline: none; padding: 12px; min-height: 80px; color: var(--text-dim); font-size: 13px; font-family: inherit; cursor: text;',
+            spellcheck: spellcheck ? 'true' : 'false'
+          }
+        }
+      });
+    }
+  }, [editor, spellcheck]);
+
   // We do NOT use global mousedown for blur because it interferes with other interactions
   // Instead, the parent component handles click-outside logic already (in NotesTab.tsx)
 
@@ -124,7 +141,7 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
       className="tiptap-wrapper"
       style={{
         width: '100%',
-        height: fullHeight ? '100%' : undefined,
+        height: autoGrow ? undefined : (fullHeight ? '100%' : undefined),
         backgroundColor: 'rgba(0, 0, 0, 0.2)',
         border: '1px solid var(--border-glass)',
         borderRadius: '6px',
@@ -139,8 +156,8 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
       <div 
         style={{ 
           flex: 1, 
-          overflowY: 'auto', 
-          maxHeight: fullHeight ? 'none' : '350px',
+          overflowY: autoGrow ? 'visible' : 'auto', 
+          maxHeight: autoGrow ? 'none' : (fullHeight ? 'none' : '350px'),
           cursor: 'text'
         }}
         onClick={() => {

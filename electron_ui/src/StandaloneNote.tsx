@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import TiptapEditor from './components/TiptapEditor';
-import { IconMinimize } from './components/Icons';
+import { IconMinimize, IconPlus, IconMinus, IconType } from './components/Icons';
 
 export default function StandaloneNote({ noteId }: { noteId: string }) {
   const [noteInfo, setNoteInfo] = useState<string>('');
   const [noteTitle, setNoteTitle] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(1.3);
+  const [spellcheck, setSpellcheck] = useState(false);
 
   // Load the initial note data
   useEffect(() => {
@@ -98,15 +100,32 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
     }
   };
 
+  const rootRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!rootRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        // Use scrollHeight to get the full height of the unconstrained content
+        const newHeight = Math.min(Math.max(150, entry.target.scrollHeight + 2), 800); // +2 for borders
+        window.electronAPI.resizePopout(noteId, 350, newHeight);
+      }
+    });
+    observer.observe(rootRef.current);
+    return () => observer.disconnect();
+  }, [noteId]);
+
   if (loading) {
     return <div style={{ padding: 20, color: 'var(--text-main)' }}>Loading note...</div>;
   }
 
   return (
-    <div style={{
+    <div 
+      ref={rootRef}
+      style={{
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh',
+      minHeight: '150px',
       backgroundColor: 'var(--bg-app)',
       color: 'var(--text-main)',
       overflow: 'hidden',
@@ -131,18 +150,44 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
         
         {/* Actions - No Drag Area */}
         <div style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          
+          <button 
+            onClick={() => setSpellcheck(!spellcheck)}
+            style={{ background: 'none', border: 'none', color: spellcheck ? 'var(--accent-blue)' : 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', marginRight: '4px' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            title={spellcheck ? "Disable Spellcheck" : "Enable Spellcheck"}
+          >
+            <IconType size={14} />
+          </button>
+
+          <button 
+            onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            title="Zoom Out"
+          >
+            <IconMinus size={14} />
+          </button>
+          
+          <div style={{ color: 'var(--text-dim)', fontSize: '12px', display: 'flex', alignItems: 'center', minWidth: '35px', justifyContent: 'center' }}>
+            {Math.round(zoomLevel * 100)}%
+          </div>
+
+          <button 
+            onClick={() => setZoomLevel(Math.min(3.0, zoomLevel + 0.1))}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            title="Zoom In"
+          >
+            <IconPlus size={14} />
+          </button>
+
           <button 
             onClick={() => window.electronAPI.closePopout(noteId)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '4px',
-              borderRadius: '4px',
-            }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', marginLeft: '8px' }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             title="Pop In (Return to Main App)"
@@ -153,12 +198,13 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
       </div>
 
       {/* Editor Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '12px' }}>
+      <div style={{ padding: '12px', zoom: zoomLevel }}>
         <TiptapEditor
           value={noteInfo}
           onChange={handleSave}
           onBlur={() => handleSave(noteInfo)} // Ensure save on blur as well
-          fullHeight={true}
+          autoGrow={true}
+          spellcheck={spellcheck}
         />
       </div>
     </div>

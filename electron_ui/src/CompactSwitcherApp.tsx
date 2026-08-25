@@ -67,11 +67,10 @@ export default function CompactSwitcherApp() {
       }
 
       newItems.sort((a, b) => {
-        if (a.id === currentDesktop) return -1;
-        if (b.id === currentDesktop) return 1;
-
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
+        const scoreA = a.id === currentDesktop ? 1 : (a.isPinned ? 0 : 2);
+        const scoreB = b.id === currentDesktop ? 1 : (b.isPinned ? 0 : 2);
+        
+        if (scoreA !== scoreB) return scoreA - scoreB;
 
         const idxA = visitHistory.indexOf(a.id);
         const idxB = visitHistory.indexOf(b.id);

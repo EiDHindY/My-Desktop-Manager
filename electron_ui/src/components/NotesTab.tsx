@@ -225,7 +225,7 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
     writeData(newData);
   };
 
-  const handleSaveEdit = (noteId: string, collapse = true) => {
+  const handleSaveEdit = (noteId: string, collapse = true, infoOverride?: string) => {
     if (!editingNoteTitle.trim()) return;
     const newData = { ...data };
     let notesList: Note[] = [];
@@ -238,7 +238,8 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
     }
     const noteIndex = notesList.findIndex(t => t.id === noteId);
     if (noteIndex !== -1) {
-      notesList[noteIndex] = { ...notesList[noteIndex], title: editingNoteTitle.trim(), info: editingNoteInfo };
+      const finalInfo = infoOverride !== undefined ? infoOverride : editingNoteInfo;
+      notesList[noteIndex] = { ...notesList[noteIndex], title: editingNoteTitle.trim(), info: finalInfo };
       writeData(newData);
     }
     if (collapse) setEditingNoteId(null);
@@ -709,6 +710,7 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
                                   className="action-btn"
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                    setEditingNoteId(null);
                                     window.electronAPI.popoutNote(note.id);
                                   }}
                                   style={{ color: 'var(--text-main)', cursor: 'pointer', padding: '4px' }}
@@ -733,7 +735,10 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
                             {editingNoteId === note.id && (
                               <TiptapEditor
                                 value={editingNoteInfo}
-                                onChange={setEditingNoteInfo}
+                                onChange={(newInfo) => {
+                                  setEditingNoteInfo(newInfo);
+                                  handleSaveEdit(note.id, false, newInfo);
+                                }}
                                 onBlur={() => handleSaveEdit(note.id)}
                                 autoFocus={true}
                               />

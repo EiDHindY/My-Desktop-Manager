@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { CLI_PATH } from './constants'
+import packageJson from '../package.json'
 import LiveTab from './components/LiveTab'
 import TempsTab from './components/TempsTab'
 import NotesTab from './components/NotesTab'
@@ -13,6 +14,7 @@ import UniversalCreateModal from './components/UniversalCreateModal'
 import CreateTaskModal from './components/CreateTaskModal'
 import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
 import CreateNoteModal from './components/CreateNoteModal'
+import { Settings } from 'lucide-react';
 
 
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap } from './components/Icons'
@@ -119,6 +121,7 @@ function App() {
 
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(true);
+  const [showSettingsPopup, setShowSettingsPopup] = useState(false);
   const [chromeProfileCount, setChromeProfileCount] = useState(0);
 
   const handleTogglePin = async (id: string) => {
@@ -276,6 +279,7 @@ function App() {
 
     // Only poll (for window counts) when focused to save CPU
     if (!isFocused) return;
+    loadData(activeTabRef.current === 'active', false);
     const interval = setInterval(() => loadData(activeTabRef.current === 'active', false), 2500)
     return () => clearInterval(interval)
   }, [loadData, isFocused])
@@ -489,7 +493,9 @@ function App() {
       color: 'var(--text-main)', 
       fontFamily: 'Outfit, sans-serif',
       backgroundColor: 'rgba(0, 33, 43, 0.85)',
-      height: '100vh',
+      height: 'calc(100vh - 4px)',
+      width: 'calc(100vw - 4px)',
+      margin: '2px',
       display: 'flex',
       flexDirection: 'column',
       boxSizing: 'border-box',
@@ -711,6 +717,30 @@ function App() {
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--text-dim)' }}></span>
               <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{totalEmpty}</span>
             </div>
+
+            {/* Settings Button & Popup */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn-hover"
+                onClick={() => setShowSettingsPopup(!showSettingsPopup)}
+                style={{
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  border: '1px solid var(--border-glass)',
+                  backgroundColor: showSettingsPopup ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  color: 'var(--text-dim)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0,
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                title="Settings"
+              >
+                <Settings size={16} />
+              </button>
+              
+
+            </div>
+
           </div>
         </div>
       </div>
@@ -1058,6 +1088,43 @@ function App() {
           <div style={{ color: 'var(--text-dim)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Quick Jump</div>
           <div style={{ color: 'var(--accent-blue)', fontSize: '18px', fontWeight: 'bold' }}>
             {desktopNames[currentDesktop || ''] || 'Loading...'}
+          </div>
+        </div>
+      )}
+
+
+      {showSettingsPopup && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(10, 10, 15, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(12px)'
+        }} onClick={() => setShowSettingsPopup(false)}>
+          <div 
+            style={{
+              backgroundColor: 'var(--bg-glass)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '16px',
+              padding: '32px 64px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'default'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <span style={{ fontSize: '15px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 'bold' }}>Settings</span>
+            <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-glass)', margin: '16px 0' }} />
+            <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>Version</span>
+            <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--accent-blue)', letterSpacing: '1px' }}>v{packageJson.version}</span>
           </div>
         </div>
       )}

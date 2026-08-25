@@ -53,6 +53,9 @@ export function updateLabel(uuid: string, rawLabel: string) {
     }
 
     const existing = cache[uuid] || { name: "", priority: "None" };
+    if (existing.name === name && existing.priority === priority) {
+        return; // Prevent race conditions rewriting the cache and erasing icons
+    }
     cache[uuid] = { ...existing, name, priority };
     saveLabelCache(cache);
 }

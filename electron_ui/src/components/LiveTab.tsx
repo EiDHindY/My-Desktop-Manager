@@ -453,14 +453,33 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
     const folderActive = displayDesktops.filter((id: string) => ((windowCounts || {})[id.split('___')[0]] || 0) > 0).length;
     const folderEmpty = displayDesktops.length - folderActive;
     
-    const sortedDesktops = [...displayDesktops].sort((a, b) => {
+    const sortedDesktops = [...displayDesktops].sort((a: string, b: string) => {
+      // First, pinned desktops go to top
+      const isAPinned = pinnedCache[a.split('___')[0]] || false;
+      const isBPinned = pinnedCache[b.split('___')[0]] || false;
+      if (isAPinned && !isBPinned) return -1;
+      if (!isAPinned && isBPinned) return 1;
+
+      // Next, prioritize by priority label (ANCHOR > HIGH > MID > LOW)
       const pureIdA = a.split('___')[0];
       const pureIdB = b.split('___')[0];
-      const priorityA = getPriorityScore(desktopPriorities[pureIdA] || 'None');
-      const priorityB = getPriorityScore(desktopPriorities[pureIdB] || 'None');
+      let scoreA = getPriorityScore(desktopPriorities[pureIdA] || 'None');
+      let scoreB = getPriorityScore(desktopPriorities[pureIdB] || 'None');
       
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
+      const nameA = (desktopNames[pureIdA] || '').toLowerCase().trim();
+      const isEmptyA = !nameA || nameA === 'empty' || nameA.startsWith('desktop ');
+      
+      const nameB = (desktopNames[pureIdB] || '').toLowerCase().trim();
+      const isEmptyB = !nameB || nameB === 'empty' || nameB.startsWith('desktop ');
+
+      if (scoreA === 5 && isEmptyA) scoreA = 6;
+      if (scoreB === 5 && isEmptyB) scoreB = 6;
+
+      if (pureIdA === currentDesktop) scoreA = (scoreA === 6) ? 6.5 : 5.5;
+      if (pureIdB === currentDesktop) scoreB = (scoreB === 6) ? 6.5 : 5.5;
+
+      if (scoreA !== scoreB) {
+        return scoreA - scoreB;
       }
       
       return 0; // Maintain manual/natural order for everything else

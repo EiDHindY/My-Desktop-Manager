@@ -107,8 +107,12 @@ export function buildMenuCommand(currentDesktops: Desktop[], currentDesktopUuid:
     let cmd = `'/home/dod/Projects/My_Desktop_Manager/python_ui/switcher-menu.py' --title "Desktop Manager" --menu "Select:" --current "${currentDesktopUuid}"`;
     
     const sorted = [...currentDesktops].sort((a, b) => {
-        const scoreA = getScore(a);
-        const scoreB = getScore(b);
+        let scoreA = getScore(a);
+        let scoreB = getScore(b);
+
+        if (a.uuid === currentDesktopUuid) scoreA = scoreA === 6 ? 6.5 : 5.5;
+        if (b.uuid === currentDesktopUuid) scoreB = scoreB === 6 ? 6.5 : 5.5;
+
         if (scoreA !== scoreB) return scoreA - scoreB;
         return a.position - b.position;
     });

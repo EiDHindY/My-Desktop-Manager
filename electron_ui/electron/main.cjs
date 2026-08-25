@@ -316,13 +316,21 @@ async function performFetchDesktops(scanWindows = true) {
     }
     
     let labelCache = global.labelCacheData;
+    let fileParseFailed = false;
     try {
       const stats = await fs.stat(labelsPath);
       if (stats.mtimeMs > global.labelCacheMtime) {
         const labelsData = await fs.readFile(labelsPath, 'utf-8');
-        labelCache = JSON.parse(labelsData);
-        global.labelCacheData = labelCache;
-        global.labelCacheMtime = stats.mtimeMs;
+        try {
+          labelCache = JSON.parse(labelsData);
+          global.labelCacheData = labelCache;
+          global.labelCacheMtime = stats.mtimeMs;
+        } catch (e) {
+          console.error("Failed to parse labels.json", e);
+          fileParseFailed = true; // Prevent wiping the file if it's corrupted
+          if (!global.labelCacheData) global.labelCacheData = {};
+          labelCache = global.labelCacheData;
+        }
       }
     } catch (e) {
       // File might not exist yet
@@ -435,7 +443,7 @@ done 2>/dev/null
       global.pinnedDesktops[uuid] = isPinned;
     }
 
-    if (cacheUpdated) {
+    if (cacheUpdated && !fileParseFailed) {
       await fs.writeFile(labelsPath, JSON.stringify(labelCache, null, 2));
     }
     
@@ -800,5 +808,12 @@ ipcMain.handle('close-popout', (event, noteId) => {
     standaloneNotes[noteId].close();
   }
   showWindow();
+  return true;
+});
+
+ipcMain.handle('resize-popout', (event, noteId, width, height) => {
+  if (standaloneNotes[noteId] && !standaloneNotes[noteId].isDestroyed()) {
+    standaloneNotes[noteId].setContentSize(Math.round(width), Math.round(height), true);
+  }
   return true;
 });
