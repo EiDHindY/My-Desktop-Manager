@@ -102,18 +102,7 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!rootRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (let entry of entries) {
-        // Use scrollHeight to get the full height of the unconstrained content
-        const newHeight = Math.min(Math.max(150, entry.target.scrollHeight + 2), 800); // +2 for borders
-        window.electronAPI.resizePopout(noteId, 350, newHeight);
-      }
-    });
-    observer.observe(rootRef.current);
-    return () => observer.disconnect();
-  }, [noteId]);
+
 
   if (loading) {
     return <div style={{ padding: 20, color: 'var(--text-main)' }}>Loading note...</div>;
@@ -125,7 +114,7 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
       style={{
       display: 'flex',
       flexDirection: 'column',
-      minHeight: '150px',
+      minHeight: '100vh',
       backgroundColor: 'var(--bg-app)',
       color: 'var(--text-main)',
       overflow: 'hidden',
@@ -198,13 +187,18 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
       </div>
 
       {/* Editor Content */}
-      <div style={{ padding: '12px', zoom: zoomLevel }}>
+      <div style={{ padding: '12px', zoom: zoomLevel, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <TiptapEditor
           value={noteInfo}
           onChange={handleSave}
           onBlur={() => handleSave(noteInfo)} // Ensure save on blur as well
-          autoGrow={true}
+          fullHeight={true}
           spellcheck={spellcheck}
+          onHeightChange={(textHeight) => {
+            // Calculate window height: text * zoom + header(36) + padding(24) + border(2) + menu(30)
+            const newHeight = Math.min(Math.max(150, (textHeight + 35) * zoomLevel + 40 + 24 + 2), 800);
+            window.electronAPI.resizePopout(noteId, window.innerWidth, newHeight);
+          }}
         />
       </div>
     </div>

@@ -11,6 +11,7 @@ interface TiptapEditorProps {
   fullHeight?: boolean;
   autoGrow?: boolean;
   spellcheck?: boolean;
+  onHeightChange?: (height: number) => void;
 }
 
 const MenuBar = ({ editor }: { editor: any }) => {
@@ -32,7 +33,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
   });
 
   return (
-    <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', borderBottom: '1px solid var(--border-glass)', backgroundColor: 'rgba(0,0,0,0.1)' }}>
+    <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', borderBottom: '1px solid var(--border-glass)', backgroundColor: 'rgba(30,30,35,0.95)', position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(4px)' }}>
       <button
         onClick={() => editor.chain().focus().toggleBold().run()}
         style={btnStyle(editor.isActive('bold'))}
@@ -92,7 +93,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
   );
 };
 
-export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullHeight, autoGrow, spellcheck = true }: TiptapEditorProps) {
+export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullHeight, autoGrow, spellcheck = true, onHeightChange }: TiptapEditorProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   
   const editor = useEditor({
@@ -131,6 +132,21 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
       });
     }
   }, [editor, spellcheck]);
+
+  useEffect(() => {
+    if (!editor || !onHeightChange) return;
+    const domNode = editor.view.dom;
+    if (!domNode) return;
+    
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        onHeightChange(entry.target.scrollHeight);
+      }
+    });
+    
+    observer.observe(domNode);
+    return () => observer.disconnect();
+  }, [editor, onHeightChange]);
 
   // We do NOT use global mousedown for blur because it interferes with other interactions
   // Instead, the parent component handles click-outside logic already (in NotesTab.tsx)
