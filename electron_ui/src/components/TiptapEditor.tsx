@@ -1,7 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered } from 'lucide-react';
+import { Bold, Italic, Strikethrough, Heading1, Heading2, List, ListOrdered, Code } from 'lucide-react';
+import { ReactNodeViewRenderer } from '@tiptap/react';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { createLowlight, common } from 'lowlight';
+import CodeBlockComponent from './CodeBlockComponent';
+import 'highlight.js/styles/github-dark.css';
+
+const lowlight = createLowlight(common);
 
 interface TiptapEditorProps {
   value: string;
@@ -55,6 +62,13 @@ const MenuBar = ({ editor }: { editor: any }) => {
       >
         <Strikethrough size={16} />
       </button>
+      <button
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        style={btnStyle(editor.isActive('codeBlock'))}
+        title="Code Block"
+      >
+        <Code size={16} />
+      </button>
       
       <div style={{ width: '1px', backgroundColor: 'var(--border-glass)', margin: '0 4px' }} />
       
@@ -98,7 +112,14 @@ export default function TiptapEditor({ value, onChange, onBlur, autoFocus, fullH
   
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        codeBlock: false,
+      }),
+      CodeBlockLowlight.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(CodeBlockComponent);
+        },
+      }).configure({ lowlight }),
     ],
     content: value,
     onUpdate: ({ editor }) => {

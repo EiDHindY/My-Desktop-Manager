@@ -1,0 +1,45 @@
+.custom-code-block {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.custom-code-block .code-block-select {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background-color: rgba(30, 30, 35, 0.8);
+  color: var(--text-dim, #a0a0a0);
+  border: 1px solid var(--border-glass, #333);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+}
+
+.custom-code-block .code-block-select:hover {
+  background-color: rgba(50, 50, 55, 0.9);
+  color: var(--text-main, #fff);
+}
+
+.custom-code-block pre {
+  background-color: #1e1e1e !important;
+  color: #d4d4d4;
+  border-radius: 8px;
+  padding: 1rem 1rem 1rem 1rem;
+  margin: 0;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid var(--border-glass, #333);
+}
+
+.custom-code-block pre code {
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  padding: 0;
+}
