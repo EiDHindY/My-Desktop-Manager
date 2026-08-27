@@ -194,11 +194,7 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
           onBlur={() => handleSave(noteInfo)} // Ensure save on blur as well
           fullHeight={true}
           spellcheck={spellcheck}
-          onHeightChange={(textHeight) => {
-            // Calculate window height: text * zoom + header(36) + padding(24) + border(2) + menu(30)
-            const newHeight = Math.min(Math.max(150, (textHeight + 35) * zoomLevel + 40 + 24 + 2), 800);
-            window.electronAPI.resizePopout(noteId, window.innerWidth, newHeight);
-          }}
+
         />
       </div>
     </div>
