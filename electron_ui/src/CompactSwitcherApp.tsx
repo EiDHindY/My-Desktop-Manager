@@ -49,22 +49,26 @@ export default function CompactSwitcherApp() {
              const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
 
              if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-               if (count > 0 || isRecentlyCreated || id === currentDesktop || dPinned[id]) {
-                 if (!newItems.find(i => i.id === id)) {
-                   newItems.push({ id, name, folder: folderName, icons: dIcons[id], isPinned: dPinned[id] });
-                 }
+               if (!newItems.find(i => i.id === id)) {
+                 newItems.push({ id, name, folder: folderName, icons: dIcons[id], isPinned: dPinned[id] });
                }
              }
            });
          }
       });
       
-      if (currentDesktop && !newItems.find(i => i.id === currentDesktop)) {
-         const name = dNames[currentDesktop];
+      // Add any desktops that are active but not present in the session folders
+      Object.keys(dNames).forEach(id => {
+         const name = dNames[id];
+         const count = desktopInfo.counts ? desktopInfo.counts[id] || 0 : 0;
+         const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
+
          if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-           newItems.push({ id: currentDesktop, name, folder: 'Other', icons: dIcons[currentDesktop], isPinned: dPinned[currentDesktop] });
+           if (!newItems.find(i => i.id === id)) {
+             newItems.push({ id, name, folder: 'Other', icons: dIcons[id], isPinned: dPinned[id] });
+           }
          }
-      }
+      });
 
       newItems.sort((a, b) => {
         const scoreA = a.id === currentDesktop ? 1 : (a.isPinned ? 0 : 2);

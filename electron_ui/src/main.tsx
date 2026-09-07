@@ -16,8 +16,10 @@ const isSwitcher = window.location.search.includes('switcher=true');
 const isStandaloneNote = window.location.search.includes('standaloneNote=true');
 const noteId = new URLSearchParams(window.location.search).get('noteId') || '';
 
+import { ThemeProvider } from './contexts/ThemeContext'
+
 createRoot(document.getElementById('root')!).render(
-  <>
+  <ThemeProvider>
     {isSwitcher ? <CompactSwitcherApp /> : isStandaloneNote ? <StandaloneNote noteId={noteId} /> : <App />}
-  </>,
+  </ThemeProvider>,
 )

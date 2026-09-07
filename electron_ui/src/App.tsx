@@ -23,6 +23,7 @@ import { Settings } from 'lucide-react';
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap } from './components/Icons'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useVisitHistory } from './hooks/useVisitHistory'
+import { useTheme } from './contexts/ThemeContext'
 import './App.css'
 
 const getThemeColor = (tab: string, type: 'var' | 'hex' = 'var') => {
@@ -83,6 +84,7 @@ function App() {
   } = useVisitHistory();
   
   const [isHistoryPaused, setIsHistoryPaused] = useState(false);
+  const { activeThemeName, setActiveThemeName, themes, saveTheme, deleteTheme } = useTheme();
   
   const [isCompactSwitcherActive, setIsCompactSwitcherActive] = useState(false);
   const [compactItems, setCompactItems] = useState<any[]>([]);
@@ -1161,7 +1163,84 @@ function App() {
             <span style={{ fontSize: '15px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 'bold' }}>Settings</span>
             <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-glass)', margin: '16px 0' }} />
             <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>Version</span>
-            <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--accent-blue)', letterSpacing: '1px' }}>v{packageJson.version}</span>
+            <span style={{ fontSize: '24px', fontWeight: '800', color: 'var(--accent-blue)', letterSpacing: '1px', marginBottom: '24px' }}>v{packageJson.version}</span>
+            
+            <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-glass)', marginBottom: '24px' }} />
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', minWidth: '300px' }}>
+              <span style={{ fontSize: '14px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 'bold' }}>Theme Selection</span>
+              
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                {Object.keys(themes).map(themeName => (
+                  <button
+                    key={themeName}
+                    onClick={(e) => { e.stopPropagation(); setActiveThemeName(themeName); }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      border: activeThemeName === themeName ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                      backgroundColor: activeThemeName === themeName ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
+                      color: activeThemeName === themeName ? 'var(--accent-blue)' : 'var(--text-dim)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      fontWeight: activeThemeName === themeName ? 'bold' : 'normal'
+                    }}
+                  >
+                    {themeName}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const newThemeName = prompt("Enter a name for your new theme (it will clone the current active theme):");
+                    if (newThemeName && newThemeName.trim()) {
+                      await saveTheme(newThemeName.trim(), themes[activeThemeName]);
+                      setActiveThemeName(newThemeName.trim());
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--accent-green)',
+                    backgroundColor: 'rgba(133, 153, 0, 0.1)',
+                    color: 'var(--accent-green)',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  + Clone Current Theme
+                </button>
+                
+                {activeThemeName !== 'Nord Frost' && activeThemeName !== 'Obsidian Glow' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Are you sure you want to delete the theme "${activeThemeName}"?`)) {
+                        deleteTheme(activeThemeName);
+                      }
+                    }}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--accent-red)',
+                      backgroundColor: 'rgba(220, 50, 47, 0.1)',
+                      color: 'var(--accent-red)',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Delete Theme
+                  </button>
+                )}
+              </div>
+              <div style={{ marginTop: '12px', fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                Note: Theme definitions are saved in ~/.config/desktop-manager/themes.json
+              </div>
+            </div>
           </div>
         </div>
       )}
