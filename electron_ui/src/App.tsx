@@ -713,7 +713,7 @@ function App() {
               style={{ height: '28px', padding: '0 12px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}
               title="Launch Whats & Music"
             >
-              🚀 Launch Apps
+              (W-M)
             </button>
           </div>
           <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />

@@ -46,10 +46,8 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
   const query = (searchQuery || '').toLowerCase().trim();
 
   const filteredTemplates = useMemo(() => {
-    return templates.map(temp => {
+    const results = templates.map(temp => {
       if (!query) return temp;
-
-
 
       const nameMatch = fuzzyMatch(temp.name.toLowerCase(), query);
       const matchingTasks = temp.tasks?.filter(t => fuzzyMatch(t.name.toLowerCase(), query)) || [];
@@ -58,6 +56,23 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
       }
       return null;
     }).filter(Boolean) as Template[];
+
+    if (query) {
+      results.sort((a, b) => {
+        const getScore = (name: string) => {
+          const lowerName = name.toLowerCase();
+          if (lowerName.startsWith(query)) return 3;
+          if (lowerName.includes(query)) return 2;
+          return 1;
+        };
+        const scoreA = Math.max(getScore(a.name), ...(a.tasks?.map(t => getScore(t.name)) || [0]));
+        const scoreB = Math.max(getScore(b.name), ...(b.tasks?.map(t => getScore(t.name)) || [0]));
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    
+    return results;
   }, [templates, query]);
 
   const flatItems = useMemo(() => {
@@ -258,9 +273,9 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                               border: 'none',
                               boxShadow: 'none'
                             } : {
-                              border: isTemplateFocused ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                              background: isTemplateFocused ? 'rgba(38, 139, 210, 0.08)' : 'rgba(7, 54, 66, 0.45)',
-                              boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(38, 139, 210, 0.1)' : 'none'
+                              border: isTemplateFocused ? '1px solid var(--accent-yellow)' : '1px solid var(--border-glass)',
+                              background: isTemplateFocused ? 'rgba(235, 203, 139, 0.08)' : 'rgba(7, 54, 66, 0.45)',
+                              boxShadow: isTemplateFocused ? '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 15px rgba(235, 203, 139, 0.1)' : 'none'
                             })
                           }}
                         >
@@ -271,9 +286,9 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                               top: '12%',
                               bottom: '12%',
                               width: '3px',
-                              background: 'var(--aurora-pillar)',
+                              background: 'var(--accent-yellow)',
                               borderRadius: '0 4px 4px 0',
-                              boxShadow: 'var(--aurora-glow)',
+                              boxShadow: '0 0 8px rgba(235, 203, 139, 0.4)',
                               zIndex: 10
                             }} />
                           )}
@@ -287,7 +302,7 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                                 alignItems: 'center', 
                                 gap: '10px', 
                                 padding: '6px 12px',
-                                background: isTemplateFocused ? 'rgba(133, 153, 0, 0.1)' : 'transparent',
+                                background: isTemplateFocused ? 'rgba(235, 203, 139, 0.1)' : 'transparent',
                                 borderRadius: '11px',
                                 cursor: 'grab'
                               }}
@@ -328,7 +343,7 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                               padding: '8px 12px',
                               cursor: 'grab',
                               transition: 'all 0.2s ease',
-                              background: isTemplateFocused ? 'rgba(38, 139, 210, 0.05)' : 'transparent',
+                              background: isTemplateFocused ? 'rgba(235, 203, 139, 0.05)' : 'transparent',
                               borderTopLeftRadius: '11px',
                               borderTopRightRadius: '11px',
                             }}
@@ -480,8 +495,10 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                                     display: 'flex', 
                                     alignItems: 'center', 
                                     gap: '10px', 
-                                    backgroundColor: isTaskFocused ? 'rgba(38, 139, 210, 0.1)' : 'transparent',
-                                    padding: '6px 12px', 
+                                    border: isTaskFocused ? '1px solid var(--accent-yellow)' : '1px solid var(--border-glass)',
+                                    background: isTaskFocused ? 'rgba(235, 203, 139, 0.05)' : 'rgba(0, 33, 43, 0.4)',
+                                    boxShadow: isTaskFocused ? '0 4px 15px rgba(0, 0, 0, 0.2)' : 'none',
+                                    padding: '8px 12px',
                                     borderRadius: '6px',
                                     transition: 'all 0.15s ease',
                                     position: 'relative',
@@ -496,12 +513,12 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                               top: '20%',
                               bottom: '20%',
                               width: '2px',
-                              background: 'var(--accent-cyan)',
+                              background: 'var(--accent-yellow)',
                               borderRadius: '0 2px 2px 0',
-                              boxShadow: '0 0 8px rgba(42, 161, 152, 0.4)',
+                              boxShadow: '0 0 8px rgba(235, 203, 139, 0.4)',
                             }} />
                           )}
-                          <div style={{ color: isTaskFocused ? 'var(--accent-cyan)' : 'var(--text-dim)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '16px' }}>
+                          <div style={{ color: isTaskFocused ? 'var(--accent-yellow)' : 'var(--text-dim)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '16px' }}>
                             {(task.icons && task.icons.length > 0) || task.icon ? (
                               <ManualIcon icon={task.icons || task.icon} size={16} />
                             ) : (
