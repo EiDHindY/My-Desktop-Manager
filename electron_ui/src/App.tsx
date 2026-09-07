@@ -687,6 +687,27 @@ function App() {
             </>
           )}
 
+          {/* Launch Apps Button */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button 
+              className="btn-hover"
+              onClick={async () => {
+                if (window.electronAPI && window.electronAPI.executeCommand) {
+                  await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:Personal:1784279295479"`);
+                  setTimeout(() => {
+                    window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:Personal:1784580074199"`);
+                  }, 2000);
+                  setLastActionTime(Date.now());
+                }
+              }}
+              style={{ height: '28px', padding: '0 12px', borderRadius: '6px', border: '1px solid var(--border-glass)', backgroundColor: 'rgba(38, 139, 210, 0.1)', color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}
+              title="Launch Whats & Music"
+            >
+              🚀 Launch Apps
+            </button>
+          </div>
+          <div style={{ width: '1px', height: '20px', backgroundColor: 'var(--border-glass)' }} />
+
           {/* Stats */}
           <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
             <div 
