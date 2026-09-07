@@ -8,22 +8,7 @@ import type { DropResult } from '@hello-pangea/dnd';
 import CreateTemplateScriptModal from './CreateTemplateScriptModal';
 import MoveScriptModal from './MoveScriptModal';
 
-interface Task {
-  id: string;
-  name: string;
-  script: string;
-  icon?: string;
-  icons?: string[];
-  shortcut?: string;
-  isExecutable?: boolean;
-}
-
-interface Template {
-  name: string;
-  filename: string;
-  isDivider?: boolean;
-  tasks?: Task[];
-}
+import type { Task, Template } from '../types';
 
 interface FlatItem {
   type: 'template' | 'task';
@@ -198,22 +183,15 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [flatItems, focusedIndex, showCreateModal, showIconPicker]);
 
-  const prevQueryRef = useRef(query);
+  const [prevQuery, setPrevQuery] = useState(query);
   
-  // Reset focus when query changes
-  useEffect(() => {
-    if (prevQueryRef.current !== query) {
-      prevQueryRef.current = query;
-      if (!query) {
-        setFocusedIndex(0);
-        return;
-      }
-      
+  if (query !== prevQuery) {
+    setPrevQuery(query);
+    if (!query) {
+      setFocusedIndex(0);
+    } else {
       const lowerQuery = query.toLowerCase();
       
-
-
-      // Find the best item to focus: prioritize tasks over templates, then start match, includes, and fuzzy
       const findBestIndex = (targetType: string) => {
         const startsWith = flatItems.findIndex(item => item.type === targetType && item.name.toLowerCase().startsWith(lowerQuery));
         if (startsWith !== -1) return startsWith;
@@ -230,7 +208,7 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
       
       setFocusedIndex(bestIndex !== -1 ? bestIndex : 0);
     }
-  }, [query, flatItems]);
+  }
 
   // Auto-scroll into view
   useEffect(() => {

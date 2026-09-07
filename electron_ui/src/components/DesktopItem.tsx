@@ -24,7 +24,7 @@ interface DesktopItemProps {
   hasWindows: boolean;
   isSelected: boolean;
   isHovered: boolean;
-  priority: string;
+  priority: string | number;
   priorityColor: string;
   hasScriptAttached: boolean;
   isDeleting: boolean;
@@ -134,7 +134,7 @@ const DesktopItemComponent: React.FC<DesktopItemProps> = ({
                 <IconMonitor size={14} color={isActive ? 'var(--accent-cyan)' : (isReturn ? 'var(--accent-purple)' : (hasWindows ? 'var(--accent-blue)' : 'var(--text-dim)'))} />
               )}
             </div>
-            {priority !== 'None' && priority?.toUpperCase() !== 'ANCHOR' && (
+            {priority !== 'None' && (typeof priority === 'string' ? priority.toUpperCase() !== 'ANCHOR' : true) && (
               <div style={{ 
                 width: '8px', 
                 height: '8px', 
@@ -220,11 +220,15 @@ export default React.memo(DesktopItemComponent, (prevProps, nextProps) => {
          prevProps.isSelected === nextProps.isSelected &&
          prevProps.isHovered === nextProps.isHovered &&
          prevProps.priority === nextProps.priority &&
+         prevProps.priorityColor === nextProps.priorityColor &&
          prevProps.hasScriptAttached === nextProps.hasScriptAttached &&
          prevProps.isDeleting === nextProps.isDeleting &&
          prevProps.icons.join(',') === nextProps.icons.join(',') &&
          prevProps.shortcut === nextProps.shortcut &&
          prevProps.hasShortcutError === nextProps.hasShortcutError &&
          prevProps.query === nextProps.query &&
-         prevProps.dIndex === nextProps.dIndex;
+         prevProps.dIndex === nextProps.dIndex &&
+         prevProps.folderName === nextProps.folderName &&
+         prevProps.isPinned === nextProps.isPinned &&
+         prevProps.hideActionButtons === nextProps.hideActionButtons;
 });

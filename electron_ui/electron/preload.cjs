@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   popoutNote: (noteId) => ipcRenderer.invoke('popout-note', noteId),
   closePopout: (noteId) => ipcRenderer.invoke('close-popout', noteId),
   resizePopout: (noteId, width, height) => ipcRenderer.invoke('resize-popout', noteId, width, height),
+  minimizePopout: (noteId) => ipcRenderer.invoke('minimize-popout', noteId),
+  restorePopout: (noteId) => ipcRenderer.invoke('restore-popout', noteId),
   onDesktopsUpdated: (callback) => {
     ipcRenderer.removeAllListeners('desktops-updated'); // prevent duplicate listeners
     ipcRenderer.on('desktops-updated', (_event, data) => callback(data));

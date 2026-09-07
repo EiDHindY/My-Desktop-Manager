@@ -42,19 +42,27 @@ const _AppIcon = ...
 
 
 
-export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, visitHistory = [], setSessionData, onAction, onSwitch, pinnedCache = {}, onTogglePin }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, visitHistory?: string[], setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void, pinnedCache?: Record<string, boolean>, onTogglePin?: (id: string) => void }) {
+export default function LiveTab({ sessionData, showOnlyActive = false, desktopNames = {}, desktopPriorities = {}, windowCounts = {}, desktopApps: _desktopApps = {}, desktopIcons = {}, desktopShortcuts = {}, shortcutErrors = [], searchQuery = '', currentDesktop = null, visitHistory = [], setSessionData, onAction, onSwitch, pinnedCache = {}, onTogglePin }: { sessionData: any, showOnlyActive?: boolean, desktopNames?: Record<string, string>, desktopPriorities?: Record<string, number | string>, windowCounts?: Record<string, number>, desktopApps?: Record<string, string[]>, desktopIcons?: Record<string, string[] | string | null>, desktopShortcuts?: Record<string, string | null>, shortcutErrors?: string[], searchQuery?: string, currentDesktop?: string | null, visitHistory?: string[], setSessionData?: (data: any) => void, onAction?: () => void, onSwitch?: (id: string) => void, pinnedCache?: Record<string, boolean>, onTogglePin?: (id: string) => void }) {
 
-  const getPriorityScore = (p: string) => {
-    const up = p?.toUpperCase();
+  const getPriorityScore = (p: string | number) => {
+    if (typeof p === 'number') return p;
+    const up = typeof p === 'string' ? p.toUpperCase() : '';
     if (up === 'ANCHOR') return 1;
     if (up === 'HIGH') return 2;
     if (up === 'MID') return 3;
     if (up === 'LOW') return 4;
     return 5;
-  };
+  }
 
-  const getPriorityColor = (p: string) => {
-    const up = p?.toUpperCase();
+  const getPriorityColor = (p: string | number) => {
+    if (typeof p === 'number') {
+      if (p === 1) return '#38bdf8';
+      if (p === 2) return '#ff4d4d';
+      if (p === 3) return '#fbbf24';
+      if (p === 4) return '#34d399';
+      return 'transparent';
+    }
+    const up = typeof p === 'string' ? p.toUpperCase() : '';
     if (up === 'ANCHOR') return '#38bdf8'; // Blue-ish for Anchor
     if (up === 'HIGH') return '#ff4d4d';   // Sharp Red
     if (up === 'MID') return '#fbbf24';    // Amber

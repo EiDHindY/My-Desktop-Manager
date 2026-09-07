@@ -5,20 +5,9 @@ import CreateTaskModal from './CreateTaskModal';
 import PromptModal from './PromptModal';
 import DataSidebar from './DataSidebar';
 
-interface Task {
-  id: string;
-  text: string;
-  checked: boolean;
-}
+import type { ChecklistTask, TasksData, SessionData, Template } from '../types';
 
-interface TasksData {
-  general: Task[];
-  live: Record<string, Task[]>;
-  templates: Record<string, Task[]>;
-  expanded_categories: string[];
-}
-
-export default function TasksTab({ isActive, tasksData, sessionData, templates, searchQuery = '', onAction, currentFolder = null }: { isActive: boolean, tasksData: any, sessionData: any, templates: any[], searchQuery?: string, onAction?: () => void, currentFolder?: string | null }) {
+export default function TasksTab({ isActive, tasksData, sessionData, templates, searchQuery = '', onAction, currentFolder = null }: { isActive: boolean, tasksData: TasksData, sessionData: SessionData, templates: Template[], searchQuery?: string, onAction?: () => void, currentFolder?: string | null }) {
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
   const [data, setData] = useState<TasksData>({
@@ -138,14 +127,14 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
 
   const toggleCategory = (cat: string) => {
     const newExpanded = data.expanded_categories.includes(cat)
-      ? data.expanded_categories.filter(c => c !== cat)
+      ? data.expanded_categories.filter((c: string) => c !== cat)
       : [...data.expanded_categories, cat];
     writeData({ ...data, expanded_categories: newExpanded });
   };
 
   const handleAddTask = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && newTaskText.trim()) {
-      const newTask: Task = {
+      const newTask: ChecklistTask = {
         id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         text: newTaskText.trim(),
         checked: false
@@ -169,7 +158,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
 
   const toggleTask = (taskId: string) => {
     const newData = { ...data };
-    let tasksList: Task[] = [];
+    let tasksList: ChecklistTask[] = [];
     
     if (activeCategory === 'general') {
       tasksList = newData.general;
@@ -188,7 +177,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
 
   const handleDeleteTask = (taskId: string) => {
     const newData = { ...data };
-    let tasksList: Task[] = [];
+    let tasksList: ChecklistTask[] = [];
     if (activeCategory === 'general') {
       tasksList = newData.general;
     } else if (activeCategory === 'live' && activeSubId) {
@@ -210,7 +199,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   const handleSaveEdit = (taskId: string) => {
     if (!editingTaskText.trim()) return;
     const newData = { ...data };
-    let tasksList: Task[] = [];
+    let tasksList: ChecklistTask[] = [];
     if (activeCategory === 'general') {
       tasksList = newData.general;
     } else if (activeCategory === 'live' && activeSubId) {
@@ -234,7 +223,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
     if (source.index === destination.index) return;
 
     const newData = { ...data };
-    let tasksList: Task[] = [];
+    let tasksList: ChecklistTask[] = [];
     
     if (activeCategory === 'general') {
       tasksList = [...newData.general];
@@ -259,7 +248,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   };
 
   const getActiveTasks = () => {
-    let tasks: Task[] = [];
+    let tasks: ChecklistTask[] = [];
     if (activeCategory === 'general') tasks = data.general || [];
     if (activeCategory === 'live' && activeSubId) tasks = data.live[activeSubId] || [];
     if (activeCategory === 'templates' && activeSubId) tasks = data.templates[activeSubId] || [];
@@ -271,7 +260,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
   };
 
   const getUnfinishedCount = (cat: 'general' | 'live' | 'templates', subId?: string) => {
-    let tasks: Task[] = [];
+    let tasks: ChecklistTask[] = [];
     if (cat === 'general') tasks = data.general || [];
     else if (cat === 'live' && subId) tasks = data.live[subId] || [];
     else if (cat === 'templates' && subId) tasks = data.templates[subId] || [];
@@ -680,7 +669,7 @@ export default function TasksTab({ isActive, tasksData, sessionData, templates, 
           initialSubId={activeSubId}
           onSubmit={(taskName, category, subId) => {
             setShowCreateModal(false);
-            const newTask: Task = {
+            const newTask: ChecklistTask = {
               id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               text: taskName,
               checked: false

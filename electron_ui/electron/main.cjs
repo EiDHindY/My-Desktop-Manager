@@ -14,12 +14,17 @@ const ICON_PATH = path.join(__dirname, 'icon_final.png');
 // ─── PID FILE PATH ───
 const PID_FILE = '/tmp/desktop-manager.pid';
 
-// Helper: show and focus the window (used by both SIGUSR1 and globalShortcut)
 function showWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   
   // Always show and focus (do not hide). The KDE Window Rule handles the Wayland override!
+  mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+    console.log(`[RENDERER CONSOLE ${level}] ${message} (${sourceId}:${line})`);
+  });
   mainWindow.show();
   mainWindow.focus();
 
@@ -50,11 +55,7 @@ if (!gotTheLock) {
   fsSync.writeFileSync(PID_FILE, process.pid.toString());
 
   app.on('second-instance', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    showWindow();
   });
 }
 
@@ -86,6 +87,9 @@ function createWindow() {
   }
 
   // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+    console.log(`[RENDERER CONSOLE ${level}] ${message} (${sourceId}:${line})`);
+  });
   mainWindow.show();
   mainWindow.focus();
 
@@ -212,9 +216,10 @@ app.whenReady().then(() => {
 
   // Register Ctrl+Space internally so it works out of the box without KDE Custom Shortcuts
   globalShortcut.register('CommandOrControl+Space', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      showWindow();
+    } else {
       if (mainWindow.isVisible() && mainWindow.isFocused()) {
-        // Optional: you can hide it here or just leave it to handle blur
         mainWindow.hide();
       } else {
         showWindow();
@@ -284,11 +289,22 @@ ipcMain.handle('register-shortcuts', (event, shortcuts) => {
 });
 
 // Provide data to the React UI (ASYNCHRONOUS)
+// In-memory cache for JSON files to prevent unnecessary disk I/O and IPC overhead
+const jsonCache = {};
+const jsonCacheMtime = {};
+
 ipcMain.handle('read-json', async (event, filename) => {
   const filePath = path.join(os.homedir(), '.config', 'desktop-manager', filename);
   try {
+    const stats = await fs.stat(filePath);
+    if (jsonCache[filename] && jsonCacheMtime[filename] === stats.mtimeMs) {
+      return jsonCache[filename];
+    }
     const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    jsonCache[filename] = parsed;
+    jsonCacheMtime[filename] = stats.mtimeMs;
+    return parsed;
   } catch (error) {
     return {};
   }
@@ -617,6 +633,11 @@ ipcMain.handle('write-json', async (event, filename, data) => {
   try {
     await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
     await fs.rename(tempPath, filePath);
+    
+    // Update cache directly to avoid next read parsing
+    const stats = await fs.stat(filePath);
+    jsonCache[filename] = data;
+    jsonCacheMtime[filename] = stats.mtimeMs;
 
     if (filename === 'session.json' || filename === 'labels.json') {
       const newData = await performFetchDesktops(false);
@@ -776,6 +797,8 @@ ipcMain.handle('popout-note', (event, noteId) => {
   const win = new BrowserWindow({
     width: 350,
     height: 350,
+    minWidth: 40,
+    minHeight: 40,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -814,6 +837,30 @@ ipcMain.handle('close-popout', (event, noteId) => {
 ipcMain.handle('resize-popout', (event, noteId, width, height) => {
   if (standaloneNotes[noteId] && !standaloneNotes[noteId].isDestroyed()) {
     standaloneNotes[noteId].setContentSize(Math.round(width), Math.round(height), true);
+  }
+  return true;
+});
+
+const popoutBounds = {};
+
+ipcMain.handle('minimize-popout', (event, noteId) => {
+  const win = standaloneNotes[noteId];
+  if (win && !win.isDestroyed()) {
+    popoutBounds[noteId] = win.getBounds();
+    win.setContentSize(60, 60, true);
+  }
+  return true;
+});
+
+ipcMain.handle('restore-popout', (event, noteId) => {
+  const win = standaloneNotes[noteId];
+  if (win && !win.isDestroyed()) {
+    const bounds = popoutBounds[noteId];
+    if (bounds) {
+      win.setBounds(bounds, true);
+    } else {
+      win.setContentSize(350, 350, true);
+    }
   }
   return true;
 });

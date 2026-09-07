@@ -8,6 +8,7 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
   const [loading, setLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1.3);
   const [spellcheck, setSpellcheck] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   // Load the initial note data
   useEffect(() => {
@@ -108,6 +109,63 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
     return <div style={{ padding: 20, color: 'var(--text-main)' }}>Loading note...</div>;
   }
 
+  if (isMinimized) {
+    return (
+      <div
+        style={{
+          width: '100vw',
+          height: '100vh',
+          overflow: 'hidden',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'transparent'
+        } as React.CSSProperties}
+      >
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            backgroundColor: 'var(--bg-secondary)',
+            color: 'var(--text-main)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            WebkitAppRegion: 'drag', // Removed all mouse events from this element to fix Linux dragging
+            border: '1px solid var(--border-glass)',
+          } as React.CSSProperties}
+          title="Drag the edges. Click the center to restore."
+        >
+          {/* CENTER CLICKABLE BUTTON */}
+          <div 
+            onClick={() => {
+              setIsMinimized(false);
+              window.electronAPI.restorePopout(noteId);
+            }}
+            style={{ 
+              width: '36px', 
+              height: '36px', 
+              WebkitAppRegion: 'no-drag', 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+            } as React.CSSProperties}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+          >
+            <span style={{ fontSize: '18px', fontWeight: '600', pointerEvents: 'none' }}>
+              {(noteTitle || 'N').charAt(0).toUpperCase()}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div 
       ref={rootRef}
@@ -139,6 +197,19 @@ export default function StandaloneNote({ noteId }: { noteId: string }) {
         
         {/* Actions - No Drag Area */}
         <div style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <button 
+            onClick={() => {
+              setIsMinimized(true);
+              window.electronAPI.minimizePopout(noteId);
+            }}
+            style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', marginRight: '4px' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            title="Minimize to Ball"
+          >
+            <IconMinus size={14} />
+          </button>
+
           
           <button 
             onClick={() => setSpellcheck(!spellcheck)}

@@ -1,19 +1,22 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { CLI_PATH } from './constants'
 import packageJson from '../package.json'
 import LiveTab from './components/LiveTab'
-import TempsTab from './components/TempsTab'
-import NotesTab from './components/NotesTab'
-import TasksTab from './components/TasksTab'
-import ChromeTab from './components/ChromeTab'
 import CompactSwitcher from './components/CompactSwitcher'
 
-import PromptModal from './components/PromptModal'
-import CreateDesktopModal from './components/CreateDesktopModal'
-import UniversalCreateModal from './components/UniversalCreateModal'
-import CreateTaskModal from './components/CreateTaskModal'
-import CreateTemplateScriptModal from './components/CreateTemplateScriptModal'
-import CreateNoteModal from './components/CreateNoteModal'
+const TempsTab = React.lazy(() => import('./components/TempsTab'));
+const NotesTab = React.lazy(() => import('./components/NotesTab'));
+const TasksTab = React.lazy(() => import('./components/TasksTab'));
+const ChromeTab = React.lazy(() => import('./components/ChromeTab'));
+
+const PromptModal = React.lazy(() => import('./components/PromptModal'));
+const CreateDesktopModal = React.lazy(() => import('./components/CreateDesktopModal'));
+const UniversalCreateModal = React.lazy(() => import('./components/UniversalCreateModal'));
+const CreateTaskModal = React.lazy(() => import('./components/CreateTaskModal'));
+const CreateTemplateScriptModal = React.lazy(() => import('./components/CreateTemplateScriptModal'));
+const CreateNoteModal = React.lazy(() => import('./components/CreateNoteModal'));
+
+import type { AppData, DesktopInfo, Template, FolderNode, SessionData, ChecklistTask, TasksData } from './types'
 import { Settings } from 'lucide-react';
 
 
@@ -34,12 +37,12 @@ const getThemeColor = (tab: string, type: 'var' | 'hex' = 'var') => {
 };
 
 function App() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AppData | null>(null)
   const [desktopNames, setDesktopNames] = useState<Record<string, string>>({})
-  const [desktopPriorities, setDesktopPriorities] = useState<Record<string, string>>({})
+  const [desktopPriorities, setDesktopPriorities] = useState<Record<string, number>>({})
   const [windowCounts, setWindowCounts] = useState<Record<string, number>>({})
   const [desktopApps, setDesktopApps] = useState<Record<string, string[]>>({})
-  const [desktopIcons, setDesktopIcons] = useState<Record<string, string[] | null>>({})
+  const [desktopIcons, setDesktopIcons] = useState<Record<string, string | string[] | null>>({})
   const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
   const [pinnedCache, setPinnedCache] = useState<Record<string, boolean>>({});
@@ -82,12 +85,13 @@ function App() {
   const [isHistoryPaused, setIsHistoryPaused] = useState(false);
   
   const [isCompactSwitcherActive, setIsCompactSwitcherActive] = useState(false);
-  const [compactSelectedIndex, setCompactSelectedIndex] = useState(0);
+  const [compactItems, setCompactItems] = useState<any[]>([]);
   const compactItemsRef = useRef<any[]>([]);
+  const [compactSelectedIndex, setCompactSelectedIndex] = useState(0);
   const compactIndexRef = useRef(0);
 
   const [isPinned, setIsPinned] = useState(true); // Default to true because KWin Window Rule forces it on launch
-  const [templates, setTemplates] = useState<any[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('tasks')
   // Ref so loadData can read current tab without being recreated
@@ -111,7 +115,7 @@ function App() {
     lastActionTimeRef.current = t
     _setLastActionTimeState(t)
   }, [])
-  const dataRef = useRef<any>(null)
+  const dataRef = useRef<AppData | null>(null)
   const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean} | null>(null)
   const [showCreateDesktopModal, setShowCreateDesktopModal] = useState(false)
   const [showUniversalCreate, setShowUniversalCreate] = useState(false)
@@ -140,7 +144,7 @@ function App() {
 
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
-      window.electronAPI.fetchChromeProfiles().then((data: any[]) => {
+      window.electronAPI.fetchChromeProfiles().then((data) => {
         setChromeProfileCount(data ? data.length : 0);
       }).catch(console.error);
     }
@@ -185,7 +189,7 @@ function App() {
           const newNames: Record<string, string> = {};
           const newExpanded: string[] = notesData.expanded_folders || ['root'];
 
-          notesData.hierarchy.forEach((folder: any) => {
+          notesData.hierarchy.forEach((folder: { name: string; children?: FolderNode[] }) => {
             const fKey = folder.name; // e.g., "pm_177..."
             newOrder.push(fKey);
             
@@ -197,7 +201,7 @@ function App() {
             }
             newNames[fKey] = displayName;
             
-            newFolders[fKey] = (folder.children || []).map((child: any) => ({
+            newFolders[fKey] = (folder.children || []).map((child: FolderNode) => ({
               id: child.id,
               type: child.type === 'note' ? 'note' : 'checkbox',
               text: child.text || child.name || 'Untitled',
@@ -224,24 +228,29 @@ function App() {
         }
 
         const newData = { session: sessionData, notes: finalNotesData, tasks: tasksData, notes_new: notesDataNew };
+        
+        setData(prev => JSON.stringify(prev) === JSON.stringify(newData) ? prev : newData);
         dataRef.current = newData;
-        setData(newData)
-        setDesktopNames(desktopInfo?.names || {})
-        setDesktopPriorities(desktopInfo?.priorities || {})
-        if (desktopInfo?.counts !== undefined) {
-          setWindowCounts(desktopInfo.counts)
+
+        if (desktopInfo) {
+          setDesktopNames(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.names || {}) ? prev : (desktopInfo.names || {}));
+          setDesktopPriorities(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.priorities || {}) ? prev : (desktopInfo.priorities || {}));
+          if (desktopInfo.counts !== undefined) {
+            setWindowCounts(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.counts) ? prev : desktopInfo.counts);
+          }
+          setDesktopApps(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.apps || {}) ? prev : (desktopInfo.apps || {}));
+          setDesktopIcons(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.icons || {}) ? prev : (desktopInfo.icons || {}));
+          setDesktopShortcuts(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.shortcuts || {}) ? prev : (desktopInfo.shortcuts || {}));
+          setPinnedCache(prev => JSON.stringify(prev) === JSON.stringify(desktopInfo.pinned || {}) ? prev : (desktopInfo.pinned || {}));
+          setCurrentDesktop(prev => prev === (desktopInfo.current || null) ? prev : (desktopInfo.current || null));
+          if (!prevDesktopRef.current && desktopInfo.current) {
+             prevDesktopRef.current = desktopInfo.current;
+          }
         }
-        setDesktopApps(desktopInfo?.apps || {})
-        setDesktopIcons(desktopInfo?.icons || {})
-        setDesktopShortcuts(desktopInfo?.shortcuts || {})
-        setPinnedCache(desktopInfo?.pinned || {})
-        setCurrentDesktop(desktopInfo?.current || null)
-        setReturnDesktop(historyData?.last_uuid || null)
+        
+        setReturnDesktop(prev => prev === (historyData?.last_uuid || null) ? prev : (historyData?.last_uuid || null));
         const historyList = historyData?.history || [];
-        setVisitHistory(historyList)
-        if (!prevDesktopRef.current && desktopInfo?.current) {
-           prevDesktopRef.current = desktopInfo.current;
-        }
+        setVisitHistory(prev => JSON.stringify(prev) === JSON.stringify(historyList) ? prev : historyList);
         setLoading(false)
       }).catch(err => {
         console.error("Error in loadData Promise.all:", err);
@@ -258,7 +267,7 @@ function App() {
   // D-Bus Event Listener & Focused Polling
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.onDesktopsUpdated) {
-      window.electronAPI.onDesktopsUpdated((desktopInfo: any) => {
+      window.electronAPI.onDesktopsUpdated((desktopInfo: DesktopInfo) => {
         // SMART SYNC: If we just performed a local action, ignore the dbus echo for a moment
         // Must match the outer throttle (3000ms) to prevent partial data from D-Bus
         // stomping over optimistic UI updates during deploy/create operations
@@ -307,9 +316,9 @@ function App() {
       // Compute items
       const folders = dataRef.current?.session?.folders || {};
       const creationTimes = dataRef.current?.session?.creation_times || {};
-      const items: any[] = [];
-      const dNames = dataRef.current?.names || desktopNames;
-      const dIcons = dataRef.current?.icons || desktopIcons;
+      const items: {id: string, name: string, count: number, isRecentlyCreated: boolean, icons?: string, folder?: string}[] = [];
+      const dNames = desktopNames;
+      const dIcons = desktopIcons;
       
       Object.entries(folders).forEach(([folderName, ids]) => {
          if (Array.isArray(ids)) {
@@ -317,12 +326,12 @@ function App() {
              const id = fullId.split('___')[0];
              const name = dNames[id];
              const count = windowCounts[id] || 0;
-             const isRecentlyCreated = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
+             const isRecent = creationTimes[id] && (Date.now() - creationTimes[id] < 30 * 1000);
 
              if (name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ')) {
-               if (count > 0 || isRecentlyCreated || id === currentDesktop) {
+               if ((windowCounts[id] || 0) > 0 || isRecent || id === currentDesktop) {
                  if (!items.find(i => i.id === id)) {
-                   items.push({ id, name, folder: folderName, icons: dIcons[id] });
+                    items.push({ id, name, count: windowCounts[id] || 0, isRecentlyCreated: !!isRecent, folder: folderName, icons: dIcons[id] as string | undefined });
                  }
                }
              }
@@ -345,6 +354,7 @@ function App() {
       });
       
       compactItemsRef.current = items;
+      setCompactItems(items);
       
       const length = items.length;
       if (length <= 1) return; // No other items to switch to
@@ -441,7 +451,7 @@ function App() {
   const activeFolder = (() => {
     let folder: string | null = null;
     if (data?.session?.folders && currentDesktop) {
-      Object.entries(data.session.folders).forEach(([folderName, desktops]: [string, any]) => {
+      Object.entries(data.session.folders).forEach(([folderName, desktops]: [string, string[]]) => {
         if (Array.isArray(desktops) && desktops.some(d => d.split('___')[0] === currentDesktop)) {
           folder = folderName;
         }
@@ -455,14 +465,14 @@ function App() {
     
     if (activeFolder) {
       if (data?.tasks?.live?.[activeFolder]) {
-        count += data.tasks.live[activeFolder].filter((t: any) => !t.checked).length;
+        count += data.tasks.live[activeFolder].filter((t: ChecklistTask) => !t.checked).length;
       }
       if (data?.tasks?.templates?.[activeFolder]) {
-        count += data.tasks.templates[activeFolder].filter((t: any) => !t.checked).length;
+        count += data.tasks.templates[activeFolder].filter((t: ChecklistTask) => !t.checked).length;
       }
     } else {
       if (data?.tasks?.general) {
-        count += data.tasks.general.filter((t: any) => !t.checked).length;
+        count += data.tasks.general.filter((t: ChecklistTask) => !t.checked).length;
       }
     }
     
@@ -852,29 +862,31 @@ function App() {
                   searchQuery={searchQuery}
                   currentDesktop={currentDesktop}
                   visitHistory={visitHistory}
-                  setSessionData={(newSession: any) => setData((prev: any) => ({ ...prev, session: newSession }))}
+                  setSessionData={(newSession: SessionData) => setData((prev) => (prev ? { ...prev, session: newSession } : null))}
                   onAction={() => setLastActionTime(Date.now())}
                   onSwitch={handleSwitch}
                   pinnedCache={pinnedCache}
                   onTogglePin={handleTogglePin}
                 />
               )}
-              {activeTab === 'temps' && <TempsTab templates={templates} setTemplates={setTemplates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} setActiveTab={handleSetActiveTab} />}
-              <div style={{ display: activeTab === 'notes' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} currentFolder={activeFolder} onAction={() => setLastActionTime(Date.now())} />
-              </div>
-              <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <TasksTab 
-                  isActive={activeTab === 'tasks'} 
-                  tasksData={data?.tasks} 
-                  sessionData={data?.session} 
-                  templates={templates} 
-                  searchQuery={searchQuery} 
-                  currentFolder={activeFolder}
-                  onAction={() => setLastActionTime(Date.now())} 
-                />
-              </div>
-              {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
+              <Suspense fallback={<div style={{ padding: '20px', color: 'var(--text-dim)', textAlign: 'center' }}>Loading modules...</div>}>
+                {activeTab === 'temps' && <TempsTab templates={templates} setTemplates={setTemplates} searchQuery={searchQuery} onAction={() => { setLastActionTime(Date.now()); loadTemplates(); }} setPromptConfig={setPromptConfig} setActiveTab={handleSetActiveTab} />}
+                <div style={{ display: activeTab === 'notes' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <NotesTab isActive={activeTab === 'notes'} notesData={data?.notes_new} sessionData={data?.session} templates={templates} searchQuery={searchQuery} currentFolder={activeFolder} onAction={() => setLastActionTime(Date.now())} />
+                </div>
+                <div style={{ display: activeTab === 'tasks' ? 'flex' : 'none', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <TasksTab 
+                    isActive={activeTab === 'tasks'} 
+                    tasksData={data?.tasks as TasksData} 
+                    sessionData={data?.session as SessionData} 
+                    templates={templates} 
+                    searchQuery={searchQuery} 
+                    currentFolder={activeFolder}
+                    onAction={() => setLastActionTime(Date.now())} 
+                  />
+                </div>
+                {activeTab === 'chrome' && <ChromeTab searchQuery={searchQuery} />}
+              </Suspense>
 
             </>
           )}
@@ -917,11 +929,12 @@ function App() {
       
       {isCompactSwitcherActive && (
         <CompactSwitcher 
-          items={compactItemsRef.current} 
+          items={compactItems} 
           selectedIndex={compactSelectedIndex} 
         />
       )}
 
+      <Suspense fallback={null}>
       {promptConfig && (
         <PromptModal 
           title={promptConfig.title}
@@ -941,7 +954,7 @@ function App() {
               }
 
               const currentNotes = data.notes;
-              const currentFolders = currentNotes.folders;
+              const currentFolders = currentNotes.folders || {};
               const currentOrder = currentNotes.folder_order || Object.keys(currentFolders);
               const currentNames = currentNotes.folder_names || {};
               const currentIsDivider = currentNotes.folder_is_divider || {};
@@ -970,7 +983,7 @@ function App() {
       {showCreateDesktopModal && (
         <CreateDesktopModal
           existingFolders={Object.keys(data?.session?.folders || {}).filter(folderId => {
-            const desktops = data?.session?.folders[folderId] || [];
+            const desktops = data?.session?.folders?.[folderId] || [];
             return desktops.some((id: string) => {
               const pureId = id.split('___')[0];
               const hasWindows = (windowCounts[pureId] || 0) > 0;
@@ -1041,13 +1054,15 @@ function App() {
             if (category === 'general') {
               newData.general = [...newData.general, newTask];
             } else if (category === 'live' && subId) {
-              if (!newData.live) newData.live = {};
-              if (!newData.live[subId]) newData.live[subId] = [];
-              newData.live[subId] = [...newData.live[subId], newTask];
+              const live: Record<string, ChecklistTask[]> = newData.live || {};
+              if (!live[subId]) live[subId] = [];
+              live[subId] = [...live[subId], newTask];
+              newData.live = live;
             } else if (category === 'templates' && subId) {
-              if (!newData.templates) newData.templates = {};
-              if (!newData.templates[subId]) newData.templates[subId] = [];
-              newData.templates[subId] = [...newData.templates[subId], newTask];
+              const templates: Record<string, ChecklistTask[]> = newData.templates || {};
+              if (!templates[subId]) templates[subId] = [];
+              templates[subId] = [...templates[subId], newTask];
+              newData.templates = templates;
             }
             window.electronAPI.writeJSON('tasks.json', newData);
             setLastActionTime(Date.now());
@@ -1087,6 +1102,7 @@ function App() {
           onCancel={() => setShowGlobalCreateNote(false)}
         />
       )}
+      </Suspense>
 
       {isHistoryPaused && (
         <div style={{

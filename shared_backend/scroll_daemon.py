@@ -3,6 +3,7 @@ import evdev
 import asyncio
 import sys
 import json
+import time
 import logging
 
 logging.basicConfig(level=logging.ERROR)
@@ -41,7 +42,6 @@ async def monitor_device(device):
             elif event.type == evdev.ecodes.EV_REL:
                 # sys.stderr.write(f"REL: {event.code} VAL: {event.value}\n")
                 if event.code in [evdev.ecodes.REL_WHEEL, evdev.ecodes.REL_WHEEL_HI_RES]:
-                    import time
                     current_time = time.time()
                     if current_time - state.get("last_scroll_time", 0) < 0.15:
                         continue
@@ -55,8 +55,9 @@ async def monitor_device(device):
                         state["active_alt_scrolling"] = True
                         emit("scroll", direction=direction)
     except Exception as e:
-        # Device might have disconnected
-        pass
+        # Device might have disconnected or raised a permission error
+        sys.stderr.write(f"Error in monitor_device for {device.name}: {e}\n")
+        sys.stderr.flush()
 
 async def watch_devices():
     known_devices = set(evdev.list_devices())

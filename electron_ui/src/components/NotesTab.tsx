@@ -62,7 +62,11 @@ export default function NotesTab({ isActive, notesData, sessionData, templates, 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  useEffect(() => setSelectedIndex(0), [searchQuery]);
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  if (searchQuery !== prevSearchQuery) {
+    setSelectedIndex(0);
+    setPrevSearchQuery(searchQuery);
+  }
 
   useEffect(() => {
     if (isActive) {

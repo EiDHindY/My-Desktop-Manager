@@ -13,10 +13,11 @@ export default function ChromeTab({ searchQuery = '' }: { searchQuery?: string }
   const [loading, setLoading] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Reset selection when search query changes
-  useEffect(() => {
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  if (searchQuery !== prevSearchQuery) {
     setSelectedIndex(0);
-  }, [searchQuery]);
+    setPrevSearchQuery(searchQuery);
+  }
 
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
