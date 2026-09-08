@@ -731,8 +731,10 @@ function App() {
               onClick={async () => {
                 if (window.electronAPI && window.electronAPI.executeCommand) {
                   await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:Personal:1784279295479"`);
-                  setTimeout(() => {
-                    window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:Personal:1784580074199"`);
+                  loadData(true);
+                  setTimeout(async () => {
+                    await window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "DEPLOY_TASK:Personal:1784580074199"`);
+                    loadData(true);
                   }, 2000);
                   setLastActionTime(Date.now());
                 }
