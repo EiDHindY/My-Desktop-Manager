@@ -146,13 +146,38 @@ function App() {
 
   useEffect(() => {
     if (window.electronAPI && window.electronAPI.fetchChromeProfiles) {
-      window.electronAPI.fetchChromeProfiles().then((data) => {
+      window.electronAPI.fetchChromeProfiles().then((data: any[]) => {
         setChromeProfileCount(data ? data.length : 0);
       }).catch(console.error);
     }
   }, []);
 
+  const startupCleanDone = useRef(false);
 
+  // Auto-clean empty named desktops on startup (e.g. after a reboot/logout)
+  useEffect(() => {
+    if (!loading && !startupCleanDone.current) {
+      startupCleanDone.current = true;
+      
+      const uuidsToClean: string[] = [];
+      Object.keys(desktopNames).forEach(uuid => {
+        const name = desktopNames[uuid];
+        const isNamed = name && name.toLowerCase() !== 'empty' && !name.toLowerCase().startsWith('desktop ');
+        const count = windowCounts[uuid] || 0;
+        // If it's named but has no windows, it's a left-over from a previous session
+        if (isNamed && count === 0) {
+          uuidsToClean.push(uuid);
+        }
+      });
+      
+      if (uuidsToClean.length > 0) {
+        console.log("Startup auto-clean triggering for:", uuidsToClean);
+        if (window.electronAPI && window.electronAPI.executeCommand) {
+          window.electronAPI.executeCommand(`npx tsx "${CLI_PATH}" "RESET_ROOT_DESKTOPS:${uuidsToClean.join(',')}"`);
+        }
+      }
+    }
+  }, [loading, desktopNames, windowCounts]);
 
   // Load templates separately — they rarely change, no need to fetch every 2.5s
   const loadTemplates = useCallback(async () => {
