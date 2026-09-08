@@ -106,6 +106,8 @@ export default function CompactSwitcher({ items, selectedIndex, currentDesktopId
   const nonScrollableItems = items.slice(0, numNonScrollable);
   const scrollableItems = items.slice(numNonScrollable);
 
+  if (items.length === 0) return null;
+
   return (
     <div style={{
       position: 'absolute',

@@ -90,6 +90,10 @@ export default function CompactSwitcherApp() {
       setItems(newItems);
       setCurrentDesktopId(currentDesktop || null);
       currentDesktopIdRef.current = currentDesktop || null;
+      
+      if (newItems.length === 0 && window.electronAPI) {
+         window.electronAPI.hideCompactSwitcher();
+      }
     } catch (e) {
       console.error("Failed to load desktops for switcher:", e);
     }
@@ -110,6 +114,10 @@ export default function CompactSwitcherApp() {
     if (window.electronAPI.onCompactScroll) {
       window.electronAPI.onCompactScroll((direction) => {
         const length = itemsRef.current.length;
+        if (length === 0 && window.electronAPI) {
+          window.electronAPI.hideCompactSwitcher();
+          return;
+        }
         const numNonScrollable = itemsRef.current.filter(i => i.id === currentDesktopIdRef.current || i.isPinned).length;
         const minIndex = numNonScrollable;
         
