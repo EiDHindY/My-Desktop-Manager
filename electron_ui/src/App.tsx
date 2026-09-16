@@ -17,7 +17,7 @@ const CreateTemplateScriptModal = React.lazy(() => import('./components/CreateTe
 const CreateNoteModal = React.lazy(() => import('./components/CreateNoteModal'));
 
 import type { AppData, DesktopInfo, Template, FolderNode, SessionData, ChecklistTask, TasksData } from './types'
-import { Settings } from 'lucide-react';
+import { Settings, Power } from 'lucide-react';
 
 
 import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap } from './components/Icons'
@@ -118,7 +118,7 @@ function App() {
     _setLastActionTimeState(t)
   }, [])
   const dataRef = useRef<AppData | null>(null)
-  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean} | null>(null)
+  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, description?: string, isConfirm?: boolean, isShortcutMode?: boolean} | null>(null)
   const [showCreateDesktopModal, setShowCreateDesktopModal] = useState(false)
   const [showUniversalCreate, setShowUniversalCreate] = useState(false)
   const [showGlobalCreateTask, setShowGlobalCreateTask] = useState(false)
@@ -778,8 +778,33 @@ function App() {
               <span style={{ color: 'var(--text-main)', fontWeight: '800' }}>{totalEmpty}</span>
             </div>
 
-            {/* Settings Button & Popup */}
-            <div style={{ position: 'relative' }}>
+            {/* Settings & Power Buttons */}
+            <div style={{ display: 'flex', gap: '8px', position: 'relative' }}>
+              <button
+                className="btn-hover"
+                onClick={() => {
+                  setPromptConfig({
+                    title: 'Shutdown PC',
+                    defaultValue: 'Are you sure you want to clear all folders and desktops to prepare for shutdown?',
+                    command: 'CLEAR_ALL',
+                    isConfirm: true
+                  });
+                }}
+                style={{
+                  width: '28px', height: '28px', borderRadius: '50%',
+                  border: '1px solid var(--accent-red)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  color: 'var(--accent-red)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 0,
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+                title="Clear All Folders & Desktops"
+              >
+                <Power size={14} />
+              </button>
+              
               <button
                 className="btn-hover"
                 onClick={() => setShowSettingsPopup(!showSettingsPopup)}
@@ -797,8 +822,6 @@ function App() {
               >
                 <Settings size={16} />
               </button>
-              
-
             </div>
 
           </div>
@@ -970,6 +993,7 @@ function App() {
           description={promptConfig.description}
           defaultValue={promptConfig.defaultValue}
           isConfirm={promptConfig.isConfirm}
+          isShortcutMode={promptConfig.isShortcutMode}
           onSubmit={async (value) => {
             if (promptConfig.command === 'NOTES_ADD_FOLDER' || promptConfig.command === 'NOTES_ADD_DIVIDER') {
               const folderKey = value.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();

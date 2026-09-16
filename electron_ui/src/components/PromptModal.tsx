@@ -5,11 +5,12 @@ interface PromptModalProps {
   description?: string;
   defaultValue: string;
   isConfirm?: boolean;
+  isShortcutMode?: boolean;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }
 
-export default function PromptModal({ title, description, defaultValue, isConfirm, onSubmit, onCancel }: PromptModalProps) {
+export default function PromptModal({ title, description, defaultValue, isConfirm, isShortcutMode, onSubmit, onCancel }: PromptModalProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -111,8 +112,47 @@ export default function PromptModal({ title, description, defaultValue, isConfir
               ref={inputRef}
               type="text" 
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onChange={(e) => {
+                if (!isShortcutMode) {
+                  setValue(e.target.value);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (isShortcutMode) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.nativeEvent.stopImmediatePropagation();
+                  
+                  const key = e.key;
+                  if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return;
+                  if (key === 'Escape') {
+                    onCancel();
+                    return;
+                  }
+                  if (key === 'Enter') {
+                    onSubmit(value);
+                    return;
+                  }
+                  if (key === 'Backspace') {
+                    setValue('');
+                    return;
+                  }
+                  
+                  const modifiers = [];
+                  if (e.metaKey) modifiers.push('Super');
+                  if (e.ctrlKey) modifiers.push('CommandOrControl');
+                  if (e.altKey) modifiers.push('Alt');
+                  if (e.shiftKey) modifiers.push('Shift');
+                  
+                  let keyName = key.length === 1 ? key.toUpperCase() : key;
+                  if (key === ' ') keyName = 'Space';
+                  if (key === '+') keyName = 'Plus';
+                  
+                  setValue([...modifiers, keyName].join('+'));
+                } else {
+                  handleKeyDown(e);
+                }
+              }}
               style={{
                 width: '100%',
                 boxSizing: 'border-box',

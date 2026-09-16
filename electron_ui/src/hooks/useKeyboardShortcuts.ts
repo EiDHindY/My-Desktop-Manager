@@ -100,44 +100,6 @@ export function useKeyboardShortcuts({
           }
           return;
         }
-        if (e.key.toLowerCase() === 'e') {
-          e.preventDefault();
-          const elToFocus = document.activeElement as HTMLElement;
-          if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('tasks');
-          }
-          const currentHist = visitHistoryRef.current;
-          if (currentHist.length > 0) {
-            const target = currentHist[Math.max(0, currentHist.length - 2)];
-            if (target) {
-              setLastActionTime(Date.now());
-              setCurrentDesktop(target);
-              setSearchQuery('');
-              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
-            }
-          }
-          if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
-          return;
-        }
-        if (e.key.toLowerCase() === 't') {
-          e.preventDefault();
-          const elToFocus = document.activeElement as HTMLElement;
-          if (activeTabRef.current !== 'notes') {
-            handleSetActiveTab('tasks');
-          }
-          const currentHist = visitHistoryRef.current;
-          if (currentHist.length > 0) {
-            const target = currentHist[Math.max(0, currentHist.length - 3)];
-            if (target) {
-              setLastActionTime(Date.now());
-              setCurrentDesktop(target);
-              setSearchQuery('');
-              window.electronAPI.executeCommand(`qdbus-qt6 org.kde.KWin /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager.current "${target}"`);
-            }
-          }
-          if (activeTabRef.current === 'notes') { setTimeout(() => elToFocus?.focus(), 50); }
-          return;
-        }
         if (e.key.toLowerCase() === 'z' && e.metaKey) {
           if (window.electronAPI) {
             window.electronAPI.nativeAction('toggle-pin').then(() => setIsPinned(prev => !prev));

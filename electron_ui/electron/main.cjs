@@ -1,3 +1,4 @@
+let fetchDesktopsPromise = null;
 const { app, BrowserWindow, ipcMain, Menu, protocol, globalShortcut, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
@@ -261,9 +262,11 @@ ipcMain.handle('execute-command', async (event, command) => {
   });
 });
 
+let registeredDesktopShortcuts = [];
 // Manage global shortcuts for desktops
 ipcMain.handle('register-shortcuts', (event, shortcuts) => {
-  globalShortcut.unregisterAll(); // Clear previous shortcuts
+  registeredDesktopShortcuts.forEach(s => globalShortcut.unregister(s));
+  registeredDesktopShortcuts = [];
   
   if (!shortcuts || !Array.isArray(shortcuts)) return [];
   
@@ -278,6 +281,8 @@ ipcMain.handle('register-shortcuts', (event, shortcuts) => {
         if (!success) {
           failures.push(uuid);
           console.warn(`Failed to register shortcut ${shortcut} for desktop ${uuid}`);
+        } else {
+          registeredDesktopShortcuts.push(shortcut);
         }
       } catch (err) {
         console.error(`Failed to register shortcut ${shortcut}:`, err);
@@ -285,6 +290,7 @@ ipcMain.handle('register-shortcuts', (event, shortcuts) => {
       }
     }
   });
+
   return failures;
 });
 
@@ -480,7 +486,7 @@ done 2>/dev/null
 }
 
 ipcMain.handle('fetch-desktops', async (event, scanWindows = true) => {
-  return await performFetchDesktops(scanWindows);
+  if (fetchDesktopsPromise) return fetchDesktopsPromise; fetchDesktopsPromise = performFetchDesktops(scanWindows).finally(() => fetchDesktopsPromise = null); return fetchDesktopsPromise;
 });
 
 ipcMain.handle('toggle-pin-desktop', async (event, uuid) => {
@@ -489,7 +495,7 @@ ipcMain.handle('toggle-pin-desktop', async (event, uuid) => {
     global.labelCacheData[uuid].isPinned = !global.labelCacheData[uuid].isPinned;
     try {
       await fs.writeFile(labelsPath, JSON.stringify(global.labelCacheData, null, 2));
-      const newData = await performFetchDesktops(false);
+      let newData; if (fetchDesktopsPromise) newData = await fetchDesktopsPromise; else { fetchDesktopsPromise = performFetchDesktops(false).finally(() => fetchDesktopsPromise = null); newData = await fetchDesktopsPromise; }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('desktops-updated', newData);
       }
@@ -521,7 +527,7 @@ function setupDBusWatcher() {
         // On any desktop event, instantly fetch and send to UI without window scanning
         // (Window scanning will still happen periodically or on focus)
         if (event.event !== 'ready') {
-          const newData = await performFetchDesktops(false);
+          let newData; if (fetchDesktopsPromise) newData = await fetchDesktopsPromise; else { fetchDesktopsPromise = performFetchDesktops(false).finally(() => fetchDesktopsPromise = null); newData = await fetchDesktopsPromise; }
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('desktops-updated', newData);
           }
@@ -640,7 +646,7 @@ ipcMain.handle('write-json', async (event, filename, data) => {
     jsonCacheMtime[filename] = stats.mtimeMs;
 
     if (filename === 'session.json' || filename === 'labels.json') {
-      const newData = await performFetchDesktops(false);
+      let newData; if (fetchDesktopsPromise) newData = await fetchDesktopsPromise; else { fetchDesktopsPromise = performFetchDesktops(false).finally(() => fetchDesktopsPromise = null); newData = await fetchDesktopsPromise; }
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktops-updated', newData);
       if (switcherWindow && !switcherWindow.isDestroyed()) switcherWindow.webContents.send('desktops-updated', newData);
     }
@@ -667,7 +673,7 @@ ipcMain.handle('move-desktop', async (event, fullId, targetFolder, targetIndex) 
       await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
       await fs.rename(tempPath, sessionPath);
       
-      const newData = await performFetchDesktops(false);
+      let newData; if (fetchDesktopsPromise) newData = await fetchDesktopsPromise; else { fetchDesktopsPromise = performFetchDesktops(false).finally(() => fetchDesktopsPromise = null); newData = await fetchDesktopsPromise; }
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('desktops-updated', newData);
       if (switcherWindow && !switcherWindow.isDestroyed()) switcherWindow.webContents.send('desktops-updated', newData);
 

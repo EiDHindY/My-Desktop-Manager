@@ -91,7 +91,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
   }, []);
 
   const [contextMenu, setContextMenu] = useState<{x: number, y: number, type: 'folder' | 'desktop', id: string, folderName?: string} | null>(null);
-  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, isConfirm?: boolean} | null>(null);
+  const [promptConfig, setPromptConfig] = useState<{title: string, defaultValue: string, command: string, isConfirm?: boolean, isShortcutMode?: boolean} | null>(null);
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [hoveredDesktop, setHoveredDesktop] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -601,6 +601,36 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
             </div>
           )}
 
+          {isFocusedFolder && folderName !== 'root' && (
+            <div 
+              className="btn-hover"
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setPromptConfig({ 
+                  title: `Wipe Folder: ${folderName}`, 
+                  defaultValue: `Are you sure you want to clear all desktops in "${folderName}"?`, 
+                  command: `WIPE_FOLDER:${folderName}`,
+                  isConfirm: true
+                }); 
+              }}
+              style={{ 
+                backgroundColor: 'rgba(239, 68, 68, 0.05)', 
+                color: 'var(--accent-red)', 
+                border: '1px solid var(--accent-red)',
+                borderRadius: '4px', 
+                width: '24px', 
+                height: '24px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                marginRight: '10px'
+              }}
+              title="Wipe Folder Contents"
+            >
+              <IconTrash size={12} />
+            </div>
+          )}
+
           {hoveredFolder === folderName && folderName !== 'root' && (
             <div 
               className="btn-hover"
@@ -799,7 +829,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
               </div>
               <div className="menu-item" onClick={() => {
                 const pureId = contextMenu.id.split('___')[0];
-                setPromptConfig({ title: 'Global Shortcut (e.g. Control+Alt+1)', defaultValue: desktopShortcuts[pureId] || '', command: `SET_SHORTCUT:${contextMenu.id}` });
+                setPromptConfig({ title: 'Global Shortcut (e.g. Control+Alt+1)', defaultValue: desktopShortcuts[pureId] || '', command: `SET_SHORTCUT:${contextMenu.id}`, isShortcutMode: true });
               }}>
                 <IconKeyboard size={14} /> Set Hotkey
               </div>
@@ -852,6 +882,7 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
           title={promptConfig.title}
           defaultValue={promptConfig.defaultValue}
           isConfirm={promptConfig.isConfirm}
+          isShortcutMode={promptConfig.isShortcutMode}
           onSubmit={async (value) => {
             const finalCommand = promptConfig.isConfirm ? promptConfig.command : `${promptConfig.command}:${value}`;
             executeMenuCommand(finalCommand);

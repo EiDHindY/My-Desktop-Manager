@@ -625,7 +625,7 @@ export default function TempsTab({ templates, setTemplates, searchQuery = '', on
                                   setPromptConfig({
                                     title: 'Global Shortcut (e.g. Control+Alt+1)',
                                     defaultValue: task.shortcut || '',
-                                    command: `SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}`
+                                    command: `SET_TEMPLATE_TASK_SHORTCUT:${temp.filename}:${task.id}`, isShortcutMode: true
                                   });
                                 }
                               }}
