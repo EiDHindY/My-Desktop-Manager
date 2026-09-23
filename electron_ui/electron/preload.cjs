@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartScrollDaemon: () => ipcRenderer.invoke('restart-scroll-daemon'),
   nativeAction: (action, params) => ipcRenderer.invoke('native-action', action, params),
   registerShortcuts: (shortcuts) => ipcRenderer.invoke('register-shortcuts', shortcuts),
+  setGlobalShortcuts: (enabled) => ipcRenderer.invoke('set-global-shortcuts', enabled),
+  getGlobalShortcutsState: () => ipcRenderer.invoke('get-global-shortcuts-state'),
   togglePinDesktop: (uuid) => ipcRenderer.invoke('toggle-pin-desktop', uuid),
   popoutNote: (noteId) => ipcRenderer.invoke('popout-note', noteId),
   closePopout: (noteId) => ipcRenderer.invoke('close-popout', noteId),

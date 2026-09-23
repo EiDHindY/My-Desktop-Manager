@@ -56,7 +56,7 @@ export function useKeyboardShortcuts({
           handleSetActiveTab(currentIndex === -1 ? 'active' : tabs[(currentIndex + tabs.length - 1) % tabs.length]);
           return;
         }
-        if (e.key.toLowerCase() === 'd') {
+        if (e.key.toLowerCase() === 'd' && e.altKey) {
           e.preventDefault();
           handleSetActiveTab('temps');
           return;

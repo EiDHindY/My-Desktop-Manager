@@ -105,6 +105,8 @@ function createWindow() {
 
 let switcherWindow;
 let scrollDaemonChild = null;
+let shortcutDaemonChild = null;
+let globalShortcutsEnabled = true;
 
 function createSwitcherWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -119,7 +121,7 @@ function createSwitcherWindow() {
     type: 'notification', // Notifications are usually drawn over everything
     alwaysOnTop: true,
     skipTaskbar: true,
-    focusable: true,
+    focusable: false,
     show: false,
     title: "Compact Switcher",
     webPreferences: {
@@ -154,7 +156,7 @@ function setupScrollDaemon() {
         const event = JSON.parse(line);
         if (event.type === 'scroll') {
           if (switcherWindow && !switcherWindow.isDestroyed()) {
-            if (!switcherWindow.isVisible()) switcherWindow.show();
+            if (!switcherWindow.isVisible()) switcherWindow.showInactive();
             switcherWindow.webContents.send('compact-scroll', event.direction);
           }
         } else if (event.type === 'global-click') {
@@ -177,6 +179,27 @@ function setupScrollDaemon() {
     scrollDaemonChild = null;
     setTimeout(setupScrollDaemon, 500);
   });
+}
+
+function setupShortcutDaemon() {
+  if (!globalShortcutsEnabled) return;
+  if (shortcutDaemonChild) return;
+  const scriptPath = path.join(__dirname, '..', '..', 'shared_backend', 'shortcut_daemon.py');
+  shortcutDaemonChild = spawn('python3', [scriptPath]);
+  
+  shortcutDaemonChild.on('close', () => {
+    shortcutDaemonChild = null;
+    if (globalShortcutsEnabled) {
+      setTimeout(setupShortcutDaemon, 500);
+    }
+  });
+}
+
+function stopShortcutDaemon() {
+  if (shortcutDaemonChild) {
+    try { shortcutDaemonChild.kill(); } catch (e) {}
+    shortcutDaemonChild = null;
+  }
 }
 
 
@@ -212,6 +235,7 @@ app.whenReady().then(() => {
 
   setupDBusWatcher();
   setupScrollDaemon();
+  setupShortcutDaemon();
   createWindow();
   createSwitcherWindow();
 
@@ -785,6 +809,37 @@ ipcMain.handle('restart-scroll-daemon', () => {
     setupScrollDaemon();
   }
   return true;
+});
+
+ipcMain.handle('set-global-shortcuts', async (event, enabled) => {
+  globalShortcutsEnabled = enabled;
+  if (enabled) {
+    setupShortcutDaemon();
+  } else {
+    stopShortcutDaemon();
+  }
+  
+  const sessionPath = path.join(os.homedir(), '.config', 'desktop-manager', 'session.json');
+  try {
+    const raw = await fs.readFile(sessionPath, 'utf-8');
+    const data = JSON.parse(raw);
+    data.global_shortcuts_enabled = enabled;
+    await fs.writeFile(sessionPath, JSON.stringify(data, null, 2));
+  } catch (e) {}
+  
+  return true;
+});
+
+ipcMain.handle('get-global-shortcuts-state', async () => {
+  const sessionPath = path.join(os.homedir(), '.config', 'desktop-manager', 'session.json');
+  try {
+    const raw = await fs.readFile(sessionPath, 'utf-8');
+    const data = JSON.parse(raw);
+    if (data.global_shortcuts_enabled !== undefined) {
+      globalShortcutsEnabled = data.global_shortcuts_enabled;
+    }
+  } catch (e) {}
+  return globalShortcutsEnabled;
 });
 
 const standaloneNotes = {};

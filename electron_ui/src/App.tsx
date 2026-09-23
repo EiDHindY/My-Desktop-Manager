@@ -20,7 +20,7 @@ import type { AppData, DesktopInfo, Template, FolderNode, SessionData, Checklist
 import { Settings, Power } from 'lucide-react';
 
 
-import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap } from './components/Icons'
+import { IconSweeper, IconBomb, IconPlus, IconTerminal, IconImport, IconFolderPlus, IconSquare, IconFileText, IconList, IconLayoutGrid, IconFolderOpen, IconMinus, IconPin, IconZap, IconKeyboard } from './components/Icons'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useVisitHistory } from './hooks/useVisitHistory'
 import { useTheme } from './contexts/ThemeContext'
@@ -46,6 +46,7 @@ function App() {
   const [desktopIcons, setDesktopIcons] = useState<Record<string, string | string[] | null>>({})
   const [desktopShortcuts, setDesktopShortcuts] = useState<Record<string, string>>({})
   const [shortcutErrors, setShortcutErrors] = useState<string[]>([])
+  const [globalShortcutsEnabled, setGlobalShortcutsEnabled] = useState(true)
   const [pinnedCache, setPinnedCache] = useState<Record<string, boolean>>({});
   
   useEffect(() => {
@@ -334,6 +335,13 @@ function App() {
     }
   }, [desktopShortcuts])
 
+  // Fetch global shortcuts state on mount
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.getGlobalShortcutsState) {
+      window.electronAPI.getGlobalShortcutsState().then(setGlobalShortcutsEnabled);
+    }
+  }, []);
+
   
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -617,6 +625,26 @@ function App() {
             title="Restart Scroll Daemon (fixes Alt+Scroll)"
           >
             <IconZap size={16} />
+          </button>
+          <button
+            className="btn-hover"
+            onClick={() => {
+              if (window.electronAPI && window.electronAPI.setGlobalShortcuts) {
+                const newState = !globalShortcutsEnabled;
+                setGlobalShortcutsEnabled(newState);
+                window.electronAPI.setGlobalShortcuts(newState);
+              }
+            }}
+            style={{ 
+              width: '32px', height: '28px', borderRadius: '8px', 
+              border: '1px solid var(--border-glass)', 
+              backgroundColor: globalShortcutsEnabled ? 'rgba(52, 211, 153, 0.1)' : 'rgba(255, 77, 77, 0.1)', 
+              color: globalShortcutsEnabled ? 'var(--accent-green)' : 'var(--accent-red)', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0, transition: 'all 0.3s ease' 
+            }}
+            title={globalShortcutsEnabled ? "Global Shortcuts: ON" : "Global Shortcuts: OFF (Click to toggle)"}
+          >
+            <IconKeyboard size={16} />
           </button>
         </div>
 

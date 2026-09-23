@@ -674,8 +674,6 @@ export default function LiveTab({ sessionData, showOnlyActive = false, desktopNa
                     const isActive = pureId === (currentDesktop || '').trim();
                     let historyShortcut: string | null = null;
                     if (visitHistory.length > 0 && pureId === visitHistory[visitHistory.length - 1]) historyShortcut = 'R';
-                    else if (visitHistory.length > 1 && pureId === visitHistory[visitHistory.length - 2]) historyShortcut = 'E';
-                    else if (visitHistory.length > 2 && pureId === visitHistory[visitHistory.length - 3]) historyShortcut = 'T';
                     const winCount = windowCounts[pureId] || 0;
                     const hasWindows = winCount > 0;
                     const isSelected = visibleItems[selectedIndex]?.id === desktopId;
